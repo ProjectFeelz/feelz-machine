@@ -6,13 +6,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { mergeArtists, deleteArtistCompletely } from '../utils/artistMerge';
 import { GRANT_DURATIONS, DEFAULT_GRANT_MONTHS, grantExpiry } from '../utils/grantDuration';
 import { sendNotification } from '../utils/notify';
 import { useAuth } from '../contexts/AuthContext';
 import {
   ArrowLeft, Loader, Search, Music, Users, Check, AlertCircle,
   Trash2, AlertTriangle, Merge, Bug, CheckCircle, Send,
-  MessageSquare, XCircle, ChevronDown, ChevronUp, Mic2,
+  MessageSquare, XCircle, ChevronDown, ChevronUp, Mic2, Shield, Crown,
 } from 'lucide-react';
 
 // ── Shared tab shell ──────────────────────────────────────────────────────────
@@ -154,6 +155,7 @@ function ListenersTab() {
 // ── ARTISTS TAB ───────────────────────────────────────────────────────────────
 function ArtistsTab() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [artists, setArtists]     = useState([]);
   const [loading, setLoading]     = useState(true);
   const [searchQuery, setSearch]  = useState('');
@@ -164,6 +166,11 @@ function ArtistsTab() {
   // every person, which is how a length setting ends up ignored.
   const [grantMonths, setGrantMonths] = useState(DEFAULT_GRANT_MONTHS);
   const [toast, setToast]         = useState(null);
+  // Who is an admin, and which row is mid-change. Promoting an admin and
+  // setting the master flag had no UI anywhere on the platform: both were
+  // only reachable by writing to the database by hand.
+  const [adminIds, setAdminIds]   = useState(() => new Set());
+  const [roleBusy, setRoleBusy]   = useState(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type }); setTimeout(() => setToast(null), 3000);
@@ -171,6 +178,8 @@ function ArtistsTab() {
 
   const fetchArtists = useCallback(async () => {
     setLoading(true);
+    const { data: adminRows } = await supabase.from('admins').select('user_id');
+    setAdminIds(new Set((adminRows || []).map(r => r.user_id)));
     const { data: artistData } = await supabase.from('artists').select('*').order('created_at', { ascending: false });
     const { data: trackCounts } = await supabase.from('tracks').select('artist_id');
     const { data: followerCounts } = await supabase.from('follows').select('artist_id');
@@ -181,6 +190,55 @@ function ArtistsTab() {
   }, []);
 
   useEffect(() => { fetchArtists(); }, [fetchArtists]);
+
+  // ── Admin access ────────────────────────────────────────────────────────
+  //
+  // The last admin cannot remove themselves. There is no other way back in:
+  // every admin-gated policy and function on this platform reads the admins
+  // table, so emptying it locks everybody out of the whole panel.
+  const toggleAdmin = async (a) => {
+    if (!a.user_id) { showToast('That artist has no account behind it yet.', 'error'); return; }
+    const isAdminNow = adminIds.has(a.user_id);
+
+    if (isAdminNow && adminIds.size <= 1) {
+      showToast('This is the only admin. Promote somebody else first.', 'error');
+      return;
+    }
+    if (isAdminNow && a.user_id === user?.id
+        && !window.confirm('Remove your OWN admin access? You will lose this panel immediately.')) return;
+    if (!isAdminNow
+        && !window.confirm(`Give ${a.artist_name || 'this artist'} full admin access? They will be able to see and change everything.`)) return;
+
+    // Through a function, not the table. public.admins has RLS with writes
+    // restricted to the service role, so an insert or delete from the browser
+    // is refused however many checks this file does first. admin_set_admin
+    // (migration 202) checks the caller and refuses to remove the last admin.
+    setRoleBusy(a.id);
+    const { error } = await supabase.rpc('admin_set_admin', {
+      p_user_id: a.user_id,
+      p_make_admin: !isAdminNow,
+    });
+    setRoleBusy(null);
+
+    if (error) { showToast(`Could not change admin access: ${error.message}`, 'error'); return; }
+
+    setAdminIds(prev => {
+      const next = new Set(prev);
+      if (isAdminNow) next.delete(a.user_id); else next.add(a.user_id);
+      return next;
+    });
+    showToast(isAdminNow ? 'Admin access removed' : 'Admin access granted');
+  };
+
+  const toggleMaster = async (a) => {
+    setRoleBusy(a.id);
+    const { error } = await supabase.from('artists')
+      .update({ is_master: !a.is_master }).eq('id', a.id);
+    setRoleBusy(null);
+    if (error) { showToast(`Could not change the master flag: ${error.message}`, 'error'); return; }
+    setArtists(prev => prev.map(x => x.id === a.id ? { ...x, is_master: !a.is_master } : x));
+    showToast(a.is_master ? 'Master removed' : 'Master set');
+  };
 
   const grantTier = async (artistId, tierSlug, artistName, months = DEFAULT_GRANT_MONTHS) => {
     setGranting(artistId);
@@ -286,6 +344,42 @@ function ArtistsTab() {
                   </div>
                 </button>
                 <div className="flex items-center space-x-2 flex-shrink-0 ml-3">
+                  {/* Admin access and the master flag. Both existed in the
+                      database and in RLS and had no control anywhere, so the
+                      only way to promote somebody was to write the row by
+                      hand. The row already shows a MASTER badge; this is what
+                      puts it there. */}
+                  {roleBusy === a.id ? (
+                    <Loader className="w-4 h-4 animate-spin text-white/30" />
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => toggleAdmin(a)}
+                        title={adminIds.has(a.user_id) ? 'Remove admin access' : 'Make admin'}
+                        className={`p-1.5 rounded-lg border transition ${
+                          adminIds.has(a.user_id)
+                            ? 'bg-red-500/15 border-red-500/30 text-red-300 hover:bg-red-500/25'
+                            : 'bg-white/[0.04] border-white/[0.08] text-white/30 hover:text-white/60 hover:bg-white/[0.08]'
+                        }`}>
+                        <Shield className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleMaster(a)}
+                        title={a.is_master ? 'Remove master' : 'Set master'}
+                        className={`p-1.5 rounded-lg border transition ${
+                          a.is_master
+                            ? 'bg-purple-500/20 border-purple-500/30 text-purple-300 hover:bg-purple-500/30'
+                            : 'bg-white/[0.04] border-white/[0.08] text-white/30 hover:text-white/60 hover:bg-white/[0.08]'
+                        }`}>
+                        <Crown className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
+                  {adminIds.has(a.user_id) && (
+                    <span className="px-1.5 py-0.5 bg-red-500/20 text-red-300 text-[9px] font-bold rounded">ADMIN</span>
+                  )}
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${a.tier === 'premium' || a.tier === 'master' ? 'bg-yellow-500/20 text-yellow-400' : a.tier === 'pro' ? 'bg-purple-500/20 text-purple-400' : 'bg-white/10 text-white/30'}`}>{a.tier || 'free'}</span>
                   {grantingId === a.id ? <Loader className="w-4 h-4 animate-spin text-white/30" /> : (
                     <select value={a.tier === 'master' ? 'premium' : (a.tier || 'free')} onChange={e => grantTier(a.id, e.target.value, a.artist_name, grantMonths)}
@@ -334,34 +428,7 @@ function DuplicatesTab() {
     if (!window.confirm('Move all tracks to kept profile then delete duplicate? Cannot be undone.')) return;
     setMoving(true);
     try {
-      // Every step checked, and the delete at the end never runs if a move
-      // failed. Unchecked, the worst case here was permanent: the track move
-      // is refused, the artist delete succeeds, and the duplicate's catalogue
-      // is orphaned or cascade-deleted with it, reported as "Tracks moved and
-      // duplicate deleted."
-      const { error: trackErr } = await supabase.from('tracks').update({ artist_id: keepId }).eq('artist_id', deleteId);
-      if (trackErr) throw new Error(`the tracks could not be moved, so nothing was deleted: ${trackErr.message}`);
-
-      const { error: followErr } = await supabase.from('follows').update({ artist_id: keepId }).eq('artist_id', deleteId);
-      if (followErr) throw new Error(`the followers could not be moved, so nothing was deleted: ${followErr.message}`);
-
-      // Carry over the duplicate's stream credit before it's gone for good —
-      // otherwise total_streams silently loses whatever that artist had earned
-      const { data: dupArtist } = await supabase
-        .from('artists').select('total_streams').eq('id', deleteId).maybeSingle();
-      if (dupArtist?.total_streams) {
-        const { data: keepArtist } = await supabase
-          .from('artists').select('total_streams').eq('id', keepId).maybeSingle();
-        const { error: creditErr } = await supabase.from('artists')
-          .update({ total_streams: (keepArtist?.total_streams || 0) + dupArtist.total_streams })
-          .eq('id', keepId);
-        // Not fatal: the merge is still correct without it, but the stream
-        // credit is gone the moment the duplicate is deleted, so say so.
-        if (creditErr) console.error('[people] stream credit not carried over:', creditErr.message);
-      }
-
-      const { error: delErr } = await supabase.from('artists').delete().eq('id', deleteId);
-      if (delErr) throw new Error(`the tracks were moved but the duplicate was NOT deleted: ${delErr.message}`);
+      await mergeArtists(supabase, keepId, deleteId);
       flash('Tracks moved and duplicate deleted.');
       fetchArtists();
     } catch (e) { flash('Error: ' + e.message); }
@@ -372,15 +439,7 @@ function DuplicatesTab() {
     if (!window.confirm('Delete this artist and ALL their tracks? Cannot be undone.')) return;
     setDeleting(id);
     try {
-      // Reported step by step, because a half-finished delete leaves rows
-      // pointing at an artist that is gone, and "Artist deleted." told you
-      // nothing about which half ran.
-      for (const [table, label] of [['tracks', 'tracks'], ['follows', 'followers'], ['notifications', 'notifications']]) {
-        const { error } = await supabase.from(table).delete().eq('artist_id', id);
-        if (error) throw new Error(`their ${label} could not be deleted, so the artist was left in place: ${error.message}`);
-      }
-      const { error: artistErr } = await supabase.from('artists').delete().eq('id', id);
-      if (artistErr) throw new Error(`their content was deleted but the artist row was not: ${artistErr.message}`);
+      await deleteArtistCompletely(supabase, id);
       flash('Artist deleted.');
       fetchArtists();
     } catch (e) { flash('Error: ' + e.message); }

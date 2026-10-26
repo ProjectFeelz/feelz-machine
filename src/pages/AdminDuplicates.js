@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { mergeArtists, deleteArtistCompletely } from '../utils/artistMerge';
 import { useAuth } from '../contexts/AuthContext';
 import { ChevronLeft, Trash2, Loader, AlertTriangle, Users, Search, Merge } from 'lucide-react';
 
@@ -48,43 +49,13 @@ export default function AdminDuplicates() {
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 4000); };
 
   const handleMoveAndDelete = async (keepId, deleteId) => {
-    if (!window.confirm('Move all tracks from the duplicate to the kept profile, then delete the duplicate? This cannot be undone.')) return;
+    if (!window.confirm('Move all tracks to the kept profile then delete the duplicate? This cannot be undone.')) return;
     setMoving(true);
     try {
-      // Move tracks
-      const { error: moveErr } = await supabase
-        .from('tracks')
-        .update({ artist_id: keepId })
-        .eq('artist_id', deleteId);
-      if (moveErr) throw moveErr;
-
-      // Move follows. Checked like the track move above: if this is refused
-      // and the delete below still runs, those followers follow nobody.
-      const { error: followErr } = await supabase.from('follows').update({ artist_id: keepId }).eq('artist_id', deleteId);
-      if (followErr) throw new Error(`the followers could not be moved, so nothing was deleted: ${followErr.message}`);
-
-      // Carry over the duplicate's stream credit before it's gone for good —
-      // otherwise total_streams silently loses whatever that artist had earned
-      const { data: dupArtist } = await supabase
-        .from('artists').select('total_streams').eq('id', deleteId).maybeSingle();
-      if (dupArtist?.total_streams) {
-        const { data: keepArtist } = await supabase
-          .from('artists').select('total_streams').eq('id', keepId).maybeSingle();
-        const { error: creditErr } = await supabase.from('artists')
-          .update({ total_streams: (keepArtist?.total_streams || 0) + dupArtist.total_streams })
-          .eq('id', keepId);
-        if (creditErr) console.error('[duplicates] stream credit not carried over:', creditErr.message);
-      }
-
-      // Delete duplicate artist
-      const { error: delErr } = await supabase.from('artists').delete().eq('id', deleteId);
-      if (delErr) throw delErr;
-
+      await mergeArtists(supabase, keepId, deleteId);
       flash('Tracks moved and duplicate deleted.');
       fetchArtists();
-    } catch (e) {
-      flash('Error: ' + e.message);
-    }
+    } catch (e) { flash('Error: ' + e.message); }
     setMoving(false);
   };
 
@@ -92,17 +63,10 @@ export default function AdminDuplicates() {
     if (!window.confirm('Delete this artist and ALL their tracks? This cannot be undone.')) return;
     setDeleting(artistId);
     try {
-      for (const [table, label] of [['tracks', 'tracks'], ['follows', 'followers'], ['notifications', 'notifications']]) {
-        const { error } = await supabase.from(table).delete().eq('artist_id', artistId);
-        if (error) throw new Error(`their ${label} could not be deleted, so the artist was left in place: ${error.message}`);
-      }
-      const { error } = await supabase.from('artists').delete().eq('id', artistId);
-      if (error) throw error;
+      await deleteArtistCompletely(supabase, artistId);
       flash('Artist and all their data deleted.');
       fetchArtists();
-    } catch (e) {
-      flash('Error: ' + e.message);
-    }
+    } catch (e) { flash('Error: ' + e.message); }
     setDeleting(null);
   };
 
