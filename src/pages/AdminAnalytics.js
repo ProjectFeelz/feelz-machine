@@ -168,6 +168,13 @@ export default function AdminAnalytics({ embedded = false }) {
   const [signupTimeline, setSignupTimeline] = useState([]);
   const [uploadTimeline, setUploadTimeline] = useState([]);
   const [deviceSplit, setDeviceSplit] = useState([]);
+
+  // Real uploads over the selected window, from the rows the Growth chart is
+  // already drawing. Per week rather than per day because on this platform a
+  // daily figure is mostly zeroes, and a weekly one moves when something
+  // happens.
+  const uploadsInRange = uploadTimeline.reduce((n, d) => n + (Number(d.uploads) || 0), 0);
+  const uploadsPerWeek = range > 0 ? (uploadsInRange * 7) / range : 0;
   const [tierSplit, setTierSplit] = useState([]);
   const [topTracks, setTopTracks] = useState([]);
   const [pluginGalleryPlays, setPluginGalleryPlays] = useState([]);
@@ -1527,8 +1534,30 @@ export default function AdminAnalytics({ embedded = false }) {
               <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05] space-y-4">
                 <SectionTitle icon={Activity} title="Platform Health Indicators" color="text-cyan-400" />
 
+                {/* "Upload rate" used to be this row, reading published / total
+                    tracks. That is not a rate: it has no time in it, nearly
+                    every upload gets published, and it returned the same
+                    number on 7 days and on 30. Somebody watching it for
+                    activity was watching a constant.
+
+                    The real measurement was already on this page.
+                    admin_upload_timeline counts uploads per day for the
+                    selected range and feeds the Growth chart above, so the
+                    actual rate is a sum of rows that are already loaded. */}
+                <div className="flex items-end justify-between pb-1">
+                  <div>
+                    <p className="text-xs text-white/60">Uploads</p>
+                    <p className="text-[10px] text-white/25 mt-0.5">
+                      Last {range} days · {fmt(uploadsInRange)} track{uploadsInRange === 1 ? '' : 's'}
+                    </p>
+                  </div>
+                  <p className="text-sm font-bold text-white">
+                    {uploadsPerWeek.toFixed(1)}<span className="text-[10px] font-normal text-white/40"> / week</span>
+                  </p>
+                </div>
+
                 {[
-                  { label: 'Upload rate', value: kpis.published, max: kpis.tracks, desc: 'Published / total tracks', color: GREEN },
+                  { label: 'Published share', value: kpis.published, max: kpis.tracks, desc: 'Published / total tracks', color: GREEN },
                   { label: 'Listener engagement', value: retentionStats.mau, max: kpis.listeners, desc: `Active 30d / total listeners`, color: CYAN },
                   { label: 'Collab activity', value: kpis.collabs, max: kpis.artists, desc: 'Collabs / total artists', color: PURPLE },
                   { label: 'Premium adoption', value: tierSplit.find(t => t.name === 'Premium')?.value || 0, max: kpis.artists, desc: 'Premium artists / total', color: YELLOW },
