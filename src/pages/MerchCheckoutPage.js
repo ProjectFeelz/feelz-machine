@@ -12,7 +12,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import { Helmet } from 'react-helmet-async';
 import { useAuth } from '../contexts/AuthContext';
-import { ArrowLeft, Loader, Truck, Check, Package, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Loader, Truck, Check, Package, ChevronDown, CreditCard } from 'lucide-react';
+import { loadPaystackInline } from '../components/PayInRandButton';
 
 const COUNTRIES = [
   { code: 'ZA', name: 'South Africa' },
@@ -35,6 +36,14 @@ const COUNTRIES = [
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 
+// Same rule as src/components/PayInRandButton.js: live only when the key says
+// live, so a missing or test key fails in the safe direction and the button
+// simply is not there. The server keeps its own copy of this check and that
+// is the one that counts.
+const PAYSTACK_PUBLIC_KEY = process.env.REACT_APP_PAYSTACK_PUBLIC_KEY || '';
+const PAYSTACK_IS_LIVE = PAYSTACK_PUBLIC_KEY.startsWith('pk_live_')
+  || process.env.REACT_APP_PAYSTACK_ALLOW_TEST === 'true';
+
 async function merchRequest(action, params = {}) {
   const headers = { 'Content-Type': 'application/json' };
   try {
@@ -48,6 +57,20 @@ async function merchRequest(action, params = {}) {
   const json = await res.json().catch(() => ({}));
   if (!res.ok || json.ok === false) throw new Error(json.error || 'Request failed');
   return json;
+}
+
+async function merchRequestRaw(action, params = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  try {
+    const { supabase } = await import('../supabaseClient');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+  } catch { /* signed out is fine */ }
+  const res = await fetch('/.netlify/functions/merch-order', {
+    method: 'POST', headers, body: JSON.stringify({ action, ...params }),
+  });
+  const json = await res.json().catch(() => ({}));
+  return { status: res.status, ok: res.ok, json };
 }
 
 export default function MerchCheckoutPage() {
@@ -75,6 +98,18 @@ export default function MerchCheckoutPage() {
   const [paypalReady,      setPaypalReady]      = useState(false);
   const [orderConfirmed,   setOrderConfirmed]   = useState(null); // order object
   const [error,            setError]            = useState('');
+
+  // ── Rand, by card ─────────────────────────────────────────────────────────
+  //
+  // The buyer pays in an overlay on this page. There is no redirect to tell
+  // this end it worked and Paystack's inline callbacks are not documented for
+  // resumeTransaction, so nothing here is trusted to say a payment happened:
+  // awaitingRef starts a poll of our own server, whose answer is the row the
+  // webhook wrote.
+  const [randBusy,   setRandBusy]   = useState(false);
+  const [randNotice, setRandNotice] = useState('');
+  const [randError,  setRandError]  = useState('');
+  const [awaitingRef, setAwaitingRef] = useState(null);
 
   const set = (key, val) => setForm(p => ({ ...p, [key]: val }));
 
@@ -170,6 +205,92 @@ export default function MerchCheckoutPage() {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paypalReady, canPay, selectedRate?.id, form.email, form.name, form.address1, form.address2, form.city, form.state_code, form.country_code, form.zip, quantity]);
+
+  // While a rand payment is open, ask our own server every four seconds
+  // whether the webhook has recorded it. The overlay's own callbacks may or
+  // may not fire; this does not depend on them.
+  useEffect(() => {
+    if (!awaitingRef) return undefined;
+    let stopped = false;
+
+    const tick = async () => {
+      try {
+        const { json } = await merchRequestRaw('status', { reference: awaitingRef });
+        if (!stopped && json && json.paid) {
+          setAwaitingRef(null);
+          setRandBusy(false);
+          setOrderConfirmed(json.order || { id: null });
+        }
+      } catch { /* a missed poll is nothing; the next one is in four seconds */ }
+    };
+
+    const id = setInterval(tick, 4000);
+    tick();
+    return () => { stopped = true; clearInterval(id); };
+  }, [awaitingRef]);
+
+  const payInRand = async () => {
+    setRandError('');
+    setRandNotice('');
+    setRandBusy(true);
+    try {
+      const { status, ok, json } = await merchRequestRaw('create', {
+        processor: 'paystack',
+        artist_id: artist.id,
+        variant_id: variant.id,
+        quantity,
+        shipping_method: selectedRate.id,
+        email: form.email,
+        shipping_address: {
+          name: form.name, phone: form.phone || undefined,
+          address1: form.address1, address2: form.address2 || undefined,
+          city: form.city, state_code: form.state_code || undefined,
+          country_code: form.country_code, zip: form.zip,
+        },
+      });
+
+      // This artist takes PayPal only, or rand is not switched on. Neither is
+      // an error, so neither is styled as one: it says so and gets out of the
+      // way of the PayPal buttons above.
+      if (status === 409 || status === 503) {
+        setRandNotice(json.message || 'Card payments in rand are not available here. Use the PayPal button above.');
+        setRandBusy(false);
+        return;
+      }
+
+      if (!ok || !json.authorizationUrl) {
+        throw new Error(json.message || json.error || 'This payment could not be started.');
+      }
+
+      if (json.accessCode) {
+        const Pop = await loadPaystackInline();
+        if (Pop) {
+          try {
+            const popup = new Pop();
+            setAwaitingRef(json.reference);
+            popup.resumeTransaction(json.accessCode, {
+              // The poll above is what actually decides. These only make a
+              // fast path faster.
+              onSuccess: () => { /* the poll picks it up within four seconds */ },
+              onCancel:  () => { setAwaitingRef(null); setRandBusy(false); },
+              onError:   () => { setAwaitingRef(null); window.location.href = json.authorizationUrl; },
+            });
+            return;
+          } catch (inlineErr) {
+            console.error('[merch] inline checkout failed, redirecting:', inlineErr);
+            setAwaitingRef(null);
+          }
+        }
+      }
+
+      // Away to Paystack. The order is already recorded as awaiting payment
+      // and the webhook confirms it, so there is no state here to keep.
+      window.location.href = json.authorizationUrl;
+    } catch (e) {
+      setRandError(e.message || 'Something went wrong.');
+      setRandBusy(false);
+    }
+  };
 
   // ── Order confirmed screen ──────────────────────────────────────────────────
   if (orderConfirmed) {
@@ -396,6 +517,51 @@ export default function MerchCheckoutPage() {
               </div>
             )}
             <div id="paypal-merch-container" />
+
+            {/* Rand, by card. Second rather than first because PayPal is the
+                route every artist has: this one only works where the artist
+                has a South African bank account on file, and the server says
+                so with a 409 the moment it is pressed. */}
+            {PAYSTACK_IS_LIVE && !randNotice && (
+              <>
+                <div className="flex items-center space-x-3 py-1">
+                  <div className="flex-1 h-px bg-white/[0.08]" />
+                  <span className="text-[10px] uppercase tracking-wider text-white/25">or</span>
+                  <div className="flex-1 h-px bg-white/[0.08]" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={payInRand}
+                  disabled={randBusy || !!awaitingRef}
+                  className="w-full py-3.5 rounded-2xl text-sm font-semibold text-white
+                             bg-white/[0.06] border border-white/10 hover:bg-white/[0.1]
+                             transition active:scale-[0.99] disabled:opacity-50
+                             flex items-center justify-center space-x-2"
+                >
+                  {awaitingRef ? (
+                    <><Loader className="w-4 h-4 animate-spin" /><span>Waiting for the payment</span></>
+                  ) : randBusy ? (
+                    <><Loader className="w-4 h-4 animate-spin" /><span>Starting</span></>
+                  ) : (
+                    <><CreditCard className="w-4 h-4" /><span>Pay in rand by card</span></>
+                  )}
+                </button>
+
+                <p className="text-[10px] text-white/25 text-center">
+                  {awaitingRef
+                    ? 'Finish in the card window. This page updates on its own once the payment clears.'
+                    : 'South African cards. The exact rand amount is shown before you confirm.'}
+                </p>
+              </>
+            )}
+
+            {randNotice && (
+              <p className="text-[11px] text-center text-white/40 px-2">{randNotice}</p>
+            )}
+            {randError && (
+              <p className="text-[11px] text-center text-red-400 px-2">{randError}</p>
+            )}
           </div>
         ) : (
           <div className="w-full py-4 rounded-2xl text-sm font-semibold text-white/40 bg-white/[0.04] flex items-center justify-center space-x-2">

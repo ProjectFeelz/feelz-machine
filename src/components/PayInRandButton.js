@@ -83,6 +83,11 @@ const PAYSTACK_IS_LIVE = PUBLIC_KEY.startsWith('pk_live_') || ALLOW_TEST;
 const INLINE_SRC = 'https://js.paystack.co/v2/inline.js';
 let inlinePromise = null;
 
+// Exported so the merch checkout can open the same overlay rather than
+// shipping a second copy of this loader. One script tag, one promise, however
+// many buttons on the page ask for it.
+export function loadPaystackInline() { return loadInline(); }
+
 function loadInline() {
   if (window.PaystackPop) return Promise.resolve(window.PaystackPop);
   if (inlinePromise) return inlinePromise;
