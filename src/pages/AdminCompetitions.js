@@ -413,9 +413,13 @@ export default function AdminCompetitions({ embedded = false }) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    // competition_entries(count) is embedded because the row below reads
+    // comp.competition_entries?.[0]?.count. Without the embed that property
+    // never exists and every competition reported "0 entries", which is the
+    // number an admin would use to decide whether to open voting.
     const { data } = await supabase
       .from('competitions')
-      .select('*')
+      .select('*, competition_entries(count)')
       .order('created_at', { ascending: false });
     setCompetitions(data || []);
     setLoading(false);

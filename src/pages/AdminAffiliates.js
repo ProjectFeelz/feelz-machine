@@ -53,10 +53,23 @@ export default function AdminAffiliates({ embedded = false }) {
       setPayouts(pays || []);
 
       const convs = convStats || [];
+      // The list above is the top 100 earners, which is the right thing to
+      // show in a table and the wrong thing to count. "Total Affiliates" read
+      // its length, so it could never exceed 100, and "Total Earned" summed
+      // only those hundred. Counted at the server instead, where there is no
+      // page to fall off.
+      const [{ count: affCount }, { count: activeAffCount }, { data: earnedRows }] = await Promise.all([
+        supabase.from('affiliates').select('*', { count: 'exact', head: true }),
+        supabase.from('affiliates').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+        supabase.rpc('affiliates_total_earned'),
+      ]);
+
       setStats({
-        totalAffiliates:   enrichedAffs.length,
-        activeAffiliates:  enrichedAffs.filter(a => a.status === 'active').length,
-        totalEarned:       enrichedAffs.reduce((s, a) => s + (a.total_earned_zar || 0), 0),
+        totalAffiliates:   affCount ?? enrichedAffs.length,
+        activeAffiliates:  activeAffCount ?? enrichedAffs.filter(a => a.status === 'active').length,
+        // The RPC is the whole sum. The fallback is the top hundred, which is
+        // wrong but visibly wrong rather than silently so.
+        totalEarned:       Number(earnedRows ?? enrichedAffs.reduce((s, a) => s + (a.total_earned_zar || 0), 0)),
         pendingPayouts:    (pays || []).reduce((s, p) => s + (p.amount_zar || 0), 0),
         totalConversions:  convs.length,
         totalCommission:   convs.reduce((s, c) => s + (c.commission_zar || 0), 0),

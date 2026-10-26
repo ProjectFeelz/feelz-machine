@@ -788,7 +788,14 @@ export default function ArtistDashboard() {
 
       if (total > 0) {
         const unique     = Number(behavior?.unique_users || 0);
-        const repeatRate = total > 0 ? Math.round((Number(behavior?.repeat_users || 0) / total) * 100) : 0;
+        // Repeat LISTENERS over LISTENERS. This divided by total streams,
+        // which is a different question and a much bigger denominator, so the
+        // figure understated loyalty and fell as an artist gained plays: the
+        // better they did, the worse this looked. unique_users was already
+        // fetched on the line above and was simply not used here.
+        const repeatRate = unique > 0
+          ? Math.min(100, Math.round((Number(behavior?.repeat_users || 0) / unique) * 100))
+          : 0;
 
         // Null rather than 0 when there is not enough data yet, so the UI can
         // show a dash instead of asserting "0 percent completion", which would

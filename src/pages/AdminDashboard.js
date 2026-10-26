@@ -90,21 +90,19 @@ export default function AdminDashboard() {
       // get_platform_listener_stats already does it in AdminAnalytics.
       // Until then the errors are at least read, so a refused query is
       // distinguishable in the console from a genuine zero.
+      // Streams, revenue and Fan Pro now come from an admin-gated function
+      // (migration 201) rather than from the five owner-scoped tables. Read
+      // from the browser those tables return only the signed-in admin's own
+      // rows, so these three tiles were showing one artist's numbers under a
+      // platform heading. The remaining three tables are USING (true) and are
+      // genuinely platform-wide, so they stay as they are.
       const [
-        { count: totalStreams7d, error: streamErr },
-        { data: tipData, error: tipErr },
-        { data: dlData, error: dlErr },
-        { data: beatData, error: beatErr },
-        { count: fanProCount, error: fanProErr },
+        { data: platform, error: platformErr },
         { count: activeListeners7d, error: activeErr },
         { count: totalTracks, error: trackErr },
         { count: totalFollows, error: followErr },
       ] = await Promise.all([
-        supabase.from('streams').select('*', { count: 'exact', head: true }).gte('created_at', cutoff7d),
-        supabase.from('tips').select('amount').gte('created_at', cutoff7d),
-        supabase.from('downloads').select('amount_paid').gt('amount_paid', 0).gte('created_at', cutoff7d),
-        supabase.from('beat_purchases').select('amount_paid').eq('status', 'completed').gte('created_at', cutoff7d),
-        supabase.from('listener_tier_subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+        supabase.rpc('admin_platform_7d_stats', { p_days: 7 }).maybeSingle(),
         supabase.from('listeners').select('*', { count: 'exact', head: true }).gte('last_seen_at', cutoff7d),
         supabase.from('tracks').select('*', { count: 'exact', head: true }).eq('is_published', true),
         supabase.from('follows').select('*', { count: 'exact', head: true }),
@@ -130,19 +128,15 @@ export default function AdminDashboard() {
       ]);
       if (listenerErr)  console.error('[admin] listener count failed:', listenerErr.code, listenerErr.message);
       if (beatmakerErr) console.error('[admin] beatmaker count failed:', beatmakerErr.code, beatmakerErr.message);
-      [['streams', streamErr], ['tips', tipErr], ['downloads', dlErr],
-       ['beat_purchases', beatErr], ['listener_tier_subscriptions', fanProErr],
+      [['admin_platform_7d_stats', platformErr],
        ['listeners (active)', activeErr], ['tracks', trackErr], ['follows', followErr]]
         .filter(([, e]) => e)
         .forEach(([name, e]) => console.error(`[admin] ${name} blocked or failed:`, e.code, e.message));
 
-      const tipsTotal  = (tipData  || []).reduce((s, t) => s + (t.amount      || 0), 0);
-      const dlTotal    = (dlData   || []).reduce((s, d) => s + (d.amount_paid || 0), 0);
-      const beatTotal  = (beatData || []).reduce((s, b) => s + (b.amount_paid || 0), 0);
       setPlatformStats({
-        streams7d:      totalStreams7d  || 0,
-        revenue7d:      (tipsTotal + dlTotal + beatTotal).toFixed(2),
-        fanProSubs:     fanProCount     || 0,
+        streams7d:      Number(platform?.streams)     || 0,
+        revenue7d:      Number(platform?.revenue_usd  || 0).toFixed(2),
+        fanProSubs:     Number(platform?.fan_pro_active) || 0,
         activeListeners: activeListeners7d || 0,
         publishedTracks: totalTracks    || 0,
         totalFollows:    totalFollows   || 0,
