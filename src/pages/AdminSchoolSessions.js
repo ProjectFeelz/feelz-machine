@@ -199,7 +199,8 @@ export default function AdminSchoolSessions({ embedded = false }) {
   };
 
   const removeJudge = async (id) => {
-    await supabase.from('school_sessions_judges').delete().eq('id', id);
+    const { error } = await supabase.from('school_sessions_judges').delete().eq('id', id);
+    if (error) { showToast(`Judge not removed: ${error.message}`); return; }
     setJudges(prev => prev.filter(j => j.id !== id));
   };
 
@@ -321,12 +322,14 @@ export default function AdminSchoolSessions({ embedded = false }) {
   };
 
   const toggleSchoolActive = async (school) => {
-    await supabase.from('school_sessions_schools').update({ is_active: !school.is_active }).eq('id', school.id);
+    const { error } = await supabase.from('school_sessions_schools').update({ is_active: !school.is_active }).eq('id', school.id);
+    if (error) { showToast(`School not changed: ${error.message}`); return; }
     setSchools(prev => prev.map(s => s.id === school.id ? { ...s, is_active: !s.is_active } : s));
   };
 
   const removeSchool = async (id) => {
-    await supabase.from('school_sessions_schools').delete().eq('id', id);
+    const { error } = await supabase.from('school_sessions_schools').delete().eq('id', id);
+    if (error) { showToast(`School not removed: ${error.message}`); return; }
     setSchools(prev => prev.filter(s => s.id !== id));
   };
 
@@ -398,17 +401,20 @@ export default function AdminSchoolSessions({ embedded = false }) {
   };
 
   const unlinkSongTrack = async (song) => {
-    await supabase.from('school_sessions_shortlist_songs').update({ reference_track_id: null }).eq('id', song.id);
+    const { error } = await supabase.from('school_sessions_shortlist_songs').update({ reference_track_id: null }).eq('id', song.id);
+    if (error) { showToast(`Track not unlinked: ${error.message}`); return; }
     setSongs(prev => prev.map(s => s.id === song.id ? { ...s, reference_track_id: null, reference_track: null } : s));
   };
 
   const toggleSongActive = async (song) => {
-    await supabase.from('school_sessions_shortlist_songs').update({ is_active: !song.is_active }).eq('id', song.id);
+    const { error } = await supabase.from('school_sessions_shortlist_songs').update({ is_active: !song.is_active }).eq('id', song.id);
+    if (error) { showToast(`Song not changed: ${error.message}`); return; }
     setSongs(prev => prev.map(s => s.id === song.id ? { ...s, is_active: !s.is_active } : s));
   };
 
   const removeSong = async (id) => {
-    await supabase.from('school_sessions_shortlist_songs').delete().eq('id', id);
+    const { error } = await supabase.from('school_sessions_shortlist_songs').delete().eq('id', id);
+    if (error) { showToast(`Song not removed: ${error.message}`); return; }
     setSongs(prev => prev.filter(s => s.id !== id));
   };
 

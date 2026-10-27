@@ -84,11 +84,18 @@ export default function AdminBugReports() {
   const updateStatus = async (id, status) => {
     setUpdating(id);
     try {
-      await supabase.from('user_feedback')
+      const { error } = await supabase.from('user_feedback')
         .update({ status, updated_at: new Date().toISOString() })
         .eq('id', id);
+      if (error) throw error;
       setReports(prev => prev.map(r => r.id === id ? { ...r, status } : r));
-    } catch (err) { console.error('Update status error:', err); }
+    } catch (err) {
+      // The catch only logged, so marking a report resolved moved the chip
+      // and survived until the next reload, which is how a bug queue loses
+      // track of what has actually been dealt with.
+      console.error('Update status error:', err);
+      window.alert(`That report was not updated: ${err.message}`);
+    }
     setUpdating(null);
   };
 
@@ -98,12 +105,16 @@ export default function AdminBugReports() {
     setReplying(report.id);
     try {
       // Save reply to user_feedback
-      await supabase.from('user_feedback').update({
+      const { error: replyErr } = await supabase.from('user_feedback').update({
         admin_reply: text,
         replied_at:  new Date().toISOString(),
         status:      'in_progress',
         updated_at:  new Date().toISOString(),
       }).eq('id', report.id);
+      // Checked before the notification goes out. Telling somebody you have
+      // replied, with no reply saved against their report, is the worst of
+      // both: they expect an answer and there is no record of one.
+      if (replyErr) throw replyErr;
 
       // Send in-app notification to the user
       const { data: userArtist } = await supabase
@@ -127,7 +138,13 @@ export default function AdminBugReports() {
         r.id === report.id ? { ...r, admin_reply: text, replied_at: new Date().toISOString(), status: 'in_progress' } : r
       ));
       setReplyText(prev => ({ ...prev, [report.id]: '' }));
-    } catch (err) { console.error('Reply error:', err); }
+    } catch (err) {
+      // Visible, because the reply box clears on success only. A silent
+      // failure here looks exactly like a sent reply: the text stays in the
+      // box, the chip does not move, and nothing says why.
+      console.error('Reply error:', err);
+      window.alert(`That reply was not sent: ${err.message}`);
+    }
     setReplying(null);
   };
 

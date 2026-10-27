@@ -493,11 +493,14 @@ export default function AdminAnalytics({ embedded = false }) {
       setTopArtists(artistData || []);
 
       // ── Top genres ────────────────────────────────────────────────────────
-      const { data: genreData } = await supabase
-        .from('tracks').select('genre, stream_count').eq('is_published', true).not('genre', 'is', null);
-      const gc = {};
-      (genreData || []).forEach(t => { gc[t.genre] = (gc[t.genre] || 0) + (t.stream_count || 0); });
-      setTopGenres(Object.entries(gc).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([genre, streams]) => ({ genre, streams })));
+      //
+      // Summed in the database (migration 206). This pulled every published
+      // track into the browser and added the counters up, against PostgREST's
+      // 1000-row ceiling. 137 published tracks today, so it was right; it
+      // would have started dropping genres silently somewhere past a thousand.
+      const { data: genreRows, error: genreErr } = await supabase.rpc('admin_top_genres', { p_limit: 8 });
+      if (genreErr) console.error('[analytics] admin_top_genres:', genreErr.code, genreErr.message);
+      setTopGenres((genreRows || []).map(g => ({ genre: g.genre, streams: Number(g.streams) || 0 })));
 
       // ── Retention / activity ──────────────────────────────────────────────
       const [
@@ -702,17 +705,14 @@ export default function AdminAnalytics({ embedded = false }) {
           .sort((a, b) => b[1] - a[1]).slice(0, 5)
           .map(([id, count]) => ({ name: artistNameMap[id]?.artist_name || id, slug: artistNameMap[id]?.slug, newFollowers: count }));
 
-        // Trending genres by recent streams
-        const { data: recentGenreStreams } = await supabase
-          .from('streams').select('tracks(genre)').gte('created_at', cutoff).limit(5000);
-        const genreCounts = {};
-        (recentGenreStreams || []).forEach(s => {
-          const g = s.tracks?.genre;
-          if (g) genreCounts[g] = (genreCounts[g] || 0) + 1;
-        });
-        setTrendingGenres(Object.entries(genreCounts)
-          .sort((a, b) => b[1] - a[1]).slice(0, 8)
-          .map(([genre, streams]) => ({ genre, streams })));
+        // Trending genres by recent streams, counted in the database
+        // (migration 206). The .limit(5000) here was a 1000-row sample
+        // wearing a 5000-row label: PostgREST clamps it and says nothing.
+        // 760 streams in a 30 day window today, so it has not tipped yet.
+        const { data: trendRows, error: trendErr } = await supabase
+          .rpc('admin_trending_genres', { p_days: range, p_limit: 8 });
+        if (trendErr) console.error('[analytics] admin_trending_genres:', trendErr.code, trendErr.message);
+        setTrendingGenres((trendRows || []).map(g => ({ genre: g.genre, streams: Number(g.streams) || 0 })));
 
         setPlatformSignals(growingArtists);
       } catch (err) { console.warn('Platform signals error:', err); }
