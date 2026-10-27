@@ -27,6 +27,7 @@ import RetailPitchesTab from '../components/retail/RetailPitchesTab';
 import RetailPayoutsTab from '../components/retail/RetailPayoutsTab';
 import RetailAnalyticsTab from '../components/retail/RetailAnalyticsTab';
 import RetailPricingTab from '../components/retail/RetailPricingTab';
+import { perMonth } from '../components/retail/retailMoney';
 
 const inputCls = "w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition";
 const btnCls = "flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg bg-purple-500 hover:bg-purple-400 text-white transition disabled:opacity-40";
@@ -351,7 +352,7 @@ function VenuesTab({ showToast }) {
         .select('id, business_name, contact_name, contact_email, status, user_id, created_at')
         .order('created_at', { ascending: false }),
       supabase.from('retail_subscriptions')
-        .select('venue_id, status, monthly_fee, paypal_subscription_id'),
+        .select('venue_id, status, monthly_fee, currency, paypal_subscription_id'),
     ]);
     const byVenue = Object.fromEntries((subs || []).map(s => [s.venue_id, s]));
     setVenues((vs || []).map(v => ({ ...v, sub: byVenue[v.id] || null })));
@@ -506,7 +507,7 @@ function VenuesTab({ showToast }) {
                 ) : (
                   <button onClick={() => { setEditingFee(v.id); setFeeDraft(v.sub?.monthly_fee || ''); }}
                     className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white/[0.06] text-white/60 hover:bg-white/[0.12] transition">
-                    {v.sub ? `$${v.sub.monthly_fee} / month` : 'Set monthly fee'}
+                    {v.sub ? perMonth(v.sub.monthly_fee, v.sub.currency) : 'Set monthly fee'}
                   </button>
                 )}
                 <button onClick={() => copyInvite(v)}

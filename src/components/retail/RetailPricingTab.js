@@ -27,18 +27,16 @@
 import React from 'react';
 import { Loader, Plus, Trash2, Pencil, Check, X, Tag, Info } from 'lucide-react';
 import { supabase } from '../../supabaseClient';
+import { CURRENCIES, DEFAULT_CURRENCY, priceRange } from './retailMoney';
 
 const inputCls = "w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition";
 
-const money = (n) => (n == null || n === '' ? '—' : `$${Number(n).toFixed(0)}`);
-
-const band = (lo, hi) => {
-  if (lo == null && hi == null) return '—';
-  if (lo != null && hi != null) return `${money(lo)} – ${money(hi)}`;
-  return money(lo ?? hi);
+// Formatting comes from retailMoney so this screen and the Venues fee field
+// cannot disagree about what a number means.
+const EMPTY = {
+  venue_type: '', suggested_fee_min: '', suggested_fee_max: '',
+  notes: '', sort_order: '', currency: DEFAULT_CURRENCY,
 };
-
-const EMPTY = { venue_type: '', suggested_fee_min: '', suggested_fee_max: '', notes: '', sort_order: '' };
 
 export default function RetailPricingTab({ showToast }) {
   const [rows, setRows]       = React.useState([]);
@@ -87,6 +85,7 @@ export default function RetailPricingTab({ showToast }) {
     suggested_fee_max: d.suggested_fee_max === '' ? null : parseFloat(d.suggested_fee_max),
     notes:             d.notes.trim() || null,
     sort_order:        d.sort_order === '' ? null : parseInt(d.sort_order, 10),
+    currency:          d.currency || DEFAULT_CURRENCY,
   });
 
   const add = async () => {
@@ -131,6 +130,7 @@ export default function RetailPricingTab({ showToast }) {
       suggested_fee_max: row.suggested_fee_max ?? '',
       notes:             row.notes || '',
       sort_order:        row.sort_order ?? '',
+      currency:          row.currency || DEFAULT_CURRENCY,
     });
   };
 
@@ -159,14 +159,18 @@ export default function RetailPricingTab({ showToast }) {
       {/* ── Add ─────────────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
         <p className="text-sm font-semibold text-white mb-3">Add a band</p>
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-2">
+        <div className="grid grid-cols-1 lg:grid-cols-6 gap-2">
           <input className={`${inputCls} lg:col-span-2`} placeholder="Venue type, e.g. Coffee shop"
                  value={draft.venue_type}
                  onChange={e => setDraft(d => ({ ...d, venue_type: e.target.value }))} />
-          <input className={inputCls} type="number" min="0" placeholder="Low $"
+          <select className={inputCls} value={draft.currency}
+                 onChange={e => setDraft(d => ({ ...d, currency: e.target.value }))}>
+            {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+          </select>
+          <input className={inputCls} type="number" min="0" placeholder="Low"
                  value={draft.suggested_fee_min}
                  onChange={e => setDraft(d => ({ ...d, suggested_fee_min: e.target.value }))} />
-          <input className={inputCls} type="number" min="0" placeholder="High $"
+          <input className={inputCls} type="number" min="0" placeholder="High"
                  value={draft.suggested_fee_max}
                  onChange={e => setDraft(d => ({ ...d, suggested_fee_max: e.target.value }))} />
           <input className={inputCls} type="number" placeholder="Order"
@@ -199,13 +203,17 @@ export default function RetailPricingTab({ showToast }) {
             <div key={row.id} className="p-4 border-b border-white/[0.05] last:border-0">
               {editing === row.id ? (
                 <div className="space-y-2">
-                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-2">
+                  <div className="grid grid-cols-1 lg:grid-cols-6 gap-2">
                     <input className={`${inputCls} lg:col-span-2`} value={editDraft.venue_type}
                            onChange={e => setEditDraft(d => ({ ...d, venue_type: e.target.value }))} />
-                    <input className={inputCls} type="number" min="0" placeholder="Low $"
+                    <select className={inputCls} value={editDraft.currency}
+                           onChange={e => setEditDraft(d => ({ ...d, currency: e.target.value }))}>
+                      {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+                    </select>
+                    <input className={inputCls} type="number" min="0" placeholder="Low"
                            value={editDraft.suggested_fee_min}
                            onChange={e => setEditDraft(d => ({ ...d, suggested_fee_min: e.target.value }))} />
-                    <input className={inputCls} type="number" min="0" placeholder="High $"
+                    <input className={inputCls} type="number" min="0" placeholder="High"
                            value={editDraft.suggested_fee_max}
                            onChange={e => setEditDraft(d => ({ ...d, suggested_fee_max: e.target.value }))} />
                     <input className={inputCls} type="number" placeholder="Order"
@@ -232,7 +240,7 @@ export default function RetailPricingTab({ showToast }) {
                     <div className="flex items-baseline gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-white">{row.venue_type}</p>
                       <p className="text-sm text-white/70 tabular-nums">
-                        {band(row.suggested_fee_min, row.suggested_fee_max)}
+                        {priceRange(row.suggested_fee_min, row.suggested_fee_max, row.currency)}
                         <span className="text-white/30"> / month</span>
                       </p>
                     </div>
