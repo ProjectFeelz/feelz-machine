@@ -271,13 +271,38 @@ const handler = async (event) => {
   try {
     console.log('[score-outcomes] Starting…');
 
-    // Fetch messages sent in last 48h that haven't been scored
-    const d48 = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-    const { data: messages } = await supabase
+    // ── A BATCH USED TO GET ONE CHANCE, AND NO SECOND ONE ────────────────
+    //
+    // This fetched messages from the last 48 hours, and scoreMessage refuses
+    // anything under 24 hours old because the conversion window has not closed
+    // yet. So a message was only ever scorable between 24 and 48 hours after
+    // it was sent, and this job samples that band once a day at 03:30.
+    //
+    // The drip sends at 08:00 on Mondays and Thursdays. For an 08:00 batch the
+    // band runs 08:00 the next day to 08:00 the day after, and exactly one
+    // scheduled run falls inside it. One. If that run fails, is skipped, or the
+    // drip shifts by an hour, the batch is never scored and never can be,
+    // because by the following run it has aged out of the 48 hour fetch.
+    //
+    // engagement_outcomes stopped at 24 October while the drip kept sending,
+    // which is what a missed single chance looks like.
+    //
+    // Seven days instead. This adds no risk and cannot double-count:
+    // scoreMessage already returns null for anything under 24 hours old, and
+    // null again for anything with a scored outcome row. Widening only gives a
+    // missed batch another go. A twice-weekly drip puts two batches in that
+    // window, well inside the 1000 row response cap.
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: messages, error: msgErr } = await supabase
       .from('engagement_messages')
       .select('user_id, artist_id, sent_at, segment, signals_used, notification_id')
-      .gte('sent_at', d48)
-      .order('sent_at', { ascending: false });
+      .gte('sent_at', since)
+      .order('sent_at', { ascending: false })
+      .limit(1000);
+
+    // Read, not discarded. An error here used to come back as an empty list,
+    // so a broken query and a quiet week looked identical.
+    if (msgErr) throw new Error(`could not read engagement_messages: ${msgErr.message}`);
 
     const toScore = messages || [];
     console.log(`[score-outcomes] ${toScore.length} messages to score`);
