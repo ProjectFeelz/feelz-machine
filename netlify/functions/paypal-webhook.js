@@ -66,15 +66,49 @@ async function getPayPalToken() {
   });
 }
 
+// WHEN THIS RETURNS FALSE, SAY WHY
+//
+// Every delivery PayPal made on 27 October came back 401 from this function,
+// and PayPal's own error log was the only place it showed. From this end it
+// was invisible: the handler returned 'Invalid signature' and logged nothing,
+// so an activation, a payment failure and a suspension all arrived, were all
+// refused, and left no trace anywhere we look.
+//
+// The three things that can be wrong are now named in the log line:
+//
+//   verification_status  PayPal's verdict. FAILURE with the right webhook id
+//                        points at the payload; the usual cause is this
+//                        function round-tripping the body through JSON.parse
+//                        and JSON.stringify, which can reorder or reformat it.
+//   webhook_id_set       whether PAYPAL_WEBHOOK_ID exists in this deploy at
+//                        all. Missing is a FAILURE every single time.
+//   webhook_id_tail      the last six characters, enough to tell at a glance
+//                        whether it is the webhook registered in PayPal,
+//                        without printing a credential into a log.
+//
+// A 401 that explains itself is the difference between a ten second fix and
+// what this one cost: every subscription event since the webhook was set up.
 async function verifyPayPalSignature(headers, rawBody) {
+  // Netlify base64-encodes some request bodies. paystack-webhook.js and
+  // resend-webhook.js both allow for it; this did not, and a parse failure
+  // here threw out of the handler as a 500 rather than returning false.
+  let parsed;
+  try {
+    parsed = JSON.parse(typeof rawBody === 'string' ? rawBody : '');
+  } catch {
+    console.error('[paypal-webhook] body did not parse as JSON, cannot verify signature');
+    return false;
+  }
+
+  const webhookId = process.env.PAYPAL_WEBHOOK_ID || '';
   const verifyPayload = {
     auth_algo:         headers['paypal-auth-algo'],
     cert_url:          headers['paypal-cert-url'],
     transmission_id:   headers['paypal-transmission-id'],
     transmission_sig:  headers['paypal-transmission-sig'],
     transmission_time: headers['paypal-transmission-time'],
-    webhook_id:        process.env.PAYPAL_WEBHOOK_ID,
-    webhook_event:     JSON.parse(rawBody),
+    webhook_id:        webhookId,
+    webhook_event:     parsed,
   };
   const base = paypalEnv.hostApi;   // see netlify/lib/paypal-env.js
   const token = await getPayPalToken();
@@ -88,11 +122,23 @@ async function verifyPayPalSignature(headers, rawBody) {
       let d = '';
       res.on('data', c => d += c);
       res.on('end', () => {
-        try { resolve(JSON.parse(d).verification_status === 'SUCCESS'); }
-        catch { resolve(false); }
+        let status = null;
+        try { status = JSON.parse(d).verification_status; } catch { /* reported below */ }
+        if (status !== 'SUCCESS') {
+          console.error('[paypal-webhook] signature NOT verified —',
+            'event=',               parsed?.event_type || 'unknown',
+            'verification_status=', status || `unreadable (http ${res.statusCode})`,
+            'webhook_id_set=',      Boolean(webhookId),
+            'webhook_id_tail=',     webhookId ? webhookId.slice(-6) : 'none',
+            '— if that tail is not the webhook registered in PayPal, that is the fault.');
+        }
+        resolve(status === 'SUCCESS');
       });
     });
-    req.on('error', () => resolve(false));
+    req.on('error', (e) => {
+      console.error('[paypal-webhook] could not reach PayPal to verify:', e.message);
+      resolve(false);
+    });
     req.write(body); req.end();
   });
 }
