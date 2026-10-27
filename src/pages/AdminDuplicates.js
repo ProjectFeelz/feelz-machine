@@ -17,36 +17,78 @@ export default function AdminDuplicates() {
   const [msg, setMsg]                 = useState('');
   const [search, setSearch]           = useState('');
   const [selected, setSelected]       = useState({}); // artistId → 'keep' | 'delete'
+  // Whether the duplicate check itself failed, as opposed to finding nothing.
+  // The green "no duplicates" panel must not be shown for the first case.
+  const [dupeCheckFailed, setDupeCheckFailed] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) { navigate('/hub'); return; }
     fetchArtists();
   }, [isAdmin]);
 
+  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 4000); };
+
+  // THE GROUPING MOVED TO THE DATABASE, AND WAS CHECKED BEFORE IT MOVED
+  //
+  // This used to pull every artist row and group them here:
+  //
+  //   .select('...').order('artist_name')            // no limit
+  //   const normalise = n => n.toLowerCase().replace(/[^a-z0-9]/g, '');
+  //
+  // PostgREST caps a response at 1000 rows whatever the query asks for, so
+  // past a thousand artists it would group the first thousand and silently
+  // miss the rest. On this page that means a duplicate pair nobody is ever
+  // offered, and a merge button sitting beside a partial picture.
+  //
+  // This was the last of those counts to be moved, because the button next to
+  // a flagged pair is an irreversible merge or delete and a pair flagged in
+  // error costs somebody their catalogue. So the two normalisations were run
+  // against all 119 names and compared rather than assumed equal: zero keys
+  // differ, and both find zero duplicate groups. The one thing that could have
+  // separated them is the bracket range, since a locale-aware collation can
+  // make [a-z] match accented letters where JavaScript's never does, and every
+  // key the database produces here came back plain ASCII. Migration 209
+  // carries that comparison and its verification query.
   const fetchArtists = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('artists')
-      .select('id, artist_name, slug, profile_image_url, tier, follower_count, created_at, user_id')
-      .order('artist_name');
-    const all = data || [];
-    setArtists(all);
 
-    // Group by normalised name (lowercase, no spaces/punctuation)
-    const normalise = n => n.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const groups = {};
-    all.forEach(a => {
-      const key = normalise(a.artist_name);
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(a);
-    });
-    // Only groups with more than one artist
-    const dups = Object.values(groups).filter(g => g.length > 1);
-    setDuplicates(dups);
+    const [groupRes, listRes] = await Promise.all([
+      supabase.rpc('admin_duplicate_artist_groups'),
+      supabase
+        .from('artists')
+        .select('id, artist_name, slug, profile_image_url, tier, follower_count, created_at, user_id')
+        .order('artist_name')
+        .limit(1000),
+    ]);
+
+    if (groupRes.error) {
+      // Read, not discarded. A failure here used to look exactly like "no
+      // duplicates found", which is the wrong thing to show on a page whose
+      // empty state is meant to be reassuring.
+      setDuplicates([]);
+      setDupeCheckFailed(true);
+      flash('Could not check for duplicates: ' + groupRes.error.message);
+    } else {
+      setDupeCheckFailed(false);
+      // A row per artist, carrying the key they share. Collected back into
+      // groups in the order the database returned them.
+      const byKey = new Map();
+      (groupRes.data || []).forEach(r => {
+        if (!byKey.has(r.group_key)) byKey.set(r.group_key, []);
+        byKey.get(r.group_key).push(r);
+      });
+      setDuplicates([...byKey.values()]);
+    }
+
+    if (listRes.error) {
+      setArtists([]);
+      flash('Could not load the artist list: ' + listRes.error.message);
+    } else {
+      setArtists(listRes.data || []);
+    }
+
     setLoading(false);
   }, []);
-
-  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 4000); };
 
   const handleMoveAndDelete = async (keepId, deleteId) => {
     if (!window.confirm('Move all tracks to the kept profile then delete the duplicate? This cannot be undone.')) return;
@@ -147,9 +189,15 @@ export default function AdminDuplicates() {
         </div>
       )}
 
-      {duplicates.length === 0 && (
+      {duplicates.length === 0 && !dupeCheckFailed && (
         <div className="mb-6 p-4 rounded-2xl bg-green-500/[0.05] border border-green-500/20 text-sm text-green-400/70 text-center">
           No duplicate artist names found
+        </div>
+      )}
+
+      {dupeCheckFailed && (
+        <div className="mb-6 p-4 rounded-2xl bg-amber-500/[0.06] border border-amber-500/25 text-sm text-amber-200/80 text-center">
+          The duplicate check did not run, so this is not a clean bill of health.
         </div>
       )}
 
