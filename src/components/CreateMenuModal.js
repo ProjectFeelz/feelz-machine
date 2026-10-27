@@ -14,6 +14,7 @@ import { StoryUpload } from './ArtistStories';
 import MerchConnectSheet from './MerchConnectSheet';
 import MerchParked from './MerchParked';
 import { MERCH_PARKED } from '../config/features';
+import CreateMenuSection, { MENU_TINTS } from './CreateMenuSection';
 
 // Exact copy of the "+" create menu from ArtistProfilePage.js — same
 // dimensions (maxWidth 360, maxHeight 85vh), same styling, same tab flow.
@@ -275,73 +276,128 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
           {/* ── Menu ── */}
           {createTab === 'menu' && (
             <>
+              {/*
+                GROUPED, BECAUSE THIRTEEN IDENTICAL ROWS ARE NOT A MENU
+                ──────────────────────────────────────────────────────
+                Every row used to carry the same border and the same flat
+                fill, so finding one meant reading all of them top to bottom.
+                They are now in five groups, each with a heading and its own
+                hue, and the hues step through the spectrum down the sheet so
+                the whole thing reads as one gradient rather than five
+                unrelated colours. The point is position: after a couple of
+                visits an artist stops reading and goes to the right band.
+
+                Each item carries a `tint` taken from its group, used for the
+                row's left-to-right wash, its border and its icon tile. The
+                old per-item `color` strings were never read by anything, so
+                they are gone rather than left to rot.
+              */}
               {[
-                { id: 'upload', icon: '🎵', label: 'Upload Track', sub: 'Add new music to your profile', color: 'yellow' },
-                { id: 'story', icon: '📸', label: 'Add Story', sub: 'Share a 24hr clip with fans', color: 'purple' },
-                { id: 'chats', icon: '💬', label: 'Chats', sub: 'Your rooms and artist chats', color: 'purple' },
-                // 'Thought of the Day' removed. It wrote to artist_thoughts
-                // and rendered in exactly one place — the artist's own
-                // profile — so the entry sat in the create menu offering a
-                // post almost nobody made and nobody found. Voice Memo and
-                // Story cover the same "say something today" intent and both
-                // actually surface.
-                { id: 'edit', icon: '✏️', label: 'Edit Profile', sub: 'Update your bio, photo and links', color: 'gray' },
-                { id: 'toppick', icon: '⭐', label: 'Top Pick', sub: 'Choose the track your profile leads with', color: 'yellow' },
-                // Merch is parked (src/config/features.js). The entry stays
-                // visible rather than vanishing, because an artist who set a
-                // store up should be told it is paused, not left wondering
-                // where it went. Tapping it explains; it does not open a shop.
-                MERCH_PARKED
-                  ? { id: 'merch_parked', icon: '🛍️', label: 'Merch Store', sub: 'Paused, tap to see why', color: 'gray' }
-                  : isPremium
-                    ? { id: 'merch', icon: '🛍️', label: 'Merch Store', sub: 'Connect Printful · sell to your fans', color: 'purple' }
-                    : { id: 'merch_locked', icon: '🛍️', label: 'Merch Store', sub: 'Premium only, upgrade to unlock', color: 'gray' },
-                { id: 'dm', icon: '📣', label: 'Message Fans', sub: 'Send a notification to all followers', color: 'green' },
-                { id: 'memo', icon: '🎙️', label: 'Voice Memo', sub: 'Record a message for your fans', color: 'pink' },
-                { id: 'live', icon: '🔴', label: 'Go Live', sub: 'Start a live session', color: 'red' },
-                ...(canNewsletter ? [{ id: 'newsletter', icon: '📨', label: 'Newsletter', sub: 'Write an update for the app or venues', color: 'purple' }] : []),
-                // Last on purpose. It is the one thing here that is not an
-                // action on your own catalogue, and somebody who needs it is
-                // looking for it rather than reaching past it.
-                { id: 'course', icon: '🎓', label: 'How to Use Feelz Machine', sub: 'Recording, uploading, splits, getting paid', color: 'gray' },
-                // SESSIONS, AT THE VERY BOTTOM.
-                //
-                // Everything above is something you do to your own catalogue.
-                // This is the one thing you go and take part in, so it sits
-                // last rather than competing with Upload.
-                //
-                // Only when the gate says the competition is running and this
-                // viewer is eligible. The gate fails closed, so between
-                // seasons the row is simply not here and nobody has to
-                // remember to remove it.
-                ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
-                  ? [{ id: 'sessions', icon: '🏆', label: 'Enter Sessions', sub: 'The cover competition, open to everyone', color: 'gray' }]
-                  : []),
-              ].map(({ id, icon, label, sub }) => (
-                <button key={id}
-                  onClick={() => {
-                    if (id === 'live') { setCreateTab('live'); setLiveTitle(`${artist?.artist_name}'s Live Session`); }
-                    else if (id === 'memo') { setCreateTab('memo'); }
-                    else if (id === 'upload') { close(); navigate('/dashboard?tab=upload'); }
-                    else if (id === 'edit') { close(); navigate('/profile/edit'); }
-                    else if (id === 'toppick') { setCreateTab('toppick'); loadTopPick(); }
-                    else if (id === 'merch_parked') { setShowMerchParked(true); }
-                    else if (id === 'merch') { setShowMerchConnect(true); }
-                    else if (id === 'merch_locked') { close(); navigate('/upgrade'); }
-                    else if (id === 'newsletter') { close(); navigate('/newsletter/compose'); }
-                    else if (id === 'chats') { close(); navigate('/community'); }
-                    else if (id === 'course') { close(); navigate('/learn'); }
-                    else if (id === 'sessions') { close(); navigate('/sessions'); }
-                    else setCreateTab(id);
-                  }}
-                  className="w-full flex items-center space-x-3 p-4 rounded-2xl border transition active:scale-[0.98] text-left"
-                  style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
-                  <span className="text-2xl flex-shrink-0">{icon}</span>
-                  <div>
-                    <p className="text-sm font-semibold text-white">{label}</p>
-                    <p className="text-xs text-white/30 mt-0.5">{sub}</p>
-                  </div>
-                </button>
+                {
+                  heading: 'Create',
+                  tint: MENU_TINTS.create,
+                  items: [
+                    { id: 'upload', icon: '🎵', label: 'Upload Track', sub: 'Add new music to your profile' },
+                    { id: 'story',  icon: '📸', label: 'Add Story',    sub: 'Share a 24hr clip with fans' },
+                    // 'Thought of the Day' removed. It wrote to artist_thoughts
+                    // and rendered in exactly one place — the artist's own
+                    // profile — so the entry sat in the create menu offering a
+                    // post almost nobody made and nobody found. Voice Memo and
+                    // Story cover the same "say something today" intent and
+                    // both actually surface.
+                    { id: 'memo',   icon: '🎙️', label: 'Voice Memo',   sub: 'Record a message for your fans' },
+                    { id: 'live',   icon: '🔴', label: 'Go Live',      sub: 'Start a live session' },
+                  ],
+                },
+                {
+                  heading: 'Reach your fans',
+                  tint: MENU_TINTS.fans,
+                  items: [
+                    { id: 'dm',    icon: '📣', label: 'Message Fans', sub: 'Send a notification to all followers' },
+                    { id: 'chats', icon: '💬', label: 'Chats',        sub: 'Your rooms and artist chats' },
+                    ...(canNewsletter
+                      ? [{ id: 'newsletter', icon: '📨', label: 'Newsletter', sub: 'Write an update for the app or venues' }]
+                      : []),
+                  ],
+                },
+                {
+                  heading: 'Your profile',
+                  tint: MENU_TINTS.profile,
+                  items: [
+                    { id: 'edit',    icon: '✏️', label: 'Edit Profile', sub: 'Update your bio, photo and links' },
+                    { id: 'toppick', icon: '⭐', label: 'Top Pick',     sub: 'Choose the track your profile leads with' },
+                    // Merch is parked (src/config/features.js). The entry stays
+                    // visible rather than vanishing, because an artist who set a
+                    // store up should be told it is paused, not left wondering
+                    // where it went. Tapping it explains; it does not open a shop.
+                    MERCH_PARKED
+                      ? { id: 'merch_parked', icon: '🛍️', label: 'Merch Store', sub: 'Paused, tap to see why' }
+                      : isPremium
+                        ? { id: 'merch', icon: '🛍️', label: 'Merch Store', sub: 'Connect Printful · sell to your fans' }
+                        : { id: 'merch_locked', icon: '🛍️', label: 'Merch Store', sub: 'Premium only, upgrade to unlock' },
+                  ],
+                },
+                {
+                  // SETTINGS, AND WHY IT IS NOT THE SAME ROW AS EDIT PROFILE
+                  //
+                  // /profile and /profile/edit are two different pages whose
+                  // names do not distinguish them. /profile/edit is the bio and
+                  // photo form in the group above. /profile is the account: the
+                  // PayPal details an artist is paid through, the theme editor,
+                  // and the rest. Nothing in this menu pointed at it, so the
+                  // only way an artist reached the page that pays them was to
+                  // already know the address — and "Edit Profile" is where they
+                  // looked first, which is the whole problem. Its own group, so
+                  // the two never read as the same thing again.
+                  heading: 'Account',
+                  tint: MENU_TINTS.account,
+                  items: [
+                    { id: 'settings', icon: '⚙️', label: 'Settings', sub: 'Payments, theme and account' },
+                  ],
+                },
+                {
+                  // Last on purpose. Nothing here is an action on your own
+                  // catalogue, and somebody who needs it is looking for it
+                  // rather than reaching past it.
+                  //
+                  // Sessions is in this group for the same reason: it is the
+                  // one thing you go and take part in, so it does not compete
+                  // with Upload. It appears only when the gate says the
+                  // competition is running and this viewer is eligible. The
+                  // gate fails closed, so between seasons the row is simply
+                  // not here and nobody has to remember to remove it.
+                  heading: 'More',
+                  tint: MENU_TINTS.more,
+                  items: [
+                    { id: 'course', icon: '🎓', label: 'How to Use Feelz Machine', sub: 'Recording, uploading, splits, getting paid' },
+                    ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
+                      ? [{ id: 'sessions', icon: '🏆', label: 'Enter Sessions', sub: 'The cover competition, open to everyone' }]
+                      : []),
+                  ],
+                },
+              ].map(({ heading, tint, items }) => (
+                <CreateMenuSection key={heading} heading={heading} tint={tint}
+                  items={items.filter(Boolean).map(it => ({
+                    ...it,
+                    onClick: () => {
+                      const id = it.id;
+                      if (id === 'live') { setCreateTab('live'); setLiveTitle(`${artist?.artist_name}'s Live Session`); }
+                      else if (id === 'memo') { setCreateTab('memo'); }
+                      else if (id === 'upload') { close(); navigate('/dashboard?tab=upload'); }
+                      else if (id === 'edit') { close(); navigate('/profile/edit'); }
+                      // The account page, not the bio form. See the Account group above.
+                      else if (id === 'settings') { close(); navigate('/profile'); }
+                      else if (id === 'toppick') { setCreateTab('toppick'); loadTopPick(); }
+                      else if (id === 'merch_parked') { setShowMerchParked(true); }
+                      else if (id === 'merch') { setShowMerchConnect(true); }
+                      else if (id === 'merch_locked') { close(); navigate('/upgrade'); }
+                      else if (id === 'newsletter') { close(); navigate('/newsletter/compose'); }
+                      else if (id === 'chats') { close(); navigate('/community'); }
+                      else if (id === 'course') { close(); navigate('/learn'); }
+                      else if (id === 'sessions') { close(); navigate('/sessions'); }
+                      else setCreateTab(id);
+                    },
+                  }))} />
               ))}
             </>
           )}

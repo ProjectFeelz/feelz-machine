@@ -213,79 +213,56 @@ export default function TierUpgradePage() {
     setProcessing(true);
     setError('');
     try {
-      const { data: tier } = await supabase
-        .from('platform_tiers').select('id').eq('slug', tierSlug).single();
-      if (!tier) throw new Error('Tier not found');
-
-      await supabase
-        .from('artist_tier_subscriptions')
-        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-        .eq('artist_id', artist.id).eq('status', 'active');
-
-      const expiresAt = cycle === 'annual'
-        ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
-        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
-      const { error: insertErr } = await supabase
-        .from('artist_tier_subscriptions')
-        .insert({
-          artist_id: artist.id,
-          tier_id: tier.id,
-          status: 'active',
-          paypal_subscription_id: subscriptionId,
+      // ── The grant happens on the server now, not here ──────────────────
+      //
+      // This used to write the artist_tier_subscriptions row straight from
+      // the browser. That insert is refused and always was: the table carries
+      // an ALL policy for admins, a SELECT for admins, and a SELECT for the
+      // owning artist, and no INSERT policy for an ordinary artist at all. So
+      // every real signup came back 42501, threw, and showed the buyer
+      // "Failed to activate subscription: new row violates row-level security
+      // policy" after PayPal had already taken the money. The webhook could
+      // not recover it either: BILLING.SUBSCRIPTION.ACTIVATED only UPDATEs a
+      // row matching the subscription id, and there was no row to match, so
+      // it updated nothing and reported nothing.
+      //
+      // verify-artist-subscription asks PayPal whether the subscription is
+      // real, active and for one of our plans, then writes with the service
+      // role. The tier and the billing cycle come from PayPal's plan id, not
+      // from anything this page sends, so neither can be asked for.
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/.netlify/functions/verify-artist-subscription', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          subscription_id: subscriptionId,
+          // Sent only as a fallback for a deploy with no plan ids configured.
+          // The function prefers PayPal's answer and logs when it cannot.
+          tier_slug:     tierSlug,
           billing_cycle: cycle || 'monthly',
-          payment_provider: 'paypal_web',
-          started_at: new Date().toISOString(),
-          expires_at: expiresAt,
-        });
-      if (insertErr) throw insertErr;
-
-      // artists.tier is deliberately NOT written here any more. The database
-      // derives it: trg_sync_artist_tier fires on the insert above and sets
-      // artists.tier from the active subscription joined to platform_tiers.
-      // Writing it from the browser was also the thing that let an artist set
-      // their own tier directly, which migration 230b closes.
-      await supabase.from('artists')
-        .update({ current_tier_id: tier.id, updated_at: new Date().toISOString() })
-        .eq('id', artist.id);
-
-      // The durable receipt. Self-addressed, which is the one insert the
-      // notifications policy does allow from a browser — and it is written
-      // here rather than waiting for the webhook because the person is
-      // standing in front of the screen right now wondering whether it
-      // worked. Renewals are announced by paypal-webhook.js instead.
-      try {
-        const { error: notifErr } = await supabase.from('notifications').insert({
-          artist_id: artist.id,
-          user_id:   user?.id || null,
-          type:      'subscription',
-          title:     `${tierSlug === 'pro' ? 'Artist Pro' : 'Artist Premium'} is live`,
-          message:   `Your new upload and payout limits are active. `
-                   + `Renews ${new Date(expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.`,
-          metadata: {
-            audience:      'artist',
-            tier:          tierSlug,
-            billing_cycle: cycle || 'monthly',
-            expires_at:    expiresAt,
-            subscription:  subscriptionId,
-          },
-        });
-        if (notifErr) {
-          console.error('[tier-upgrade] receipt refused (subscription is fine):',
-            notifErr.code, notifErr.message,
-            notifErr.code === '23514' ? '— run migration 125.' : '');
-        }
-      } catch (e) {
-        console.error('[tier-upgrade] receipt threw (subscription is fine):', e.message);
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || !result?.ok) {
+        throw new Error(result?.error || 'We could not confirm that subscription with PayPal.');
       }
 
-      setCurrentTier(tierSlug);
-      setSuccess(`Welcome to ${tierSlug === 'pro' ? 'Pro' : 'Premium'}! Your new features are active.`);
+      // What was actually granted, which is PayPal's answer rather than the
+      // button's. The receipt below must not promise a plan nobody bought.
+      const grantedTier  = result.tier || tierSlug;
+      const grantedCycle = result.billing_cycle || cycle || 'monthly';
+      const grantedName  = result.tier_name || (grantedTier === 'pro' ? 'Pro' : 'Premium');
+
+      setCurrentTier(grantedTier);
+      setSuccess(`Welcome to ${grantedName}! Your new features are active.`);
       showReceipt({
         kind: 'subscription',
-        heading: `${tierSlug === 'pro' ? 'Pro' : 'Premium'} is live`,
-        title: tierSlug === 'pro' ? 'Artist Pro' : 'Artist Premium',
-        subtitle: cycle === 'annual' ? 'Billed yearly' : 'Billed monthly',
+        heading: `${grantedName} is live`,
+        title: `Artist ${grantedName}`,
+        subtitle: grantedCycle === 'annual' ? 'Billed yearly' : 'Billed monthly',
         note: 'Your new upload and payout limits are active now. The renewal date is in your '
             + 'notifications, and PayPal has emailed you a receipt.',
       });
@@ -305,7 +282,11 @@ export default function TierUpgradePage() {
         }
       } catch {}
     } catch (err) {
-      setError('Failed to activate subscription: ' + err.message);
+      // The function's messages are already written to be read by the buyer
+      // and say what to do next, so they are shown as they are. Prefixing them
+      // with "Failed to activate subscription" on top of "Your payment went
+      // through but..." reads as two different outcomes at once.
+      setError(err.message || 'We could not activate that subscription.');
     }
     setProcessing(false);
   };
