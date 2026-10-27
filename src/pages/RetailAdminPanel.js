@@ -18,13 +18,14 @@
 import React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Loader, Plus, Trash2, Music, Link2, Check, UserPlus, Store, ListMusic, Users, Pencil, ImagePlus, Inbox, Wallet,
+  Loader, Plus, Trash2, Music, Link2, Check, UserPlus, Store, ListMusic, Users, Pencil, ImagePlus, Inbox, Wallet, BarChart3,
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import RetailTrackPicker from '../components/retail/RetailTrackPicker';
 import RetailPitchesTab from '../components/retail/RetailPitchesTab';
 import RetailPayoutsTab from '../components/retail/RetailPayoutsTab';
+import RetailAnalyticsTab from '../components/retail/RetailAnalyticsTab';
 
 const inputCls = "w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition";
 const btnCls = "flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-lg bg-purple-500 hover:bg-purple-400 text-white transition disabled:opacity-40";
@@ -37,14 +38,14 @@ const btnCls = "flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounde
 const TABS = [
   { key: 'playlists', label: 'Playlists', icon: ListMusic, minRole: 'editor'  },
   { key: 'pitches',   label: 'Pitches',   icon: Inbox,     minRole: 'editor'  },
+  { key: 'analytics', label: 'Analytics', icon: BarChart3, minRole: 'editor'  },
   { key: 'payouts',   label: 'Payouts',   icon: Wallet,    minRole: 'manager' },
   { key: 'venues',    label: 'Venues',    icon: Store,     minRole: 'manager' },
   { key: 'staff',     label: 'Staff',     icon: Users,     minRole: 'manager' },
 ];
 
 const NOT_BUILT = {
-  ads: 'Ads',
-  analytics: 'Analytics', pricing: 'Pricing', autocompile: 'Auto-Compile',
+  ads: 'Ads', pricing: 'Pricing', autocompile: 'Auto-Compile',
 };
 
 // ── Playlists ────────────────────────────────────────────────────────────────
@@ -733,6 +734,7 @@ export default function RetailAdminPanel({ role = 'manager' }) {
         </div>
       ) : active === 'playlists' ? <PlaylistsTab showToast={showToast} />
         : active === 'pitches'  ? <RetailPitchesTab showToast={showToast} />
+        : active === 'analytics' ? <RetailAnalyticsTab showToast={showToast} />
         : active === 'payouts'  ? <RetailPayoutsTab showToast={showToast} />
         : active === 'venues'   ? <VenuesTab showToast={showToast} />
         : <StaffTab showToast={showToast} />}
