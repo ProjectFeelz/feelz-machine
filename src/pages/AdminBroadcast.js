@@ -92,7 +92,7 @@ export default function AdminBroadcast({ embedded = false }) {
             setDmSent(true);
             setTimeout(() => {
                 setDmSent(false); setDmTarget(null); setDmTitle('');
-                setDmMessage(''); setDmSearch(''); setDmResults('');
+                setDmMessage(''); setDmSearch(''); setDmResults([]);
             }, 2000);
         } catch (err) {
             setDmError(err.message);
@@ -240,6 +240,77 @@ export default function AdminBroadcast({ embedded = false }) {
                         {sending ? <Loader className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                         <span>{sending ? 'Sending...' : `Send to ${recipientCount} Artists`}</span>
                     </button>
+
+                    {/* ── One artist ───────────────────────────────────────
+                        searchArtists and sendDM were written in full and had
+                        no UI at all, so dmTarget could never be set and
+                        sendDM returned on its first line every time. This is
+                        the missing half: a search, a chosen artist, and the
+                        same notification path the broadcast uses. */}
+                    <div className="pt-5 mt-5 border-t border-white/[0.06] space-y-3">
+                        <div>
+                            <p className="text-sm font-bold text-white">Message one artist</p>
+                            <p className="text-xs text-white/30 mt-0.5">Goes to them only. They see it as an admin message.</p>
+                        </div>
+
+                        {!dmTarget ? (
+                            <div className="space-y-2">
+                                <input
+                                    value={dmSearch}
+                                    onChange={e => searchArtists(e.target.value)}
+                                    placeholder="Search for an artist by name"
+                                    className="w-full px-3 py-2.5 rounded-xl text-sm text-white bg-white/[0.04] border border-white/[0.08] focus:outline-none focus:border-white/25"
+                                />
+                                {dmSearching && <p className="text-[11px] text-white/30">Searching</p>}
+                                {!dmSearching && dmSearch.length >= 2 && dmResults.length === 0 && (
+                                    <p className="text-[11px] text-white/30">Nobody by that name.</p>
+                                )}
+                                {dmResults.map(a => (
+                                    <button key={a.id} type="button"
+                                        onClick={() => { setDmTarget(a); setDmResults([]); }}
+                                        className="w-full flex items-center space-x-2.5 p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] transition text-left">
+                                        <div className="w-7 h-7 rounded-full bg-white/[0.08] overflow-hidden flex items-center justify-center flex-shrink-0">
+                                            {a.profile_image_url
+                                                ? <img src={a.profile_image_url} alt="" className="w-full h-full object-cover" />
+                                                : <span className="text-[10px] font-bold text-white/30">{a.artist_name?.charAt(0)?.toUpperCase() || '?'}</span>}
+                                        </div>
+                                        <span className="text-sm text-white truncate">{a.artist_name}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="space-y-2.5">
+                                <div className="flex items-center justify-between p-2 rounded-xl bg-white/[0.04] border border-white/[0.08]">
+                                    <span className="text-sm text-white truncate">{dmTarget.artist_name}</span>
+                                    <button type="button" onClick={() => setDmTarget(null)}
+                                        className="text-[11px] text-white/40 hover:text-white flex-shrink-0 ml-2">Change</button>
+                                </div>
+                                <input
+                                    value={dmTitle}
+                                    onChange={e => setDmTitle(e.target.value)}
+                                    placeholder="Subject"
+                                    className="w-full px-3 py-2.5 rounded-xl text-sm text-white bg-white/[0.04] border border-white/[0.08] focus:outline-none focus:border-white/25"
+                                />
+                                <textarea
+                                    value={dmMessage}
+                                    onChange={e => setDmMessage(e.target.value)}
+                                    placeholder="What do you want to tell them?"
+                                    rows={3}
+                                    className="w-full px-3 py-2.5 rounded-xl text-sm text-white bg-white/[0.04] border border-white/[0.08] focus:outline-none focus:border-white/25 resize-none"
+                                />
+                                {dmError && <p className="text-[11px] text-red-400">{dmError}</p>}
+                                {dmSent && <p className="text-[11px] text-green-400">Sent to {dmTarget.artist_name}.</p>}
+                                <button
+                                    type="button"
+                                    onClick={sendDM}
+                                    disabled={dmSending || !dmTitle.trim() || !dmMessage.trim()}
+                                    className="w-full flex items-center justify-center space-x-2 py-2.5 bg-white/[0.08] hover:bg-white/[0.14] text-white rounded-xl font-semibold text-sm disabled:opacity-40 transition">
+                                    {dmSending ? <Loader className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                                    <span>{dmSending ? 'Sending' : `Send to ${dmTarget.artist_name}`}</span>
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
