@@ -353,6 +353,20 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   tint: MENU_TINTS.account,
                   items: [
                     { id: 'settings', icon: '⚙️', label: 'Settings', sub: 'Payments, theme and account' },
+                    // SPLITS, FOR THE SAME REASON AS SETTINGS
+                    //
+                    // /splits is the ledger of collaborator shares: what you
+                    // are owed on other people's sales, and what you owe on
+                    // yours. It is where a collaborator confirms a share
+                    // reached them.
+                    //
+                    // The whole app linked to it from one place: a text link
+                    // on the Payments tab of /profile, which itself had no
+                    // entry point in this menu until today. So a collaborator
+                    // told to "confirm when it reaches you" had to already
+                    // know the address of a page two levels inside another
+                    // page they could not find either.
+                    { id: 'splits', icon: '🤝', label: 'Splits', sub: 'Collab shares owed to you and by you' },
                   ],
                 },
                 {
@@ -387,6 +401,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                       else if (id === 'edit') { close(); navigate('/profile/edit'); }
                       // The account page, not the bio form. See the Account group above.
                       else if (id === 'settings') { close(); navigate('/profile'); }
+                      else if (id === 'splits') { close(); navigate('/splits'); }
                       else if (id === 'toppick') { setCreateTab('toppick'); loadTopPick(); }
                       else if (id === 'merch_parked') { setShowMerchParked(true); }
                       else if (id === 'merch') { setShowMerchConnect(true); }

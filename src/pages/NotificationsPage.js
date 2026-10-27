@@ -125,7 +125,11 @@ const FILTERS = [
 // type added next year lands somewhere a person can find it without anybody
 // having to remember this file exists.
 const MONEY = ['tip','download','payout_pending','beat_purchase','purchase','sale',
-               'subscription','paid_download','paid','earned','payout'];
+               'subscription','paid_download','paid','earned','payout',
+               // Collaborator shares. These were in no category at all, so a
+               // person looking under Money for the share they are owed did
+               // not find it there.
+               'split_settled','split_confirmed','split_reminder'];
 //
 // MILESTONES also covers the prefix milestone_, which is what the database
 // trigger writes (milestone_100, milestone_500, milestone_1k, milestone_10k,
@@ -256,6 +260,75 @@ function QuickReply({ postId, trackId, parentCommentId = null, replyType = 'post
       {failed && (
         <p className="text-[11px] text-red-400 flex-shrink-0">Not sent, try again</p>
       )}
+    </div>
+  );
+}
+
+// ─── "I received this" on a settled split ─────────────────────────────────────
+//
+// WHY THIS IS HERE AND NOT ONLY ON /splits
+//
+// A collaborator's share is paid outside the platform: the sale settles into
+// the track owner's account and the owner pays the collaborator themselves.
+// The owner marks it paid, split_mark_settled writes this notification, and
+// its last line says "Confirm when it reaches you."
+//
+// There was nothing to confirm with. The whole app linked to /splits from one
+// place, a text link on the Payments tab of /profile, and tapping the
+// notification did nothing at all, because split_settled had no branch in the
+// router below. So the message asked someone to do a thing and then gave them
+// no way to do it, which is how the first real collaborator on the platform
+// read it.
+//
+// The button is here rather than only on /splits because this is where the
+// person already is when they are told. /splits is still the full ledger and
+// the notification now opens it, but confirming one payment should not
+// require finding a page first.
+function SplitConfirmAction({ notif, onActioned }) {
+  const [loading, setLoading] = useState(false);
+  const [done, setDone]       = useState(false);
+  const [failed, setFailed]   = useState('');
+  const splitId = (notif.metadata || {}).split_id || null;
+
+  const confirm = async () => {
+    setLoading(true);
+    setFailed('');
+    try {
+      // The database decides. split_confirm_received checks that the caller is
+      // the collaborator on this split, so a confirmation cannot be made by
+      // anyone else, the person who owes the money included.
+      const { error } = await supabase.rpc('split_confirm_received', { p_split_id: splitId });
+      if (error) throw new Error(error.message);
+      setDone(true);
+      await supabase.from('notifications').update({ read: true }).eq('id', notif.id);
+      setTimeout(() => onActioned?.(), 1200);
+    } catch (e) {
+      // Shown, not swallowed. Confirming receipt of money is exactly the
+      // action where "it looked like it worked" is worst.
+      setFailed(e.message || 'That did not go through.');
+    }
+    setLoading(false);
+  };
+
+  // split_mark_settled always writes split_id, so it is there on any new row.
+  // An older row without it gets no button rather than one that cannot work.
+  if (!splitId) return null;
+
+  if (done) {
+    return <div className="mt-2 text-xs text-emerald-300/70 italic">✓ Confirmed as received</div>;
+  }
+
+  return (
+    <div className="mt-2" onClick={e => e.stopPropagation()}>
+      <button
+        onClick={confirm}
+        disabled={loading}
+        className="flex items-center space-x-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 transition active:scale-95 disabled:opacity-40"
+      >
+        {loading ? <Loader className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+        <span>{loading ? 'Saving…' : 'I received this'}</span>
+      </button>
+      {failed && <p className="mt-1 text-[11px] text-red-400">{failed}</p>}
     </div>
   );
 }
@@ -966,6 +1039,13 @@ export default function NotificationsPage() {
       navigate('/library/downloads'); return;
     }
     if (type === 'sale')         { navigate('/dashboard?tab=analytics&section=earnings'); return; }
+    // The splits ledger. None of these had a branch, so tapping any of them
+    // did nothing, and /splits was reachable from exactly one text link on
+    // the Payments tab of /profile. A notification that says "confirm when it
+    // reaches you" has to lead somewhere a person can do that.
+    if (type === 'split_settled' || type === 'split_confirmed' || type === 'split_reminder') {
+      navigate('/splits'); return;
+    }
     if (type === 'subscription') { navigate(meta.audience === 'artist' ? '/upgrade' : '/listener/upgrade'); return; }
     if (type === 'weekly_report') {
       // weekly-listener-recap.js sends this to LISTENERS, who have no artist
@@ -1274,6 +1354,10 @@ export default function NotificationsPage() {
                   // Orphaned stream notification, has no track data
                   const isOrphanStream = notif.type === 'new_stream' && !meta.track_title;
                   const isCollabReq   = notif.type === 'collab_request';
+                  // Only while it is still unconfirmed. split_confirm_received
+                  // writes split_confirmed to the owner, not back to here, so
+                  // the row itself is what says whether this is still open.
+                  const isSplitToConfirm = notif.type === 'split_settled';
                   const isEngagement  = notif.type === 'engagement' || notif.type === 'announcement' || notif.type === 'admin_message';
                   const isNewFollower = notif.type === 'new_follower';
                   const isComment     = notif.type === 'track_commented' || notif.type === 'new_comment';
@@ -1422,6 +1506,12 @@ export default function NotificationsPage() {
                         {isCollabReq && (
                           <CollabActions notif={notif} onActioned={() => fetchAll(0)} />
                         )}
+
+                        {/* "I received this" on a share the owner marked paid */}
+                        {isSplitToConfirm && (
+                          <SplitConfirmAction notif={notif} onActioned={() => fetchAll(0)} />
+                        )}
+
                         {actionUrl && !isCollabReq && (
                           <button
                             onClick={e => {
