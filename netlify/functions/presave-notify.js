@@ -9,13 +9,14 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { wrapHandler } = require('../lib/jobRun');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-exports.handler = async () => {
+const handler = async () => {
   const now = new Date().toISOString();
 
   // Find presaves for tracks whose release date has passed and haven't been notified yet
@@ -103,3 +104,8 @@ exports.handler = async () => {
   console.log(`Presave notify complete: ${totalSent} sent`);
   return { statusCode: 200, body: JSON.stringify({ sent: totalSent, tracks: Object.keys(byTrack).length }) };
 };
+
+// Wrapped so this job is visible in job_runs. The handler above is
+// unchanged; wrapHandler reads the status it returns and writes one row
+// per run, so "ran and did nothing" stops looking like "never ran".
+exports.handler = wrapHandler('presave-notify', handler);

@@ -747,35 +747,75 @@ export default function AdminFeed() {
           </div>
 
           {/* ── Test against control ────────────────────────────────────── */}
+          {/*
+            WHEN THERE IS ONLY ONE SET, THERE IS NO EXPERIMENT
+            ──────────────────────────────────────────────────
+            feed_weights_for sends holdout listeners to the OLDEST set and
+            everyone else to the ACTIVE one. With a single set stored, those
+            are the same row, so both arms are running identical weights and
+            the table below is a set measured against itself.
+
+            That is not a fault, it is the honest state before the first
+            change is made live. What was wrong is that the verdict underneath
+            read the same either way: it would announce "within a point and a
+            half of each other, that is the same, not an improvement" about two
+            groups that could not possibly differ, which reads as a finding
+            about the weights rather than an absence of one.
+          */}
+          {(() => {
+            const noExperiment = !!active && !!control && active.id === control.id;
+            return (
           <div className={`${card} mb-5`}>
             <p className={`${heading} mb-1`}>Test against control</p>
             <p className="text-xs text-white/30 mb-4">
               The same {days} days, the two groups side by side. This is the only number that can
               honestly say whether a change worked.
             </p>
-            <Table
-              head={['Group', 'Listeners', 'Plays', 'Average completion', 'Skip rate']}
-              rows={arms.map(a => [
-                a.arm, Number(a.listeners).toLocaleString(), Number(a.plays).toLocaleString(),
-                `${a.avg_completion ?? '-'}%`, `${a.skip_rate_pct ?? '-'}%`,
-              ])}
-              empty="Nothing to compare yet."
-            />
-            {arms.length === 2 && (
-              <p className="text-xs text-white/30 mt-3">
-                {(() => {
-                  const t = arms.find(a => a.arm.startsWith('test'));
-                  const c = arms.find(a => a.arm.startsWith('control'));
-                  if (!t || !c || !t.avg_completion || !c.avg_completion) return 'Not enough plays on both sides yet.';
-                  const d = Number(t.avg_completion) - Number(c.avg_completion);
-                  const thin = Number(c.plays) < 200 || Number(t.plays) < 200;
-                  if (thin) return `Test is ${d >= 0 ? 'up' : 'down'} ${Math.abs(d).toFixed(1)} points, but one side has under 200 plays, so this is still noise. Leave it a fortnight.`;
-                  if (Math.abs(d) < 1.5) return 'The two sides are within a point and a half of each other. That is the same, not an improvement.';
-                  return `Test is ${d > 0 ? 'ahead' : 'behind'} by ${Math.abs(d).toFixed(1)} points of completion.`;
-                })()}
-              </p>
+
+            {noExperiment ? (
+              <div className="flex items-start gap-2.5 rounded-xl border border-sky-400/20 bg-sky-500/[0.06] p-3.5">
+                <Info className="w-4 h-4 text-sky-300 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm text-sky-100/85">
+                    Both groups are on "{active.label}", so there is nothing to compare yet.
+                  </p>
+                  <p className="text-xs text-sky-100/50 mt-1.5">
+                    The holdout stays on the oldest set and everyone else moves to whatever is made
+                    live. Only one set is stored, so those are the same weights. Change a dial above
+                    and save it, and from that moment the two sides are genuinely different and this
+                    table starts meaning something.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <Table
+                  head={['Group', 'Listeners', 'Plays', 'Average completion', 'Skip rate']}
+                  rows={arms.map(a => [
+                    a.arm, Number(a.listeners).toLocaleString(), Number(a.plays).toLocaleString(),
+                    `${a.avg_completion ?? '-'}%`, `${a.skip_rate_pct ?? '-'}%`,
+                  ])}
+                  empty="Nothing to compare yet."
+                />
+                {arms.length === 2 && (
+                  <p className="text-xs text-white/30 mt-3">
+                    {(() => {
+                      const t = arms.find(a => a.arm.startsWith('test'));
+                      const c = arms.find(a => a.arm.startsWith('control'));
+                      if (!t || !c || !t.avg_completion || !c.avg_completion) return 'Not enough plays on both sides yet.';
+                      const d = Number(t.avg_completion) - Number(c.avg_completion);
+                      const thin = Number(c.plays) < 200 || Number(t.plays) < 200;
+                      if (thin) return `Test is ${d >= 0 ? 'up' : 'down'} ${Math.abs(d).toFixed(1)} points, but one side has under 200 plays, so this is still noise. Leave it a fortnight.`;
+                      if (Math.abs(d) < 1.5) return 'The two sides are within a point and a half of each other. That is the same, not an improvement.';
+                      return `Test is ${d > 0 ? 'ahead' : 'behind'} by ${Math.abs(d).toFixed(1)} points of completion.`;
+                    })()}
+                  </p>
+                )}
+              </>
             )}
           </div>
+            );
+          })()}
 
           {/* ── Surfaces ────────────────────────────────────────────────── */}
           <div className={`${card} mb-5`}>

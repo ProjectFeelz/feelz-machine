@@ -29,6 +29,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { wrapHandler } = require('../lib/jobRun');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -212,7 +213,7 @@ function generateSVG({ totalArtists, newTracksWeek, totalStreams, trendingTrack,
 </svg>`;
 }
 
-exports.handler = async () => {
+const handler = async () => {
   const { id: PLATFORM_ARTIST_ID, source } = await resolvePlatformArtistId();
 
   if (!PLATFORM_ARTIST_ID) {
@@ -319,3 +320,8 @@ exports.handler = async () => {
     return { statusCode: 500, body: err.message };
   }
 };
+
+// Wrapped so this job is visible in job_runs. The handler above is
+// unchanged; wrapHandler reads the status it returns and writes one row
+// per run, so "ran and did nothing" stops looking like "never ran".
+exports.handler = wrapHandler('platform-daily-story', handler);

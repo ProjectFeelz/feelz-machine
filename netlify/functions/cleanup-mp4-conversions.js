@@ -13,6 +13,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { wrapHandler } = require('../lib/jobRun');
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL,
@@ -21,7 +22,7 @@ const supabase = createClient(
 
 const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-exports.handler = async () => {
+const handler = async () => {
   try {
     const { data: files, error } = await supabase.storage
       .from('stories')
@@ -55,3 +56,8 @@ exports.handler = async () => {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
+
+// Wrapped so this job is visible in job_runs. The handler above is
+// unchanged; wrapHandler reads the status it returns and writes one row
+// per run, so "ran and did nothing" stops looking like "never ran".
+exports.handler = wrapHandler('cleanup-mp4-conversions', handler);

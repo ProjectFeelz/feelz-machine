@@ -124,4 +124,87 @@ function withRunRecord(job, fn) {
   };
 }
 
-module.exports = { recordRun, withRunRecord };
+/**
+ * Wrap an existing Netlify handler so its runs are recorded, without touching
+ * a line of what it does.
+ *
+ *
+ * WHY THIS EXISTS SEPARATELY FROM withRunRecord
+ *
+ * withRunRecord wants the inner function to return a count. Thirteen of the
+ * scheduled functions on this platform predate that convention: they each have
+ * one handler with five or six different return points, and threading a
+ * recordRun through all of them means editing working jobs in a dozen places
+ * for a bookkeeping change. That is how a payout job or a weekly report gets
+ * broken by an edit that was supposed to be inert.
+ *
+ * This wraps instead. The handler is untouched; its answer is read on the way
+ * out and turned into a run record:
+ *
+ *   exports.handler = wrapHandler('weekly-artist-report', handler);
+ *
+ * Two lines per file, no change to any code path.
+ *
+ *
+ * WHAT IT RECORDS
+ *
+ *   ok      from the HTTP status the handler returned. Under 400 is a success,
+ *           which is the same judgement Netlify itself makes.
+ *   items   the first number that looks like a count in the JSON body, so a
+ *           handler already returning { sent: 12 } or { deleted: 3 } gets a
+ *           meaningful figure without being asked to change its shape.
+ *   error   the message when it throws, and the throw is passed on unchanged
+ *           so Netlify still sees the failure.
+ *
+ * Like everything else here it never throws on its own account: a job must not
+ * fail because the record of it failed.
+ */
+const COUNT_KEYS = [
+  'items', 'count', 'sent', 'processed', 'deleted', 'created', 'updated',
+  'notified', 'released', 'scored', 'skipped', 'total',
+];
+
+function countFrom(result) {
+  try {
+    if (!result || typeof result.body !== 'string') return 0;
+    const parsed = JSON.parse(result.body);
+    if (!parsed || typeof parsed !== 'object') return 0;
+    for (const k of COUNT_KEYS) {
+      const v = parsed[k];
+      if (Number.isFinite(Number(v))) return Math.trunc(Number(v));
+      if (Array.isArray(v)) return v.length;
+    }
+    return 0;
+  } catch {
+    // A body that is not JSON is perfectly normal. It means no count, not a
+    // problem worth reporting.
+    return 0;
+  }
+}
+
+function wrapHandler(job, handler) {
+  return async (...args) => {
+    const started = Date.now();
+    try {
+      const result = await handler(...args);
+      const status = Number(result && result.statusCode);
+      const ok = !Number.isFinite(status) || status < 400;
+      await recordRun(job, {
+        ok,
+        items: ok ? countFrom(result) : 0,
+        error: ok ? null : `returned ${status}: ${String((result && result.body) || '').slice(0, 300)}`,
+        startedAt: started,
+      });
+      return result;
+    } catch (err) {
+      await recordRun(job, {
+        ok: false,
+        error: err && err.message ? err.message : String(err),
+        startedAt: started,
+      });
+      throw err;
+    }
+  };
+}
+
+module.exports = { recordRun, withRunRecord, wrapHandler };

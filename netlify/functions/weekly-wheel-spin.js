@@ -10,6 +10,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { wrapHandler } = require('../lib/jobRun');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -106,7 +107,7 @@ const BEATMAKER_PROMPTS = [
 
 const ALL_PROMPTS = [...SINGER_PROMPTS, ...BEATMAKER_PROMPTS];
 
-exports.handler = async () => {
+const handler = async () => {
   try {
     const now = new Date();
 
@@ -230,3 +231,8 @@ exports.handler = async () => {
     return { statusCode: 500, body: err.message };
   }
 };
+
+// Wrapped so this job is visible in job_runs. The handler above is
+// unchanged; wrapHandler reads the status it returns and writes one row
+// per run, so "ran and did nothing" stops looking like "never ran".
+exports.handler = wrapHandler('weekly-wheel-spin', handler);

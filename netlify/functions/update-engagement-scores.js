@@ -19,6 +19,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { wrapHandler } = require('../lib/jobRun');
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -68,7 +69,7 @@ async function markRun(supabase) {
             { onConflict: 'key' });
 }
 
-exports.handler = async (event) => {
+const handler = async (event) => {
   const isManual = event.httpMethod === 'POST';
 
   const gate = await guardRun(event, supabase);
@@ -168,3 +169,8 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
+
+// Wrapped so this job is visible in job_runs. The handler above is
+// unchanged; wrapHandler reads the status it returns and writes one row
+// per run, so "ran and did nothing" stops looking like "never ran".
+exports.handler = wrapHandler('update-engagement-scores', handler);

@@ -24,6 +24,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { wrapHandler } = require('../lib/jobRun');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -237,7 +238,7 @@ async function rollupLearning() {
 }
 
 // ── Main handler ───────────────────────────────────────────────────────────────
-exports.handler = async (event) => {
+const handler = async (event) => {
   // AUTH, and a bug this check was probably causing.
   //
   // As written this refused every POST without the secret and waved every GET
@@ -306,3 +307,8 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
+
+// Wrapped so this job is visible in job_runs. The handler above is
+// unchanged; wrapHandler reads the status it returns and writes one row
+// per run, so "ran and did nothing" stops looking like "never ran".
+exports.handler = wrapHandler('score-engagement-outcomes', handler);

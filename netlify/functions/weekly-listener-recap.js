@@ -13,6 +13,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const { wrapHandler } = require('../lib/jobRun');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -33,7 +34,7 @@ function getWeekBounds() {
   };
 }
 
-exports.handler = async () => {
+const handler = async () => {
   const { weekStart, weekEnd } = getWeekBounds();
 
   // Get all streams this week with track + artist info
@@ -157,3 +158,8 @@ exports.handler = async () => {
     body: JSON.stringify({ sent, eligible: eligible.length, total_active_users: userIds.length }),
   };
 };
+
+// Wrapped so this job is visible in job_runs. The handler above is
+// unchanged; wrapHandler reads the status it returns and writes one row
+// per run, so "ran and did nothing" stops looking like "never ran".
+exports.handler = wrapHandler('weekly-listener-recap', handler);
