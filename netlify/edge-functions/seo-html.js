@@ -50,13 +50,39 @@
 //
 // It never fails the request. Every error path returns the untouched page.
 
+// `meta` says whether og-meta.js knows about this type and should be asked for
+// the title, description and JSON-LD. `links` says whether seo-links.js should
+// be asked for the anchors to put in the body. Most pages want both; the hubs
+// have no entity behind them, so seo-links supplies their words as well.
 const ROUTE_PATTERNS = [
-  { re: /^\/artist\/([^/]+)\/?$/, type: 'artist' },
-  { re: /^\/track\/([^/]+)\/?$/, type: 'track' },
-  { re: /^\/beat\/([^/]+)\/?$/, type: 'beat' },
-  { re: /^\/album\/([^/]+\/[^/]+)\/?$/, type: 'album' },
-  { re: /^\/sessions\/?$/, type: 'schoolsessions' },
-  { re: /^\/schoolsessions\/?$/, type: 'schoolsessions' },
+  { re: /^\/artist\/([^/]+)\/?$/, type: 'artist', meta: true, links: true },
+  { re: /^\/track\/([^/]+)\/?$/, type: 'track', meta: true, links: true },
+  { re: /^\/beat\/([^/]+)\/?$/, type: 'beat', meta: true, links: true },
+  { re: /^\/album\/([^/]+\/[^/]+)\/?$/, type: 'album', meta: true, links: true },
+  { re: /^\/sessions\/?$/, type: 'schoolsessions', meta: true, links: false },
+  { re: /^\/schoolsessions\/?$/, type: 'schoolsessions', meta: true, links: false },
+
+  // ── The hubs, and why they are the whole point of this change ────────────
+  //
+  // Search Console: 233 URLs "Discovered, currently not indexed", and
+  // /artist/stevecsa with a last-crawl date of N/A. Google had found these
+  // pages and never fetched one of them.
+  //
+  // It had no reason to. This function filled in the artist and track pages
+  // beautifully and the home page was left serving the bare shell, whose body
+  // text is "You need to enable JavaScript to run Feelz Machine" and which
+  // contains not one anchor. So there was no path from the home page to any of
+  // the 269 content pages. The sitemap offered them; nothing on the site
+  // seconded it.
+  //
+  // These four routes are that path. /artists and /genres/:slug are new pages,
+  // with React routes of their own so a person clicking one gets a real
+  // screen, and every artist, track, album and genre is reachable from the
+  // home page in two clicks of plain HTML.
+  { re: /^\/$/, type: 'home', meta: false, links: true },
+  { re: /^\/browse\/?$/, type: 'browse', meta: false, links: true },
+  { re: /^\/artists\/?$/, type: 'artists', meta: false, links: true },
+  { re: /^\/genres\/([^/]+)\/?$/, type: 'genre', meta: false, links: true },
 ];
 
 const esc = (s) => String(s == null ? '' : s)
@@ -98,13 +124,18 @@ export default async (request, context) => {
 
     let type = null;
     let slug = null;
-    for (const { re, type: t } of ROUTE_PATTERNS) {
-      const m = url.pathname.match(re);
-      if (m) { type = t; slug = m[1] || null; break; }
+    let wantMeta = false;
+    let wantLinks = false;
+    for (const route of ROUTE_PATTERNS) {
+      const m = url.pathname.match(route.re);
+      if (m) {
+        type = route.type;
+        slug = m[1] || null;
+        wantMeta = route.meta;
+        wantLinks = route.links;
+        break;
+      }
     }
-    // The home page has no entity behind it. Its meta in the shell is already
-    // correct and specific, so there is nothing to rewrite and nothing to gain
-    // from pretending otherwise.
     if (!type) return response;
 
     html = await response.text();
@@ -118,15 +149,24 @@ export default async (request, context) => {
     metaUrl.searchParams.set('type', type);
     if (slug) metaUrl.searchParams.set('slug', slug);
 
-    // Budgeted the same way social-preview budgets its own call, and for the
-    // same reason: this function has no time of its own to give away, and a
-    // slow lookup must cost the tags, never the page.
+    const linksUrl = new URL('/.netlify/functions/seo-links', url.origin);
+    linksUrl.searchParams.set('type', type);
+    if (slug) linksUrl.searchParams.set('slug', slug);
+
+    // One budget for both calls, spent in parallel. This function has no time
+    // of its own to give away, and a slow lookup must cost the tags or the
+    // links, never the page.
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(), 2500);
     let meta = null;
+    let linkData = null;
     try {
-      const res = await fetch(metaUrl.toString(), { signal: abort.signal });
-      if (res.ok) meta = await res.json();
+      const [metaRes, linksRes] = await Promise.all([
+        wantMeta ? fetch(metaUrl.toString(), { signal: abort.signal }).catch(() => null) : null,
+        wantLinks ? fetch(linksUrl.toString(), { signal: abort.signal }).catch(() => null) : null,
+      ]);
+      if (metaRes && metaRes.ok) meta = await metaRes.json();
+      if (linksRes && linksRes.ok) linkData = await linksRes.json();
     } catch {
       // Timed out, refused, or threw. Caught here rather than left to the
       // outer catch on purpose: a lookup that does not answer costs this page
@@ -135,20 +175,42 @@ export default async (request, context) => {
       clearTimeout(timer);
     }
 
-    if (!meta || !meta.title) return serve(html, response);
+    // The hubs have no og-meta entry, so their words come from seo-links. An
+    // entity page keeps og-meta as the authority, and takes only anchors from
+    // seo-links.
+    if (!meta && linkData && linkData.title) {
+      meta = {
+        title: linkData.title,
+        description: linkData.description || '',
+        pageUrl: linkData.canonical || null,
+        cardImage: null,
+        jsonLd: null,
+      };
+    }
 
-    const { title, description, cardImage, pageUrl, jsonLd } = meta;
+    // The home page and /browse are the case where there is nothing to rewrite
+    // and everything to add: their meta in the shell is already correct and
+    // specific, and what they were missing was links. So a page with links and
+    // no meta is still worth serving; only a page with neither is given back
+    // untouched.
+    const hasLinks = Boolean(linkData && Array.isArray(linkData.sections)
+      && linkData.sections.some(s => s && Array.isArray(s.links) && s.links.length));
+    if ((!meta || !meta.title) && !hasLinks) return serve(html, response);
 
-    html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${esc(title)}</title>`);
-    html = setMeta(html, 'name', 'description', description);
-    html = setMeta(html, 'property', 'og:title', title);
-    html = setMeta(html, 'property', 'og:description', description);
-    html = setMeta(html, 'property', 'og:url', pageUrl);
-    html = setMeta(html, 'name', 'twitter:title', title);
-    html = setMeta(html, 'name', 'twitter:description', description);
-    if (cardImage) {
-      html = setMeta(html, 'property', 'og:image', cardImage);
-      html = setMeta(html, 'name', 'twitter:image', cardImage);
+    const { title, description, cardImage, pageUrl, jsonLd } = meta || {};
+
+    if (title) {
+      html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${esc(title)}</title>`);
+      html = setMeta(html, 'name', 'description', description);
+      html = setMeta(html, 'property', 'og:title', title);
+      html = setMeta(html, 'property', 'og:description', description);
+      html = setMeta(html, 'property', 'og:url', pageUrl);
+      html = setMeta(html, 'name', 'twitter:title', title);
+      html = setMeta(html, 'name', 'twitter:description', description);
+      if (cardImage) {
+        html = setMeta(html, 'property', 'og:image', cardImage);
+        html = setMeta(html, 'name', 'twitter:image', cardImage);
+      }
     }
 
     // The canonical is the single most load bearing tag here. 232 URLs all
@@ -169,13 +231,50 @@ export default async (request, context) => {
       html = html.replace(/<\/head>/i, `  ${block}\n  </head>`);
     }
 
-    // Real text, in the document, where a crawler that does not render will
-    // still read it. React clears #root on mount, so this is what the page
-    // says before the app exists and nothing after it.
+    // Real text and real links, in the document, where a crawler that does not
+    // render will still read them. React clears #root on mount, so this is
+    // what the page says before the app exists and nothing after it.
+    //
+    // The links are the part that matters. A heading and a paragraph told
+    // Google what a page was about; they never told it the page existed, and
+    // 233 URLs sat discovered and uncrawled because nothing on this site
+    // pointed at them. Anchors are the pointing.
+    const heading = (linkData && linkData.heading) || title || '';
+    const intro = (linkData && linkData.intro) || description || '';
+
+    let body = '';
+    if (heading) {
+      body += `<h1 style="font-size:1.75rem;font-weight:700;margin:0 0 .75rem">${esc(heading)}</h1>`;
+    }
+    if (intro) {
+      body += `<p style="font-size:.95rem;line-height:1.6;color:rgba(255,255,255,.55);margin:0 0 2rem">${esc(intro)}</p>`;
+    }
+
+    if (hasLinks) {
+      for (const section of linkData.sections) {
+        if (!section || !Array.isArray(section.links) || !section.links.length) continue;
+        body += `<h2 style="font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;` +
+          `color:rgba(255,255,255,.4);margin:2rem 0 .75rem">${esc(section.heading || '')}</h2>`;
+        body += '<ul style="list-style:none;margin:0;padding:0">';
+        for (const link of section.links) {
+          if (!link || !link.href || !link.label) continue;
+          // A relative href on purpose. The canonical host is www, the app is
+          // served on it, and a relative link cannot disagree with the page it
+          // is on about which host it belongs to.
+          body += `<li style="margin:0 0 .4rem"><a href="${esc(link.href)}" ` +
+            `style="color:#c4b5fd;text-decoration:none">${esc(link.label)}</a>`;
+          if (link.sub) {
+            body += `<span style="color:rgba(255,255,255,.3);font-size:.85rem"> ${esc(link.sub)}</span>`;
+          }
+          body += '</li>';
+        }
+        body += '</ul>';
+      }
+    }
+
     const shell = `<div id="root"><div style="max-width:42rem;margin:0 auto;padding:3rem 1.25rem;` +
       `font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#fff;background:#000;min-height:100vh">` +
-      `<h1 style="font-size:1.75rem;font-weight:700;margin:0 0 .75rem">${esc(title)}</h1>` +
-      `<p style="font-size:.95rem;line-height:1.6;color:rgba(255,255,255,.55);margin:0">${esc(description)}</p>` +
+      body +
       `</div></div>`;
     html = html.replace('<div id="root"></div>', shell);
 
@@ -202,5 +301,11 @@ export default async (request, context) => {
 // twice and produces intermittent 5xx. Do not add an [[edge_functions]] block
 // for this one.
 export const config = {
-  path: ['/artist/*', '/track/*', '/beat/*', '/album/*', '/sessions', '/schoolsessions'],
+  path: [
+    '/artist/*', '/track/*', '/beat/*', '/album/*', '/sessions', '/schoolsessions',
+    // The hubs. '/' is the important one: it is the only page Google reliably
+    // crawls on this site, and until now it handed back a document with no
+    // links in it, so a crawl of it discovered nothing.
+    '/', '/browse', '/artists', '/genres/*',
+  ],
 };

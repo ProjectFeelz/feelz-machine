@@ -27,6 +27,11 @@ const ComparisonPage = React.lazy(() => import('./pages/ComparisonPage'));
 const HomePage = React.lazy(() => import('./pages/HomePage'));
 const Welcome = React.lazy(() => import('./pages/Welcome'));
 const BrowsePage = React.lazy(() => import('./pages/BrowsePage'));
+// The two hub pages. Added because Google had discovered 233 of this site's
+// URLs and crawled none of them: nothing linked to them. See
+// netlify/lib/seoCatalogue.js for the whole diagnosis.
+const ArtistsIndexPage = React.lazy(() => import('./pages/ArtistsIndexPage'));
+const GenrePage = React.lazy(() => import('./pages/GenrePage'));
 const SplitsPage = React.lazy(() => import('./pages/SplitsPage'));
 const LoginPage = React.lazy(() => import('./pages/LoginPage'));
 const ResetPasswordPage = React.lazy(() => import('./pages/ResetPasswordPage'));
@@ -485,6 +490,8 @@ export default function AppRouter() {
                 <Route path="/schoolsessions/judge" element={<SchoolSessionsJudgePanel />} />
                 <Route path="/for-you" element={<Navigate to="/" replace />} />
                 <Route path="/browse" element={<BrowsePage />} />
+                <Route path="/artists" element={<ArtistsIndexPage />} />
+                <Route path="/genres/:slug" element={<GenrePage />} />
                 <Route path="/wheel" element={<WheelRevealPage />} />
                 <Route path="/competitions" element={<CompetitionsPage />} />
                 <Route path="/library" element={<LibraryPage />} />

@@ -4,6 +4,9 @@
 // Access at: https://www.feelzmachine.com/sitemap.xml (via netlify.toml redirect)
 
 const { createClient } = require('@supabase/supabase-js');
+// Shared with netlify/functions/seo-links.js so the sitemap and the on-page
+// links cannot disagree about which genre pages exist.
+const { genreSlug } = require('../lib/seoCatalogue');
 
 const BASE_URL = 'https://www.feelzmachine.com';
 
@@ -101,6 +104,11 @@ async function buildSitemap() {
   const staticPages = [
     { url: '/',                priority: '1.0', changefreq: 'daily'   },
     { url: '/browse',          priority: '0.9', changefreq: 'daily'   },
+    // The hub pages. These are what give the catalogue a crawlable shape:
+    // every artist is one click from /artists and every track one click from
+    // its genre page. Before them Google had found 233 URLs here and
+    // fetched none of them.
+    { url: '/artists',         priority: '0.9', changefreq: 'weekly'  },
     { url: '/about',           priority: '0.6', changefreq: 'monthly' },
     // /sessions, never /schoolsessions. The page canonicals to /sessions
     // now, and per the note above, a sitemap URL that canonicals elsewhere
@@ -146,7 +154,7 @@ async function buildSitemap() {
     // approaches that this has to become a sitemap index rather than one flat
     // file. Not a concern at current scale.
     supabase.from('tracks')
-      .select('slug, artist_id, updated_at')
+      .select('slug, artist_id, updated_at, genre')
       .eq('is_published', true)
       .eq('is_beat', false)
       .not('slug', 'is', null)
@@ -203,6 +211,33 @@ async function buildSitemap() {
     console.log(`[sitemap] ${skippedArtists} artist profile(s) left out: no published music, a placeholder name, or an unusable slug`);
   }
 
+  // ── Genre pages ──────────────────────────────────────────────────────────
+  //
+  // Derived from the tracks that survived the filters above rather than from a
+  // fixed list, so a genre page is only submitted while something is actually
+  // in it. An empty genre page is a crawl spent on nothing, which is precisely
+  // what this site cannot afford: Google has fetched 20 of its 261 pages.
+  //
+  // genreSlug is required from netlify/lib/seoCatalogue.js, the same function
+  // netlify/functions/seo-links.js uses to build the links on the page. If the
+  // two ever disagreed, the sitemap would submit a URL the site links to under
+  // a different name, which is the exact shape of a soft 404.
+  const genreCounts = new Map();
+  (tracks || []).forEach(t => {
+    const g = (t.genre || '').trim();
+    if (!g) return;
+    genreCounts.set(g, (genreCounts.get(g) || 0) + 1);
+  });
+  const genreUrls = [...genreCounts.keys()]
+    .map(name => genreSlug(name))
+    .filter(Boolean)
+    .map(slug => urlNode({
+      loc: `${BASE_URL}/genres/${slug}`,
+      lastmod: now,
+      changefreq: 'weekly',
+      priority: '0.7',
+    }));
+
   const urls = [
     ...staticPages.map(p => urlNode({
       loc: `${BASE_URL}${p.url}`,
@@ -212,6 +247,8 @@ async function buildSitemap() {
     })),
 
     ...artistUrls,
+
+    ...genreUrls,
 
     ...(albums || [])
       .filter(a => usableSlug(a.slug) && usableSlug(a.artists?.slug))
