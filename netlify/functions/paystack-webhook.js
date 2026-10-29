@@ -59,6 +59,11 @@ const crypto = require('crypto');
 // Merch finishes here rather than in the browser, so the confirm-and-print
 // step is shared with netlify/functions/merch-order.js.
 const merchFulfil = require('../lib/merch-fulfil');
+// Retail venue subscriptions in rand. Kept in a library because the daily job
+// in retail-artist-payouts.js re-reads the same subscriptions from Paystack,
+// and two places deciding separately what a Paystack status means is how a
+// venue's player ends up disagreeing with its billing.
+const retailSub = require('../lib/retailPaystackSub');
 
 const PAYSTACK_BASE = 'https://api.paystack.co';
 const SECRET = process.env.PAYSTACK_SECRET_KEY;
@@ -145,6 +150,26 @@ exports.handler = async (event) => {
 
   const eventType = evt.event || 'unknown';
 
+  // ── Retail venue subscriptions ────────────────────────────────────────────
+  //
+  // Everything below this block is about a one-off sale: a track, an album, a
+  // beat licence, merch. A venue's monthly subscription in rand is a different
+  // animal and arrives as a different set of events, so it is split off here
+  // before any of the purchase machinery runs.
+  //
+  // Nothing in these handlers trusts the event body for anything but a
+  // subscription code, because Paystack documents these events by name and
+  // publishes no payload schema for any of them. See
+  // netlify/lib/retailPaystackSub.js.
+  if (retailSub.SUBSCRIPTION_EVENTS.has(eventType)) {
+    const subAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const out = await retailSub.handleSubscriptionEvent({ admin: subAdmin, evt, eventType });
+    // retry only when it is worth retrying. A refusal on the merits, such as a
+    // subscription no venue claims, would otherwise be redelivered hourly for
+    // three days and never get further.
+    return out.retry ? retry(out.note || 'retail_sub_failed') : ok('retail:' + (out.note || eventType));
+  }
+
   // charge.success is the only event that moves money into a sale. The rest
   // are acknowledged so Paystack stops sending them, and logged so a new
   // event type showing up is visible rather than silent.
@@ -160,6 +185,33 @@ exports.handler = async (event) => {
   }
 
   const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+  // A venue's first subscription payment is a charge.success like any other,
+  // on a reference this site issued with the rtl_ prefix. It has no
+  // paystack_intents row and never will, so it is routed before the intent
+  // lookup below, which would otherwise log it as a forged event.
+  //
+  // The prefix only chooses the route. What decides whether anything is
+  // recorded is the retail_subscriptions row carrying that exact reference, so
+  // a made-up rtl_ reference buys nothing.
+  if (String(reference).startsWith(retailSub.RETAIL_REF_PREFIX)) {
+    let subTx;
+    try {
+      subTx = await verifyTransaction(reference);
+    } catch (err) {
+      console.error('[paystack-webhook] verify failed for retail reference', reference, ':', err.message);
+      return retry('verify_failed');
+    }
+    // The same domain check the sale path makes, and for the same reason:
+    // Paystack's test card is public, so a test charge costs an attacker
+    // nothing and would switch a venue's player on for free.
+    if (!ALLOW_TEST && subTx.domain !== 'live') {
+      console.error('[paystack-webhook] REFUSED retail charge on domain', subTx.domain, reference);
+      return ok('retail_not_live');
+    }
+    const out = await retailSub.handleRetailCharge({ admin, reference, tx: subTx });
+    return out.retry ? retry(out.note || 'retail_charge_failed') : ok('retail:' + (out.note || 'charge'));
+  }
 
   // ── Already done? ─────────────────────────────────────────────────────────
   //

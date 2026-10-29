@@ -25,126 +25,13 @@ import InstallPrompt from '../components/InstallPrompt';
 import RetailReferrals from '../components/retail/RetailReferrals';
 import { buildPlayRow, sendPlay, flushQueue } from '../utils/retailPlayQueue';
 import useRetailManifest from '../hooks/useRetailManifest';
+// Both processors live here now. A venue billed in rand goes to Paystack and
+// one billed in dollars to PayPal, and which of the two it is comes from the
+// server rather than from anything this page works out. The PayPal button that
+// used to be defined in this file moved there unchanged.
+import { RetailBillingPanel, RetailTrialBanner } from '../components/retail/RetailBilling';
 
 const QUALIFYING_SECONDS = 30;
-const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID || '';
-
-// Loads the PayPal SDK once, gets a plan created server-side for this
-// venue's exact negotiated fee, then renders the subscribe button. On
-// approval, links the subscription back to the venue, the webhook
-// confirms/corrects the status afterward, this is the fast path so the
-// venue doesn't sit staring at a spinner waiting on a webhook round-trip.
-function RetailPayPalButton({ venueId, onSubscribed }) {
-  const buttonRef = React.useRef(null);
-  const [ready, setReady] = React.useState(false);
-  const [planId, setPlanId] = React.useState(null);
-  const [usdAmount, setUsdAmount] = React.useState(null);
-  const [error, setError] = React.useState('');
-
-  React.useEffect(() => {
-    if (window.paypal) { setReady(true); return; }
-    const existing = document.querySelector('script[src*="paypal.com/sdk"]');
-    if (existing) { existing.addEventListener('load', () => setReady(true)); return; }
-    const script = document.createElement('script');
-    // USD, not ZAR. The plan this button subscribes to is created in USD by
-    // retail-paypal-subscription.js, deliberately, because ZAR billing plans
-    // did not work on this PayPal account. Loading the SDK under a different
-    // currency to the plan is a mismatch PayPal is entitled to reject, and the
-    // ZAR figure is a display figure only. The line under the button already
-    // tells the venue what it is charged in dollars.
-    script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&vault=true&intent=subscription&currency=USD`;
-    script.async = true;
-    script.onload = () => setReady(true);
-    script.onerror = () => setError('Could not load PayPal. Try again shortly.');
-    document.head.appendChild(script);
-  }, []);
-
-  React.useEffect(() => {
-    // retail-paypal-subscription requires a session now: it had none, held
-    // the service role key, and would activate any venue the caller named.
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      return fetch('/.netlify/functions/retail-paypal-subscription', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session?.access_token || ''}`,
-        },
-        body: JSON.stringify({ action: 'get-plan', venueId }),
-      });
-    })()
-      .then(r => r.json())
-      .then(data => { if (data.planId) { setPlanId(data.planId); setUsdAmount(data.usdAmount); } else setError(data.error || 'Billing not set up yet, contact us.'); })
-      .catch(() => setError('Could not reach billing. Try again shortly.'));
-  }, [venueId]);
-
-  React.useEffect(() => {
-    if (!ready || !planId || !buttonRef.current || !window.paypal) return;
-    buttonRef.current.innerHTML = '';
-    window.paypal.Buttons({
-      style: { shape: 'pill', color: 'white', layout: 'vertical', label: 'subscribe' },
-      createSubscription: (data, actions) => actions.subscription.create({ plan_id: planId }),
-      onApprove: async (data) => {
-        const { data: { session: linkSession } } = await supabase.auth.getSession();
-        // The response was thrown away and onSubscribed() called regardless, so
-        // a link that came back 402 subscription_not_paid, or failed outright -
-        // still showed the venue a working, subscribed player that the server
-        // had not switched on. Read it.
-        try {
-          const res = await fetch('/.netlify/functions/retail-paypal-subscription', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${linkSession?.access_token || ''}`,
-            },
-            body: JSON.stringify({ action: 'link', venueId, subscriptionId: data.subscriptionID }),
-          });
-          const linked = await res.json().catch(() => ({}));
-          if (!res.ok || !linked.success) {
-            setError(
-              linked.error === 'subscription_not_paid'
-                ? 'PayPal has approved this but the first payment has not settled yet. '
-                  + 'Your player switches on by itself as soon as it does, usually within a few minutes.'
-                : 'Payment went through but we could not activate this venue. Contact us and we will sort it out.'
-            );
-            return;
-          }
-          // success with status APPROVED means PayPal has the approval but
-          // not the first payment. The server leaves the venue pending until
-          // the webhook confirms it, so switching the player on here showed an
-          // empty player. Only a genuinely ACTIVE subscription unlocks it.
-          if (linked.status !== 'ACTIVE') {
-            setError('Approved. Your player switches on by itself as soon as PayPal confirms the first payment, '
-              + 'usually within a few minutes. Refresh this page then.');
-            return;
-          }
-        } catch {
-          setError('Payment went through but we could not reach the server to activate the venue. Contact us.');
-          return;
-        }
-        onSubscribed();
-      },
-      onError: (err) => {
-        console.error('[retail] PayPal button error:', err);
-        setError('PayPal could not complete that. Nothing was charged. Refresh the page to try again.');
-      },
-    }).render(buttonRef.current);
-  }, [ready, planId, venueId, onSubscribed]);
-
-  if (error) return <p className="text-xs text-red-400 mt-3">{error}</p>;
-  if (!planId || !ready) return <div className="flex justify-center mt-4"><Loader className="w-4 h-4 text-white/30 animate-spin" /></div>;
-  return (
-    <div className="mt-4 max-w-xs mx-auto">
-      {usdAmount && (
-        <p className="text-xs text-white/40 mb-2 text-center">
-          Billed as ${usdAmount} USD/month via PayPal, pay by bank card, no PayPal account needed.
-        </p>
-      )}
-      <div ref={buttonRef} />
-    </div>
-  );
-}
-
 
 export default function RetailPlayerPage() {
   useRetailManifest();
@@ -1006,7 +893,7 @@ export default function RetailPlayerPage() {
               only a pending venue used to be shown the button, so a lapsed
               venue had no way back without us editing the database. */}
           {(venue.status === 'pending' || venue.status === 'suspended') && (
-            <RetailPayPalButton venueId={venue.id} onSubscribed={() => setVenue(v => ({ ...v, status: 'active' }))} />
+            <RetailBillingPanel venueId={venue.id} onActivated={() => setVenue(v => ({ ...v, status: 'active' }))} />
           )}
         </div>
       </div>
@@ -1104,6 +991,13 @@ export default function RetailPlayerPage() {
           </div>
         )}
       </div>
+
+      {/* A rand free trial takes no card, because Paystack cannot start a
+          subscription without one. So the trial ends with the music stopping
+          unless the venue comes back and pays, and a venue that was never
+          told reads that as the product breaking. This draws nothing at all
+          except while such a trial is running. */}
+      {!isPreviewMode && <RetailTrialBanner venueId={venue.id} />}
 
       {isPreviewMode && (
         <div className="bg-yellow-500/10 border-b border-yellow-500/20 px-4 py-2 flex items-center justify-between">

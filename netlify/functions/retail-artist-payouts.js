@@ -6,9 +6,17 @@
 //
 // Each run, in order:
 //
+//   0. PAYSTACK SYNC. Every venue subscription billed in rand is re-read from
+//      Paystack and written back, so a renewal, a cancellation or a failed
+//      charge reaches the row even if its webhook never arrived. This runs
+//      first because the sweep below reads the dates it writes.
+//
 //   1. ACCESS SWEEP. A venue that cancelled keeps the music until the end of
 //      the period it paid for (or its free trial). Once that date passes, the
-//      venue is suspended.
+//      venue is suspended. This also catches a rand trial that ended with no
+//      card behind it, which is the one case where nothing else would ever
+//      stop the music. Venues whose trial is nearly up are warned here too,
+//      three days out and again on the last day.
 //
 //   2. CLOSE LAST MONTH, once it is 14 days over (the refund window). The
 //      split itself is done by close_retail_payout_period() in the database
@@ -36,6 +44,9 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const paypalEnv = require('../lib/paypal-env');
 const { recordRun } = require('../lib/jobRun');
+// Venue subscriptions billed in rand. Shared with paystack-webhook.js so the
+// two cannot disagree about what a Paystack status means.
+const retailSub = require('../lib/retailPaystackSub');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -75,24 +86,156 @@ async function tellAdmins(title, message, metadata = {}) {
   }
 }
 
+// ── 0. Paystack sync ──────────────────────────────────────────────────────────
+//
+// Runs BEFORE the access sweep, and the order is the point: the sweep decides
+// who loses their music by reading current_period_end, so that date has to be
+// as fresh as Paystack can make it first. Sweeping on a stale date would
+// suspend a venue whose renewal went through yesterday and whose webhook got
+// lost.
+//
+// It also makes the webhook non-critical rather than load-bearing. Paystack
+// names its subscription events and publishes no payload schema for any of
+// them, so this is the thing that guarantees a renewal, a cancellation made in
+// Paystack's dashboard, or a failed charge reaches the row within a day.
+async function syncPaystack(dryRun) {
+  if (dryRun) return { skipped: 'dry run' };
+  try {
+    return await retailSub.reconcileAll({ admin: supabase });
+  } catch (e) {
+    // Never fatal. The sweep below still runs on whatever the row says, which
+    // is the conservative direction: a period nobody extended simply ends.
+    console.error('[retail-payouts] paystack sync threw:', e.message);
+    return { error: e.message };
+  }
+}
+
 // ── 1. Access sweep ───────────────────────────────────────────────────────────
+//
+// Three ways a venue's access ends, all of them "the period that was paid for
+// has run out":
+//
+//   cancelled   they cancelled, and the month they had paid for is over.
+//
+//   past_due    a charge failed. Paystack does not retry one, so the period
+//               already paid for runs out and is not replaced.
+//
+//   active, with a trial end, and no subscription anywhere.
+//               This is the rand trial, and it is the case the sweep used to
+//               miss entirely. A Paystack trial takes no card (see
+//               netlify/functions/retail-paystack-subscription.js), so a venue
+//               on one is status 'active' with current_period_end set to the
+//               end of the trial and nothing behind it to bill. Only
+//               'cancelled' was swept, so that venue's player would have gone
+//               on playing free forever.
+//
+//               The qualifier that makes it safe is the pair of null checks: a
+//               venue with a paypal_subscription_id or a
+//               paystack_subscription_code is being billed by somebody, and its
+//               period is extended by a webhook or by the sync above. Only a
+//               row with neither has no way to ever be extended.
 async function sweepAccess(dryRun) {
   const nowIso = new Date().toISOString();
-  const { data: lapsed, error } = await supabase
-    .from('retail_subscriptions')
-    .select('venue_id, current_period_end, status, retail_venues!inner(status)')
-    .eq('status', 'cancelled')
-    .lt('current_period_end', nowIso)
-    .eq('retail_venues.status', 'active');
-  if (error) { console.error('[retail-payouts] sweep read failed:', error.message); return []; }
 
-  const venueIds = [...new Set((lapsed || []).map(r => r.venue_id))];
+  const lapsedIds = [];
+
+  // Paid periods that ran out: cancelled, or a charge that failed.
+  {
+    const { data, error } = await supabase
+      .from('retail_subscriptions')
+      .select('venue_id, current_period_end, status, retail_venues!inner(status)')
+      .in('status', ['cancelled', 'past_due'])
+      .lt('current_period_end', nowIso)
+      .eq('retail_venues.status', 'active');
+    if (error) console.error('[retail-payouts] sweep read failed:', error.message);
+    (data || []).forEach(r => lapsedIds.push(r.venue_id));
+  }
+
+  // Card-less trials that ran out with nothing behind them.
+  {
+    const { data, error } = await supabase
+      .from('retail_subscriptions')
+      .select('venue_id, current_period_end, trial_ends_at, retail_venues!inner(status)')
+      .eq('status', 'active')
+      .not('trial_ends_at', 'is', null)
+      .is('paystack_subscription_code', null)
+      .is('paypal_subscription_id', null)
+      .lt('current_period_end', nowIso)
+      .eq('retail_venues.status', 'active');
+    if (error) console.error('[retail-payouts] trial sweep read failed:', error.message);
+    (data || []).forEach(r => lapsedIds.push(r.venue_id));
+  }
+
+  const venueIds = [...new Set(lapsedIds)];
   if (!dryRun && venueIds.length) {
     const { error: upErr } = await supabase.from('retail_venues')
       .update({ status: 'suspended' }).in('id', venueIds).eq('status', 'active');
     if (upErr) console.error('[retail-payouts] sweep suspend failed:', upErr.message);
   }
   return venueIds;
+}
+
+// ── 1b. Tell a venue its trial is nearly up ───────────────────────────────────
+//
+// A card-less trial ends with the music stopping, and a venue that was never
+// warned reads that as the product breaking. PayPal's trial does not need this:
+// it has a card and bills itself.
+//
+// Fired at two points rather than every day, so it is a reminder and not
+// nagging: three days out, and on the last day. The bucket is part of the
+// notification's metadata and is checked before sending, so a second run on
+// the same day, or a redeployed schedule, does not send it twice.
+async function warnTrialsEnding(dryRun) {
+  const now = Date.now();
+  const horizon = new Date(now + 3.5 * 86400000).toISOString();
+
+  const { data: ending, error } = await supabase
+    .from('retail_subscriptions')
+    .select('id, venue_id, trial_ends_at, monthly_fee, currency, retail_venues!inner(user_id, business_name, status)')
+    .eq('status', 'active')
+    .not('trial_ends_at', 'is', null)
+    .is('paystack_subscription_code', null)
+    .is('paypal_subscription_id', null)
+    .gt('trial_ends_at', new Date(now).toISOString())
+    .lt('trial_ends_at', horizon)
+    .eq('retail_venues.status', 'active');
+  if (error) { console.error('[retail-payouts] trial warning read failed:', error.message); return []; }
+
+  const sent = [];
+  for (const row of ending || []) {
+    const userId = row.retail_venues?.user_id;
+    if (!userId) continue; // A venue nobody has claimed has nobody to tell.
+
+    const daysLeft = Math.ceil((new Date(row.trial_ends_at).getTime() - now) / 86400000);
+    const bucket = daysLeft <= 1 ? 'last_day' : daysLeft <= 3 ? 'three_days' : null;
+    if (!bucket) continue;
+
+    const { data: already, error: dupeErr } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('type', 'subscription')
+      .contains('metadata', { kind: 'retail_trial_ending', venue_id: row.venue_id, bucket })
+      .limit(1);
+    if (dupeErr) { console.error('[retail-payouts] trial warning dupe check failed:', dupeErr.message); continue; }
+    if (already && already.length) continue;
+
+    if (dryRun) { sent.push({ venue_id: row.venue_id, bucket, dryRun: true }); continue; }
+
+    const money = row.currency === 'ZAR' ? `R${Number(row.monthly_fee || 0).toFixed(0)}`
+                                         : `$${Number(row.monthly_fee || 0).toFixed(2)}`;
+    const { error: insErr } = await supabase.from('notifications').insert({
+      user_id: userId,
+      type:    'subscription',
+      title:   bucket === 'last_day' ? 'Your free trial ends today' : 'Your free trial ends in 3 days',
+      message: `Add a card to keep the music playing at ${row.retail_venues?.business_name || 'your venue'}. `
+             + `It is ${money} a month, and you can cancel whenever you like.`,
+      metadata: { kind: 'retail_trial_ending', venue_id: row.venue_id, bucket },
+    });
+    if (insErr) { console.error('[retail-payouts] trial warning refused:', insErr.message, row.venue_id); continue; }
+    sent.push({ venue_id: row.venue_id, bucket });
+  }
+  return sent;
 }
 
 // ── 2. Close last month ───────────────────────────────────────────────────────
@@ -302,7 +445,10 @@ exports.handler = async (event) => {
 
   const report = { dryRun };
   try {
+    // Before the sweep, always. See the note on syncPaystack.
+    report.paystack = await syncPaystack(dryRun);
     report.suspended = await sweepAccess(dryRun);
+    report.trialWarnings = await warnTrialsEnding(dryRun);
     report.close = await closeLastMonth(dryRun);
     const token = await paypalToken();
     report.reconciled = await reconcile(token, dryRun);
