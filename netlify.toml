@@ -106,9 +106,18 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    # No framing by anyone. The app is not embedded anywhere; if an embed is
-    # ever wanted, this becomes a frame-ancestors CSP naming that one host.
-    X-Frame-Options = "DENY"
+    # SAMEORIGIN, not DENY. DENY blocks framing by EVERY origin including this
+    # one, and the login page frames the app itself: LoginPage.js draws a phone
+    # mockup around <iframe src="/?preview=phone"> so a visitor can see the feed
+    # before signing up. Under DENY the browser refused that frame, so the one
+    # thing the auth page shows of the product rendered as a broken image, read
+    # as "the songs don't load", which is how this was found.
+    #
+    # SAMEORIGIN still blocks every third-party embed, which is what the header
+    # is for. If an outside embed is ever wanted this becomes a frame-ancestors
+    # CSP naming 'self' AND that host; X-Frame-Options cannot express an
+    # allowlist, so do not loosen this value further.
+    X-Frame-Options = "SAMEORIGIN"
     # Stops a browser second-guessing a Content-Type, which is how an upload
     # served as text ends up executing as script.
     X-Content-Type-Options = "nosniff"

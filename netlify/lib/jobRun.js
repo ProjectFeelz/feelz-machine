@@ -188,6 +188,35 @@ function wrapHandler(job, handler) {
     try {
       const result = await handler(...args);
       const status = Number(result && result.statusCode);
+
+      // 429 is not a failed run. It is a refused duplicate.
+      //
+      // Several of these jobs guard themselves with a cooldown, because their
+      // URL is publicly reachable and each run does thousands of writes. The
+      // guard answers 429 when an identical run has just happened.
+      //
+      // Netlify fires a scheduled function more than once. update-engagement-
+      // scores proved it on two consecutive nights: a run at 02:00:50 that
+      // scored 135 tracks and returned 200, then a second invocation thirteen
+      // seconds later that the cooldown refused. Recording that refusal as a
+      // failure made the night look failed when the work had been done, and the
+      // watchdog emailed about it.
+      //
+      // So a 429 writes no row at all, which is the truthful record: that
+      // invocation did no work and there is already a row for the one that did.
+      // Nothing is hidden by this. check-job-health reports `overdue` on the
+      // absence of a SUCCESSFUL run inside max_gap_hours, so a job that is only
+      // ever refused writes no success and is still caught, by the check that
+      // is actually about the job not running.
+      //
+      // Only 429. A 401 or a 403 means the job could not authorise itself and
+      // did nothing, which is exactly the silent failure this file exists to
+      // make visible, and those are still recorded.
+      if (status === 429) {
+        console.warn(`[jobrun] ${job}: refused with 429, duplicate invocation, not recorded`);
+        return result;
+      }
+
       const ok = !Number.isFinite(status) || status < 400;
       await recordRun(job, {
         ok,

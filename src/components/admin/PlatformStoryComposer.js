@@ -223,16 +223,34 @@ export default function PlatformStoryComposer({ onToast }) {
     const { error: delErr } = await supabase.from('artist_stories').delete().eq('id', row.id);
     if (delErr) { toast('Could not delete: ' + delErr.message); return; }
 
-    // Same key extraction as the fixed version in ArtistStories.js. Split on
-    // the bucket segment and keep everything after it, which is the key by
-    // definition however many path parts it has.
+    // The bucket is read out of the URL rather than assumed to be `stories`.
+    //
+    // It used to be hardcoded, which was true of everything an editor uploads
+    // here and false of the one story this page lists that an editor did not
+    // upload: platform-daily-story generates its image into `platform-media`,
+    // because that bucket allows SVG and `stories` deliberately does not. With
+    // the bucket hardcoded, deleting that story asked `stories` to remove a key
+    // that was never in it, so the call quietly did nothing to anything.
+    //
+    // Parsed, it addresses the right bucket. For platform-media the delete is
+    // then refused by policy, because only the service role may write there,
+    // which is why that job sweeps its own old files on a 14-day window instead
+    // of relying on this. So the console line below is the expected outcome for
+    // a daily story, and a real problem for anything an editor uploaded.
+    //
+    // A Supabase public URL is .../object/public/<bucket>/<key>, and the key
+    // may have any number of path parts, so everything after the bucket segment
+    // is the key by definition.
     try {
-      const marker = '/object/public/stories/';
+      const marker = '/object/public/';
       const i = row.media_url.indexOf(marker);
-      const key = i === -1 ? null : row.media_url.slice(i + marker.length).split('?')[0];
-      if (key) {
-        const { error: rmErr } = await supabase.storage.from('stories').remove([key]);
-        if (rmErr) console.error('[platform story] media not removed:', key, rmErr.message);
+      const rest = i === -1 ? '' : row.media_url.slice(i + marker.length).split('?')[0];
+      const slash = rest.indexOf('/');
+      const bucket = slash === -1 ? null : rest.slice(0, slash);
+      const key = slash === -1 ? null : rest.slice(slash + 1);
+      if (bucket && key) {
+        const { error: rmErr } = await supabase.storage.from(bucket).remove([key]);
+        if (rmErr) console.error('[platform story] media not removed:', bucket, key, rmErr.message);
       }
     } catch (err) {
       console.error('[platform story] media cleanup threw:', err?.message);

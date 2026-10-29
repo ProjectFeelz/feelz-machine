@@ -36,6 +36,30 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// Where the generated image goes, and why it is not `stories`.
+//
+// This job uploaded to `stories` and failed on every run it has ever had: six
+// recorded runs, six 500s reading "mime type image/svg+xml is not supported".
+// That bucket's allowed_mime_types has no SVG in it, so not one story was ever
+// posted, and the only reason anybody knows is that the run now gets a row in
+// job_runs.
+//
+// The allowlist on `stories` is right and stays as it is. Artists can upload
+// there ("Artists and admins can upload to stories"), an SVG is a document that
+// can carry <script>, and the download button in ArtistStories.js navigates
+// top-level to media_url, so a scripted SVG uploaded by any artist would
+// execute at the Supabase storage origin.
+//
+// platform-media (migration 218) exists for the one SVG that is not user
+// content. It allows SVG and has no write policy for the `authenticated` role
+// at all, so only this function, holding the service role, can write to it.
+// Nothing user-submitted may ever be uploaded here.
+const MEDIA_BUCKET = 'platform-media';
+
+// How long a generated image is kept. Each day writes a new date-stamped file,
+// so without a sweep this grows by one file a day forever.
+const KEEP_DAYS = 14;
+
 // Resolved at call time, not module load, so a value set in the database
 // takes effect on the next run rather than the next deploy.
 async function resolvePlatformArtistId() {
@@ -284,18 +308,20 @@ const handler = async () => {
       dateStr,
     });
 
-    // Upload SVG to Supabase storage
+    // The name carries the date rather than being one fixed file, because a
+    // public Supabase URL is CDN cached: reusing a name would serve yesterday's
+    // picture for today's story. The sweep below keeps that from growing.
     const filename = `platform-story-${new Date().toISOString().slice(0, 10)}.svg`;
     const path     = `platform/${filename}`;
     const { error: upErr } = await supabase.storage
-      .from('stories')
+      .from(MEDIA_BUCKET)
       .upload(path, Buffer.from(svg, 'utf8'), {
         contentType: 'image/svg+xml',
         upsert: true,
       });
     if (upErr) throw upErr;
 
-    const { data: { publicUrl } } = supabase.storage.from('stories').getPublicUrl(path);
+    const { data: { publicUrl } } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
 
     // Delete previous platform stories
     await supabase.from('artist_stories')
@@ -304,16 +330,42 @@ const handler = async () => {
       .lt('created_at', new Date(Date.now() - 20 * 3600000).toISOString());
 
     // Insert new story
-    await supabase.from('artist_stories').insert({
+    const { error: insErr } = await supabase.from('artist_stories').insert({
       artist_id:  PLATFORM_ARTIST_ID,
       media_url:  publicUrl,
       media_type: 'image',
       caption:    `Feelz Machine · ${dateStr}`,
       expires_at: new Date(Date.now() + 24 * 3600000).toISOString(),
     });
+    // Checked rather than ignored: an upload with no row behind it is an image
+    // nobody will ever see, and that is the shape of failure this whole job has
+    // been in since it was written.
+    if (insErr) throw insErr;
+
+    // Sweep old generated files. Best effort on purpose, because the story is already
+    // posted by this point, and failing the run over tidying up would report a
+    // success as a failure. A warning in the log is the right weight for it.
+    try {
+      const { data: old } = await supabase.storage.from(MEDIA_BUCKET)
+        .list('platform', { limit: 200, sortBy: { column: 'name', order: 'asc' } });
+      const cutoff = new Date(Date.now() - KEEP_DAYS * 86400000).toISOString().slice(0, 10);
+      const stale  = (old || [])
+        .filter(o => /^platform-story-\d{4}-\d{2}-\d{2}\.svg$/.test(o.name))
+        .filter(o => o.name.slice(15, 25) < cutoff)
+        .map(o => `platform/${o.name}`);
+      if (stale.length) {
+        const { error: rmErr } = await supabase.storage.from(MEDIA_BUCKET).remove(stale);
+        if (rmErr) console.warn('[platform-daily-story] old files not removed:', rmErr.message);
+        else console.log(`[platform-daily-story] swept ${stale.length} file(s) older than ${KEEP_DAYS} days`);
+      }
+    } catch (sweepErr) {
+      console.warn('[platform-daily-story] sweep threw:', sweepErr?.message);
+    }
 
     console.log(`[platform-daily-story] Done — ${publicUrl}`);
-    return { statusCode: 200, body: JSON.stringify({ ok: true }) };
+    // `created` so wrapHandler records items=1 rather than 0: a run that posted
+    // a story has to look different in job_runs from a run that posted none.
+    return { statusCode: 200, body: JSON.stringify({ ok: true, created: 1, url: publicUrl }) };
 
   } catch (err) {
     console.error('[platform-daily-story] Error:', err.message);
