@@ -90,6 +90,7 @@ async function loadCatalogue(supabase) {
     { data: artists, error: artistsError },
     { data: allTracks, error: tracksError },
     { data: albums, error: albumsError },
+    { data: newsletters, error: newsletterError },
   ] = await Promise.all([
     supabase.from('artists')
       .select('id, slug, artist_name, genre, follower_count, updated_at')
@@ -111,11 +112,24 @@ async function loadCatalogue(supabase) {
       .eq('is_published', true)
       .not('slug', 'is', null)
       .limit(5000),
+
+    // The newsletter posts are here because they are the only pages on this
+    // site other than the home page that Google has ever shown to anybody.
+    // Eighteen of them have earned impressions; no artist, track, album or
+    // beat page ever has. Whatever small standing this site has with Google is
+    // concentrated in them, and until now they linked to nothing, so none of
+    // it reached the catalogue.
+    supabase.from('newsletter_posts')
+      .select('slug, title, excerpt, created_at')
+      .not('slug', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(5000),
   ]);
 
   // Logged rather than swallowed. A missing section is survivable; not knowing
   // which one failed is not.
-  [['artists', artistsError], ['tracks', tracksError], ['albums', albumsError]]
+  [['artists', artistsError], ['tracks', tracksError], ['albums', albumsError],
+   ['newsletter', newsletterError]]
     .filter(([, e]) => e)
     .forEach(([name, e]) => console.error(`[seo-catalogue] ${name} query failed:`, e.message));
 
@@ -147,7 +161,9 @@ async function loadCatalogue(supabase) {
     .filter(g => g.slug)
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
-  return { artists: liveArtists, tracks, beats, albums: liveAlbums, genres };
+  const posts = (newsletters || []).filter(n => usableSlug(n.slug));
+
+  return { artists: liveArtists, tracks, beats, albums: liveAlbums, genres, posts };
 }
 
 module.exports = {

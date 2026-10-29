@@ -79,6 +79,16 @@ const ROUTE_PATTERNS = [
   // with React routes of their own so a person clicking one gets a real
   // screen, and every artist, track, album and genre is reachable from the
   // home page in two clicks of plain HTML.
+  // The newsletter posts are here for a reason of their own. They are the only
+  // pages besides the home page that Google has ever shown to anyone, and all
+  // eighteen of them were serving the home page's title and description,
+  // because og-meta.js has no newsletter type. Eighteen pages claiming to be
+  // the same page is what "Duplicate, Google chose different canonical" means
+  // in the coverage report. seo-links gives each one its own words and points
+  // it at the catalogue, which is the only authority on this domain that has
+  // anywhere to flow.
+  { re: /^\/newsletter\/([^/]+)\/?$/, type: 'newsletter', meta: false, links: true },
+
   { re: /^\/$/, type: 'home', meta: false, links: true },
   { re: /^\/browse\/?$/, type: 'browse', meta: false, links: true },
   { re: /^\/artists\/?$/, type: 'artists', meta: false, links: true },
@@ -307,5 +317,9 @@ export const config = {
     // crawls on this site, and until now it handed back a document with no
     // links in it, so a crawl of it discovered nothing.
     '/', '/browse', '/artists', '/genres/*',
+    // '/newsletter/compose' matches this path too. It falls through harmlessly:
+    // seo-links finds no post with that slug, answers 404, and the page is
+    // served exactly as it arrived.
+    '/newsletter/*',
   ],
 };

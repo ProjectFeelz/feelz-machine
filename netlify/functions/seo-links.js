@@ -262,6 +262,49 @@ exports.handler = async (event) => {
       return json(200, { sections });
     }
 
+    // ── The newsletter ──────────────────────────────────────────────────────
+    //
+    // These eighteen pages matter more than their traffic suggests. They are
+    // the only pages on this site other than the home page that Google has
+    // ever put in front of anybody: 90 days of Search Console shows the home
+    // page and eighteen newsletter posts, and nothing else. Whatever small
+    // standing the domain has is sitting in them.
+    //
+    // Until now they linked to nothing and they had no meta of their own
+    // either, because og-meta.js has no newsletter type, so all eighteen
+    // served the same title and the same description as the home page. Three
+    // of the "not indexed" reasons in the coverage report are duplicate
+    // canonicals, which is exactly what eighteen identical pages look like.
+    //
+    // So each post now carries its own title and excerpt, and links out to the
+    // catalogue. That is both the honest thing for a reader at the end of an
+    // article and the one place on this site with any authority to pass on.
+    if (type === 'newsletter') {
+      const post = cat.posts.find(p => p.slug === slug);
+      if (!post) return json(404, { error: 'unknown_post' });
+
+      const others = cat.posts.filter(p => p.slug !== post.slug).slice(0, 10);
+      const excerpt = (post.excerpt || '').trim();
+
+      return json(200, {
+        title: `${post.title || post.slug} | Feelz Machine`,
+        description: excerpt
+          || `${post.title || 'An update'} from Feelz Machine, the independent music platform where artists keep what they earn.`,
+        canonical: `${BASE_URL}/newsletter/${post.slug}`,
+        heading: post.title || post.slug,
+        intro: excerpt,
+        sections: [
+          newestTracks,
+          { heading: 'Artists on Feelz Machine', links: [{ href: '/artists', label: 'All artists', sub: `${cat.artists.length} artists` }, ...artistLinks(cat.artists.slice(0, 18))] },
+          genreSection,
+          ...(others.length ? [{
+            heading: 'More from the newsletter',
+            links: others.map(p => ({ href: `/newsletter/${p.slug}`, label: p.title || p.slug })),
+          }] : []),
+        ],
+      });
+    }
+
     // Used by the sitemap to learn which genre pages exist, so the two cannot
     // disagree about which ones are real.
     if (type === 'genre-index') {
