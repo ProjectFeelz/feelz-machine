@@ -1896,12 +1896,16 @@ export default function ForYouPage() {
   }, [loading, tracks.length, loadError]);
 
   useEffect(() => {
-    if (idx >= tracks.length - 3 && !loadingMore && tracks.length > 0) loadTracks(tracks.length);
-  }, [idx, tracks.length, loadingMore, loadTracks]);
+    // Measured against the filtered list, because that is what the viewer is
+    // moving through. Against the raw list, a feed heavy in podcasts or beats
+    // would stop fetching while the viewer was three cards from the end of
+    // what they can actually see.
+    if (idx >= filteredTracks.length - 3 && !loadingMore && tracks.length > 0) loadTracks(tracks.length);
+  }, [idx, filteredTracks.length, tracks.length, loadingMore, loadTracks]);
 
   // Preload next track's audio so it starts instantly when swiped to
   useEffect(() => {
-    const next = tracks[idx + 1];
+    const next = filteredTracks[idx + 1];
     if (next?.file_url && !next.youtube_url && !preloadedRef.current.has(next.id)) {
       preloadedRef.current.add(next.id);
       // Resolved rather than read straight off the row, so this keeps working
@@ -2160,11 +2164,26 @@ export default function ForYouPage() {
     return () => window.removeEventListener('wheel', onWheel);
   }, [idx, goTo]);
 
+  // ── ONE LIST. THIS WAS TWO, AND THE FEED WAS SHOWING THE WRONG TRACKS ──
+  //
+  // visibleRange was built from `tracks`, every position and key in the render
+  // loop read `tracks[i]`, and the music card read `filteredTracks[i]`. Those
+  // are two arrays of different lengths indexed by the same i.
+  //
+  // With one podcast in the list, everything after it was off by one: the card
+  // on screen and the audio playing were different tracks. idx, goTo, the
+  // playable queue and the swipe bounds all ran on filteredTracks while the
+  // card positions ran on tracks, so they disagreed about what track 7 even
+  // was. The podcast was the visible symptom; the misalignment was the bug,
+  // and it applied to the beats filter too.
+  //
+  // filteredTracks is the feed now, everywhere. It keeps story cards, because
+  // a story row has no is_podcast and no is_beat, so it survives every filter.
   const visibleRange = useMemo(() => {
     const start = Math.max(0, idx - 1);
-    const end   = Math.min(tracks.length - 1, idx + PRELOAD_AHEAD);
+    const end   = Math.min(filteredTracks.length - 1, idx + PRELOAD_AHEAD);
     return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-  }, [idx, tracks.length]);
+  }, [idx, filteredTracks.length]);
 
   const vh = window.innerHeight;
 
@@ -2220,7 +2239,7 @@ export default function ForYouPage() {
         }}
       >
         {visibleRange.map(i => {
-          const item = tracks[i];
+          const item = filteredTracks[i];
           const isStoryCard = item?._type === 'story';
           const isCurrentCard = i === idx;
           const isDraggingDown = dragOffset > 0;
@@ -2238,7 +2257,7 @@ export default function ForYouPage() {
               ? Math.min(1, dragOffset / 80)
               : isCurrentCard ? 1 : 0.6;
           return (
-            <div key={tracks[i].id} className="absolute inset-x-0"
+            <div key={item?.id ?? `slot-${i}`} className="absolute inset-x-0"
               style={{
                 top: i * vh, height: vh,
                 transform: `scale(${scale})`,
@@ -2249,9 +2268,9 @@ export default function ForYouPage() {
               }}>
               {isStoryCard ? (
                 <StoryFeedCard
-                  item={tracks[i]}
+                  item={item}
                   isActive={i === idx}
-                  onOpen={() => setViewingStory({ artist: tracks[i].artist, stories: tracks[i].stories })}
+                  onOpen={() => setViewingStory({ artist: item.artist, stories: item.stories })}
                   navigate={navigate}
                 />
               ) : (

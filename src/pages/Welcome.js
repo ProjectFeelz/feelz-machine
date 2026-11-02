@@ -459,12 +459,13 @@ export default function Welcome() {
       // them again.
 
       if (role === 'listener') {
-        await supabase.from('user_profiles').upsert({
+        const { error: lpErr } = await supabase.from('user_profiles').upsert({
           user_id: user.id, name: finalName,
           genre: genres[0] || null, genre_preferences: genres, mood: mood || null,
           ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
           updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
+        if (lpErr) throw lpErr;
 
         // UPSERT, not update.
         //
@@ -492,12 +493,23 @@ export default function Welcome() {
         //
         // user_profiles first, so the name survives even if the artists
         // insert is refused.
-        await supabase.from('user_profiles').upsert({
+        // mood is here now. It was in the listener branch and in NEITHER artist
+        // branch, so an artist who picked a mood had it silently dropped while
+        // a listener who picked one kept it. Five questions asked, four saved.
+        //
+        // The error is READ. Every user_profiles write in this file discarded
+        // it, which is why neither the person onboarding nor anybody reading
+        // the table afterwards could tell a refused write from a successful
+        // one. That is the whole reason this was reported as "onboarding does
+        // not save" with no way to confirm it.
+        const { error: pErr } = await supabase.from('user_profiles').upsert({
           user_id: user.id, name: finalName, bio: bio.trim() || null,
           genre: genres[0] || null, genre_preferences: genres,
+          mood: mood || null,
           ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
           updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
+        if (pErr) throw pErr;
 
         const base = generateSlug(finalName || '');
         if (base) finalSlug = await getUniqueSlug(base, null);
@@ -506,6 +518,7 @@ export default function Welcome() {
           artist_name: finalName,
           bio: bio.trim() || null,
           genre: genres[0] || null,
+          mood: mood || null,
           role,
           role_confirmed: true,
           ...(finalSlug ? { slug: finalSlug } : {}),
@@ -517,6 +530,7 @@ export default function Welcome() {
           artist_name: finalName,
           bio: bio.trim() || null,
           genre: genres[0] || null,
+          mood: mood || null,
           role,
           role_confirmed: true,
           ...(avatarUrl ? { profile_image_url: avatarUrl } : {}),
@@ -529,16 +543,19 @@ export default function Welcome() {
           const base = generateSlug(finalName || '');
           if (base) { update.slug = await getUniqueSlug(base, artist.id); finalSlug = update.slug; }
         }
-        await supabase.from('artists').update(update).eq('id', artist.id);
+        const { error: uErr } = await supabase.from('artists').update(update).eq('id', artist.id);
+        if (uErr) throw uErr;
 
         // Mirrored, same as ProfileSetup does. An artist is a listener
         // everywhere outside their own dashboard.
-        await supabase.from('user_profiles').upsert({
+        const { error: mErr } = await supabase.from('user_profiles').upsert({
           user_id: user.id, name: finalName, bio: bio.trim() || null,
           genre: genres[0] || null, genre_preferences: genres,
+          mood: mood || null,
           ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
           updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
+        if (mErr) throw mErr;
       }
     } catch (e) {
       // THE MESSAGE USED TO SAY NOTHING. One line for every possible failure
@@ -565,9 +582,21 @@ export default function Welcome() {
     // in localStorage, and the app asked again on every new browser, every
     // installed-app session, every cleared cache, forever.
     //
-    // Written outside the try above on purpose: if saving the answers failed,
-    // the person still went through this and must not be asked again. Losing
-    // their genres is a worse feed. Losing this is an account that nags.
+    // WHEN IT IS WRITTEN, AND WHEN IT DELIBERATELY IS NOT.
+    //
+    // It is outside the try above, but the !silent branch of the catch returns
+    // before reaching here, and that ordering is the whole fix. The answer
+    // writes now read their own errors and throw, so a refused write lands in
+    // the catch, the person is told on screen, and this marker is NOT set.
+    // They keep the chance to try again. Previously every one of those writes
+    // discarded its error, nothing ever threw, and this ran regardless: the
+    // account was recorded as onboarded with an empty profile behind it and
+    // could never be asked again. That is the state somebody reported after
+    // completing onboarding and finding no genre, no mood and no bio.
+    //
+    // A skip (silent) is the opposite case and still writes it. There are no
+    // answers to lose, and somebody who has said no must not be asked on every
+    // new device forever.
     //
     // The error is READ, not caught. supabase-js resolves { data, error } for a
     // database refusal rather than throwing, so the try/catch that used to be

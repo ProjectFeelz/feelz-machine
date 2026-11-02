@@ -136,5 +136,37 @@
   <body>
     <noscript>You need to enable JavaScript to run Feelz Machine.</noscript>
     <div id="root"></div>
+    <!-- ── Pinch zoom on iOS ──────────────────────────────────────────────
+         Reported as three things: the bottom nav hides, the page moves
+         around, and you can pinch to zoom. They are one bug. Once an iPhone
+         zooms at all, position: fixed is laid out against the layout viewport
+         while the person looks through a smaller visual viewport, so the nav
+         is exactly where it always was and the window has moved off it.
+         Nothing in the app can recover from that, because the app is never
+         told the visual viewport moved.
+
+         iOS has ignored user-scalable=no since iOS 10, so the viewport meta
+         cannot stop this. What Safari does respect is a cancelled gesture
+         event, and these are Safari-only events: no other browser fires them,
+         so this costs nothing anywhere else.
+
+         gesturestart alone is not enough. Safari will still complete a zoom
+         already in flight, so gesturechange and gestureend are cancelled too.
+
+         This is inline and before React on purpose: a zoom triggered during
+         the first paint, while somebody is impatiently tapping a loading
+         screen, is exactly the case a React effect would be too late for.
+
+         It does NOT disable browser or OS zoom, and it does not touch Android,
+         where the gesture does not have this side effect. -->
+    <script>
+      (function () {
+        if (!('ongesturestart' in window)) return;
+        var block = function (e) { e.preventDefault(); };
+        document.addEventListener('gesturestart', block, { passive: false });
+        document.addEventListener('gesturechange', block, { passive: false });
+        document.addEventListener('gestureend', block, { passive: false });
+      })();
+    </script>
   </body>
 </html>

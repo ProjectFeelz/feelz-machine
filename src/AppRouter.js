@@ -329,13 +329,29 @@ function OnboardingGuard({ children }) {
   if (needsFlow === null) return null;
   if (needsFlow) return <Navigate to="/welcome" replace />;
 
-  if (user && !artist && !listener && !hasSeenWelcome(user.id)) {
-    // Everybody goes to /welcome now, whichever kind of account they asked
-    // for. Welcome.js reads the same pending_creator_role key and picks the
-    // right set of questions, so the branch that used to live here has moved
-    // to the one place that can act on it.
-    return <Navigate to="/welcome" replace />;
-  }
+  // THE BRANCH THAT USED TO BE HERE OVERRODE THE ANSWER ABOVE IT.
+  //
+  // It read `!artist && !listener && !hasSeenWelcome(...)` and redirected to
+  // /welcome. Every one of those three is true for somebody signing in on a
+  // SECOND device: localStorage is empty there by definition, and `artist` and
+  // `listener` are both still null for the first renders while AuthContext
+  // reads them.
+  //
+  // So the sequence was: needsWelcome asks the database, finds
+  // welcome_completed_at set, correctly answers "no", sets needsFlow to false,
+  // and then execution fell straight through to this branch and sent the
+  // person to onboarding anyway. The durable marker was read, believed, and
+  // then ignored two lines later.
+  //
+  // Reproduced exactly: an account with welcome_completed_at set at 18:33 and
+  // a complete profile, name, genre, mood, bio and all, asked to onboard again
+  // on a PC.
+  //
+  // Reaching this line means needsFlow is false, which means either the
+  // durable marker said done or the 2.5s floor expired. Both of those are
+  // already a decision to let the person in. There is nothing left to infer,
+  // and inference is what the comment above has been warning about for three
+  // paragraphs.
   return children;
 }
 

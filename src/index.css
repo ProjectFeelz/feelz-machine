@@ -16,6 +16,40 @@ body {
   overflow-x: hidden;
   /* Prevent iOS rubber-band bounce thrashing fixed/sticky elements */
   overscroll-behavior-y: none;
+
+  /* ── WHY THE BOTTOM NAV DISAPPEARS ON AN IPHONE ──────────────────────────
+     Reported as: the nav hides, the page moves around, and you can pinch to
+     zoom. Those are one bug, not three.
+
+     On iOS, once the page is zoomed at all, position: fixed is laid out
+     against the LAYOUT viewport while the person is looking through a smaller
+     VISUAL viewport. The nav is still exactly where it was; the window has
+     moved off it. Nothing in the app can put it back, because the app is not
+     told the visual viewport moved.
+
+     So the fix is upstream of that: do not let an accidental zoom happen.
+
+     manipulation kills the double-tap-to-zoom gesture and keeps panning,
+     scrolling and pinch. Double tap is the one people trigger by accident,
+     because a quick second tap on a card, a play button or a like is read as
+     a zoom instead of two taps. Pinch is handled in public/index.html, where
+     it has to be: iOS ignores user-scalable=no and only respects a cancelled
+     gesturestart event.
+
+     Worth being honest that this costs something. Pinch zoom is a real
+     accessibility affordance and blocking it is a choice, made here because
+     this is a full-screen swipe feed where the gesture is nearly always
+     accidental and its side effect is a navigation bar the person cannot get
+     back without reloading. Browser and OS zoom still work. */
+  touch-action: manipulation;
+}
+
+/* Safari applies overscroll-behavior from the scrolling element, which on iOS
+   is html rather than body, so the rule on body alone was not stopping the
+   page being dragged around. Both, because which one scrolls differs between
+   iOS versions. */
+html {
+  overscroll-behavior: none;
 }
 
 /* NOTE: do NOT add transform/will-change to main — it breaks position:fixed
@@ -24,6 +58,21 @@ body {
 
 #root {
   min-height: 100vh;
+
+  /* ── The page could be dragged sideways on an iPhone ─────────────────────
+     body has overflow-x: hidden, and on iOS Safari that is not reliably
+     honoured on body, so one element wider than the viewport let the whole
+     page pan. The cause was a full-bleed row using a negative margin with no
+     padding to put the space back; that is fixed at the source in
+     BrowsePage.js. This is the backstop so the next one cannot do it again.
+
+     clip, not hidden, and the difference matters here. hidden creates a
+     scroll container, which makes this element the containing block for
+     sticky descendants and breaks them. clip does not. It is also why this is
+     not solved with a transform or will-change: the note further up this file
+     records that doing so broke position: fixed for every descendant, which
+     is every modal, FAB and overlay in the app. */
+  overflow-x: clip;
 }
 
 /* ── Global surface & card system ───────────────────────────────────────────

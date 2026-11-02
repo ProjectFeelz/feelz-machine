@@ -817,7 +817,13 @@ export default function BrowsePage() {
             route to it at all. Stories were being uploaded into a screen that
             half the audience could not open. Hidden while searching, because
             a search result page should be search results. */}
-        {!searchResults && <div className="-mx-6 md:mx-0 mb-6"><StoriesRail userId={user?.id} /></div>}
+        {/* -mx-6 with px-6 to match, which it did not have. A negative margin
+            with nothing putting the space back makes this element 48px wider
+            than the page. On desktop body{overflow-x:hidden} hid it; iOS
+            Safari does not reliably honour that on body, so the whole page
+            could be dragged sideways. The row two hundred lines below has
+            always used "-mx-6 px-6" for exactly this reason. */}
+        {!searchResults && <div className="-mx-6 px-6 md:mx-0 md:px-0 mb-6"><StoriesRail userId={user?.id} /></div>}
 
         {/* Search results */}
         {searchResults && (
