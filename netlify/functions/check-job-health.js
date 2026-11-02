@@ -127,6 +127,21 @@ exports.handler = async (event) => {
             type: 'admin_message',
             title: `Scheduled job ${r.status}: ${r.job}`,
             message: describe(r),
+            // Marked admin_only, which it was not before.
+            //
+            // Seventeen of these have been written and every one of them
+            // reached exactly one person, because adminIds held exactly one
+            // id. That is not the flag working, that is there having been one
+            // admin. The moment a second account is made an admin, an alert
+            // saying "Scheduled job never ran: release-pending-payouts" is a
+            // row in somebody's notification list with nothing marking it as
+            // internal.
+            //
+            // retail-artist-payouts.js already sets this on the notices it
+            // writes to admins. Two files writing the same kind of row and
+            // disagreeing about whether it is internal is the kind of thing
+            // that is only ever found afterwards.
+            admin_only: true,
             // Emailed, because the whole point is that nobody was looking at
             // the app when these failed.
             email_requested: true,
