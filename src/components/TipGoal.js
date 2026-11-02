@@ -25,7 +25,9 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { useTier } from '../contexts/useTier';
 import { useHaptics } from '../hooks/useHaptics';
 import { Target, X, Loader, Check, Edit2 } from 'lucide-react';
 
@@ -117,6 +119,22 @@ function GoalEditModal({ goal, artistId, onClose, onSaved }) {
 
 export default function TipGoal({ artistId, primaryColor = '#8B5CF6', textColor = '#fff', isOwner = false }) {
   const { tap } = useHaptics();
+  const navigate = useNavigate();
+  // THE PLAN.
+  //
+  // "Tip goals & fan fundraising" is sold on the Premium card and this file
+  // had no tier reference of any kind, so any artist could set one from their
+  // own profile.
+  //
+  // What is gated is CREATING and EDITING, and nothing else. A goal that
+  // already exists keeps showing, keeps its progress bar, and keeps taking
+  // tips on any plan: tip-artist.js credits it with the service role, so the
+  // database gate does not touch an incoming tip either. Pulling a public
+  // fundraiser off somebody's profile because their plan lapsed is not a thing
+  // to do quietly, and the money owed to them does not care what tier they are
+  // on.
+  const { hasFeature, tierLoading } = useTier();
+  const canEditGoal = hasFeature('tip_goals');
   const [goal, setGoal]           = useState(null);
   const [loading, setLoading]     = useState(true);
   const [showEdit, setShowEdit]   = useState(false);
@@ -173,6 +191,21 @@ export default function TipGoal({ artistId, primaryColor = '#8B5CF6', textColor 
   // A pill, not a dashed full-width bar. It used to sit on its own line and
   // leave "Set a tip goal" floating alone under the name.
   if (!goal && isOwner) {
+    // Below Premium the pill still appears and still says what it is, the way
+    // the withheld rows in the create menu do. A control that is simply absent
+    // tells an artist nothing about what the plan would give them. While the
+    // tier is still resolving it shows the plain pill rather than a lock, so a
+    // paying artist never sees their own feature flash as unavailable.
+    if (!tierLoading && !canEditGoal) {
+      return (
+        <button onClick={() => { tap(); navigate('/upgrade'); }}
+          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+          style={{ backgroundColor: 'transparent', color: `${textColor}40`, border: `1px dashed ${textColor}20` }}>
+          <Target className="w-3.5 h-3.5" />
+          <span>Tip goal · Premium</span>
+        </button>
+      );
+    }
     return (
       <>
         <button onClick={() => { tap(); setShowEdit(true); }}
@@ -279,7 +312,7 @@ export default function TipGoal({ artistId, primaryColor = '#8B5CF6', textColor 
               <Target className="w-4 h-4 flex-shrink-0" style={{ color: primaryColor }} />
               <p className="text-sm font-semibold truncate" style={{ color: textColor }}>{goal.title}</p>
             </div>
-            {isOwner && (
+            {isOwner && canEditGoal && (
               <button onClick={() => { tap(); setOpen(false); setShowEdit(true); }}
                 className="p-1 rounded-lg hover:bg-white/10 transition flex-shrink-0 ml-2">
                 <Edit2 className="w-3 h-3" style={{ color: `${textColor}40` }} />

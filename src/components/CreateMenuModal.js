@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { sendArtistBroadcast } from '../utils/notify';
-import { useTier } from '../contexts/useTier';
+import { useTier, FEATURE_LABELS } from '../contexts/useTier';
 import { useAuth } from '../contexts/AuthContext';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 import {
@@ -97,7 +97,25 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
     }
     setTopPickSaving(false);
   };
-  const { isPremium } = useTier();
+  const { isPremium, hasFeature } = useTier();
+
+  // ONE SHAPE FOR EVERY ROW THE PLAN CAN WITHHOLD.
+  //
+  // Stories, Voice Memo, Go Live and Message Fans were in no tier map, so
+  // every artist on every plan had all four. Three of them are Pro now and
+  // live streaming is Premium, which is what the cards in src/data/tiers.js
+  // have always said.
+  //
+  // The row is not hidden. Merch already worked this way and for the right
+  // reason: an artist who cannot see a feature has no idea it exists and no
+  // reason to pay for it, and a row that appears and disappears between plans
+  // reads as a bug rather than a price. So the row stays, says which plan it
+  // needs, and opens the upgrade page instead of the composer.
+  const gated = (feature, item) => {
+    if (hasFeature(feature)) return item;
+    const needs = FEATURE_LABELS[feature]?.minTier === 'premium' ? 'Premium' : 'Pro';
+    return { ...item, id: `${item.id}_locked`, sub: `${needs} only, upgrade to unlock` };
+  };
 
   const [createTab, setCreateTab] = useState('menu'); // 'menu' | 'story' | 'dm' | 'memo' | 'live' | 'toppick'
   const [showMerchConnect, setShowMerchConnect] = useState(false);
@@ -143,6 +161,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
 
   const startLiveSession = async () => {
     if (!artist || startingSession) return;
+    if (!hasFeature('live_streaming')) { close(); navigate('/upgrade'); return; }
     setStartingSession(true);
     try {
       const { data: existing } = await supabase.from('listening_sessions').select('id')
@@ -175,6 +194,10 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
 
   const sendDMToFollowers = async () => {
     if (!artist || !dmMessage.trim() || dmSending) return;
+    // Belt as well as braces. The row that opens this composer is withheld
+    // below a Pro plan, but the tier can resolve late and a composer already
+    // on screen does not re-render, so the send checks for itself.
+    if (!hasFeature('fan_broadcast')) { close(); navigate('/upgrade'); return; }
     setDmSending(true);
     try {
       const { data: follows } = await supabase
@@ -298,22 +321,22 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   tint: MENU_TINTS.create,
                   items: [
                     { id: 'upload', icon: '🎵', label: 'Upload Track', sub: 'Add new music to your profile' },
-                    { id: 'story',  icon: '📸', label: 'Add Story',    sub: 'Share a 24hr clip with fans' },
+                    gated('stories', { id: 'story', icon: '📸', label: 'Add Story', sub: 'Share a 24hr clip with fans' }),
                     // 'Thought of the Day' removed. It wrote to artist_thoughts
                     // and rendered in exactly one place — the artist's own
                     // profile — so the entry sat in the create menu offering a
                     // post almost nobody made and nobody found. Voice Memo and
                     // Story cover the same "say something today" intent and
                     // both actually surface.
-                    { id: 'memo',   icon: '🎙️', label: 'Voice Memo',   sub: 'Record a message for your fans' },
-                    { id: 'live',   icon: '🔴', label: 'Go Live',      sub: 'Start a live session' },
+                    gated('voice_memo', { id: 'memo', icon: '🎙️', label: 'Voice Memo', sub: 'Record a message for your fans' }),
+                    gated('live_streaming', { id: 'live', icon: '🔴', label: 'Go Live', sub: 'Start a live session' }),
                   ],
                 },
                 {
                   heading: 'Reach your fans',
                   tint: MENU_TINTS.fans,
                   items: [
-                    { id: 'dm',    icon: '📣', label: 'Message Fans', sub: 'Send a notification to all followers' },
+                    gated('fan_broadcast', { id: 'dm', icon: '📣', label: 'Message Fans', sub: 'Send a notification to all followers' }),
                     { id: 'chats', icon: '💬', label: 'Chats',        sub: 'Your rooms and artist chats' },
                     ...(canNewsletter
                       ? [{ id: 'newsletter', icon: '📨', label: 'Newsletter', sub: 'Write an update for the app or venues' }]
@@ -406,6 +429,8 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                       else if (id === 'merch_parked') { setShowMerchParked(true); }
                       else if (id === 'merch') { setShowMerchConnect(true); }
                       else if (id === 'merch_locked') { close(); navigate('/upgrade'); }
+                      // Every other withheld row, by the suffix gated() gives it.
+                      else if (id.endsWith('_locked')) { close(); navigate('/upgrade'); }
                       else if (id === 'newsletter') { close(); navigate('/newsletter/compose'); }
                       else if (id === 'chats') { close(); navigate('/community'); }
                       else if (id === 'course') { close(); navigate('/learn'); }

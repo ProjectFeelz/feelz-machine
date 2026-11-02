@@ -1112,7 +1112,7 @@ function AddTrackToAlbum({
         </div>
       </div>
 
-      <TierGate feature="download_sales" inline>
+      <TierGate feature="video_backdrop" inline>
         <YoutubeField
           value={trackForm.youtube_url}
           onChange={(val) => setTrackForm({ ...trackForm, youtube_url: val })}
@@ -2652,7 +2652,7 @@ export default function TrackUploadPanel() {
                 </div>
               ) : (
                 !isAlbumRelease && (
-                  <TierGate feature="download_sales" inline>
+                  <TierGate feature="video_backdrop" inline>
                     <YoutubeField
                       value={trackForm.youtube_url}
                       onChange={(val) => setTrackForm({ ...trackForm, youtube_url: val })}
@@ -3353,7 +3353,7 @@ export default function TrackUploadPanel() {
                             />
                           </div>
 
-                          <TierGate feature="download_sales" inline>
+                          <TierGate feature="video_backdrop" inline>
                             <YoutubeField
                               value={editForm.youtube_url}
                               onChange={(val) => setEditForm({ ...editForm, youtube_url: val })}

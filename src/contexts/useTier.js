@@ -18,7 +18,15 @@ const TIER_ACCESS = {
     max_albums: 0,
     lyrics: false,
     custom_theme: false,
-    chat_rooms: true,
+    // WAS true, WHILE EVERYTHING ELSE SAID OTHERWISE.
+    //
+    // platform_tiers.can_create_chat_rooms is false for free, the Free card in
+    // src/data/tiers.js lists chat rooms as not included, and handleCreate in
+    // ChatRoomsPage refuses a free artist outright. Only this line said yes,
+    // and this line is the one TierGate reads. So a free artist was shown the
+    // whole create form, named their room, picked a colour, pressed create,
+    // and was told then.
+    chat_rooms: false,
     analytics: false,
     collaborations: false,
     priority_trending: false,
@@ -27,6 +35,32 @@ const TIER_ACCESS = {
     custom_branding: false,
     advanced_analytics: false,
     offline_listening: false,            // Free: streaming only
+    // ── THE CREATE MENU ──────────────────────────────────────────────────
+    //
+    // Stories, voice memos, live sessions and the follower broadcast were in
+    // no tier map at all, so hasFeature() answered false for every one of
+    // them and nothing ever asked. They were reachable by every artist on
+    // every plan, and the only reason that never looked like a leak is that
+    // nobody had used them: zero stories, zero memos, zero live sessions and
+    // zero chat rooms across all 77 free artists on the day this was written.
+    //
+    // live_streaming sits at premium rather than pro because that is what the
+    // cards say: the Premium card sells "Live streaming to followers" and the
+    // Pro card lists it as not included.
+    stories: false,
+    voice_memo: false,
+    fan_broadcast: false,
+    live_streaming: false,
+    // Sold on the Premium card as "YouTube video backdrop", and listed as not
+    // included on Pro. The field was wrapped in a download_sales gate, which
+    // is a Pro feature, so every Pro artist had it.
+    video_backdrop: false,
+    // "Tip goals & fan fundraising" on the Premium card. TipGoal.js had no
+    // tier reference of any kind, so a free artist could set one from their
+    // own profile. Gating creating and editing only: an existing goal keeps
+    // showing and keeps taking tips whatever the plan says, because taking a
+    // public fundraiser off somebody's page is not a thing to do by migration.
+    tip_goals: false,
     // Beatmaker limits
     max_beats: 3,                        // Free: 3 beats total
     beat_licences: ['free', 'basic'],    // Free: only Free and Basic Lease
@@ -51,8 +85,16 @@ const TIER_ACCESS = {
     community_post: true,
     daily_thought: true,
     offline_listening: true,             // Pro: carry music with no signal
+    // The create menu. Live streaming stays off: it is a Premium line, and so
+    // are the video backdrop and tip goals.
+    stories: true,
+    voice_memo: true,
+    fan_broadcast: true,
+    live_streaming: false,
+    video_backdrop: false,
+    tip_goals: false,
     // Beatmaker limits
-    max_beats: 20,                                              // Pro: 20 beats
+    max_beats: 20,                                            // Pro: 20 beats
     beat_licences: ['free', 'basic', 'premium', 'unlimited'],  // Pro: all except Exclusive
     stems_upload: true,
     beat_analytics: true,
@@ -76,8 +118,15 @@ const TIER_ACCESS = {
     community_post: true,
     daily_thought: true,
     offline_listening: true,             // Premium: carry music with no signal
+    // The create menu, in full.
+    stories: true,
+    voice_memo: true,
+    fan_broadcast: true,
+    live_streaming: true,
+    video_backdrop: true,
+    tip_goals: true,
     // Beatmaker limits
-    max_beats: Infinity,                                                      // Premium: unlimited
+    max_beats: Infinity,                                                    // Premium: unlimited
     beat_licences: ['free', 'basic', 'premium', 'unlimited', 'exclusive'],   // Premium: all tiers
     stems_upload: true,
     beat_analytics: true,
@@ -136,6 +185,12 @@ const FEATURE_LABELS = {
   stems_upload: { name: 'Stem Uploads', description: 'Attach stems to your beats for buyers to download', minTier: 'pro' },
   beat_analytics: { name: 'Beat Analytics', description: 'Per-beat plays, licence views and purchase tracking', minTier: 'pro' },
   exclusive_licence: { name: 'Exclusive Licence', description: 'Offer full exclusive rights on your beats', minTier: 'premium' },
+  stories: { name: 'Stories', description: 'Share a 24 hour clip with your followers', minTier: 'pro' },
+  voice_memo: { name: 'Voice Memos', description: 'Record a short message for your fans', minTier: 'pro' },
+  fan_broadcast: { name: 'Message Fans', description: 'Send a notification to everyone who follows you', minTier: 'pro' },
+  live_streaming: { name: 'Live Streaming', description: 'Go live to your followers, audio or video', minTier: 'premium' },
+  video_backdrop: { name: 'Video Backdrop', description: 'Play a YouTube video behind a track in the player', minTier: 'premium' },
+  tip_goals: { name: 'Tip Goals', description: 'Set a fundraising goal on your profile and show the progress', minTier: 'premium' },
 }
 
 function useTierInternal() {
