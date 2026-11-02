@@ -1,0 +1,144 @@
+{
+  "sell-beats-south-africa": {
+    "slug": "sell-beats-south-africa",
+    "title": "How to sell beats in South Africa and get paid in rand",
+    "metaTitle": "How to Sell Beats in South Africa and Get Paid in Rand | Feelz Machine",
+    "metaDescription": "What it actually takes to sell beats from South Africa: licensing, pricing, getting paid in rand to a local bank account, and what each route costs you.",
+    "intro": "Selling beats from South Africa has one problem that selling beats from anywhere else does not: getting the money. Most beat marketplaces pay out in dollars, through a service that either is not available here or charges enough on the conversion that a R300 sale becomes something closer to R250. This is what the routes actually are.",
+    "sections": [
+      {
+        "heading": "The payment problem, stated plainly",
+        "body": "A beat sale is usually small. R200 to R800 is a normal range for a lease. Fees that would be trivial on a R10,000 transaction are not trivial on a R300 one, and a fixed fee plus a conversion spread can take a tenth of it before anything reaches you. So the question is not only who has the audience. It is what arrives in your account afterwards."
+      },
+      {
+        "heading": "What you are actually selling",
+        "body": "A lease is permission to use the beat under conditions you set: how many copies, whether it can be monetised, whether it stays non-exclusive. An exclusive is the beat itself, sold once, usually with the stems. Price them differently and say which is which on the page, because the single most common reason a beat sale goes wrong is a buyer who thought they bought one and got the other."
+      },
+      {
+        "heading": "Getting paid in rand",
+        "body": "On Feelz Machine a buyer in South Africa pays by card in rand through Paystack, and the artist’s share settles into their own South African bank account rather than into a platform balance. A buyer outside the country pays in dollars through PayPal. The platform takes no cut of either: the only deduction is the card processor’s fee, and on a rand sale the buyer covers it, so the figure you set is the figure you are owed."
+      },
+      {
+        "heading": "What to price it at",
+        "body": "Start by looking at what beats in your genre go for locally rather than at what American producers charge, because your buyer is comparing you to the former. Then set a price you would be happy to receive forty times, because volume at a fair price beats one exclusive you spend six months trying to sell. Pay-what-you-want with a minimum is worth using on older beats: it finds the buyers who would have paid more and keeps the ones who would not have bought at all."
+      }
+    ],
+    "steps": [
+      "Upload the beat with its BPM and key filled in, because that is what producers filter by.",
+      "Set a lease price and, if you are selling one, an exclusive price. Make the difference obvious.",
+      "Add your bank details so rand payouts have somewhere to go.",
+      "Put the link in your Instagram bio and send it to the three artists most likely to use it. Beats sell to people, not to search engines."
+    ],
+    "honestNote": "If your goal is reach rather than income, a beat marketplace with an existing audience of buyers will get you more ears than any platform you are new on, including this one. The case for selling direct is what happens to the money once a sale does happen, not that the sale is easier to find.",
+    "related": [
+      {
+        "label": "How artists get paid on Feelz Machine",
+        "href": "/guides/get-paid-for-music-south-africa"
+      },
+      {
+        "label": "What music distribution costs",
+        "href": "/guides/music-distribution-south-africa-cost"
+      },
+      {
+        "label": "Browse beats on Feelz Machine",
+        "href": "/browse"
+      }
+    ]
+  },
+  "get-paid-for-music-south-africa": {
+    "slug": "get-paid-for-music-south-africa",
+    "title": "How to get paid for your music in South Africa",
+    "metaTitle": "How to Get Paid for Your Music in South Africa | Feelz Machine",
+    "metaDescription": "The four ways a South African independent artist actually gets paid for music, what each one pays, how long it takes, and which are worth your time.",
+    "intro": "There are four ways money reaches an independent artist, and they pay wildly differently. Knowing which is which is the difference between chasing the one everybody talks about and using the three that actually work at your size.",
+    "sections": [
+      {
+        "heading": "Streaming royalties",
+        "body": "The one everybody means by \"getting paid for music\", and the one that pays least per listener by a very long way. Per-stream rates sit in fractions of a cent, and on the pro-rata model your payout depends on how many streams happened platform-wide that month rather than only on yours. Spotify’s own 2025 reporting puts the 100,000th highest-earning artist on the entire platform at $7,300 for the full year. Streaming is worth doing because it is where people listen. It is not worth planning around as income until the numbers are very large."
+      },
+      {
+        "heading": "Selling music directly",
+        "body": "A download or an album sold to someone who already wants it pays more than tens of thousands of streams. The arithmetic is not close. One R60 album sale is worth roughly what fifteen thousand streams pay. The constraint is not the rate, it is that you need people who want your music specifically, which is why the fan contact list matters more than the follower count."
+      },
+      {
+        "heading": "Live and sync",
+        "body": "Still the largest line for most working South African artists. Nothing on any platform changes that, and anyone who tells you otherwise is selling you something. What a platform can do is give a promoter or a music supervisor a page that loads, plays, and says who you are without them having to ask."
+      },
+      {
+        "heading": "Background music licensing",
+        "body": "The one most artists have never been offered. Shops, cafes and bars legally need licensed music, pay monthly for it, and almost none of that money reaches independent artists. Feelz Retail splits that subscription income among the artists whose tracks actually played, counted per qualifying play, which is the part that makes it verifiable rather than a promise."
+      }
+    ],
+    "steps": [
+      "Put your music where people can buy it, not only where they can stream it.",
+      "Add your payout details before your first sale rather than after it, so nothing sits waiting.",
+      "Collect fan contacts you can reach without a platform in the middle.",
+      "Say yes to background licensing. It costs you nothing and it pays on plays you were never going to get otherwise."
+    ],
+    "honestNote": "None of this replaces an audience. A platform that pays you fairly on zero sales still pays you zero. The work of getting people to care is the work, and it is not something any of this makes easier.",
+    "related": [
+      {
+        "label": "Feelz Machine vs Spotify, with the figures",
+        "href": "/vs/spotify"
+      },
+      {
+        "label": "How to sell beats and get paid in rand",
+        "href": "/guides/sell-beats-south-africa"
+      },
+      {
+        "label": "Music for your business",
+        "href": "/retail"
+      }
+    ]
+  },
+  "music-distribution-south-africa-cost": {
+    "slug": "music-distribution-south-africa-cost",
+    "title": "What music distribution actually costs a South African artist",
+    "metaTitle": "What Music Distribution Costs in South Africa | Feelz Machine",
+    "metaDescription": "The real cost of getting your music onto streaming platforms from South Africa: the pricing models distributors use, what each takes, and what you keep.",
+    "intro": "Distributors do one job: they put your music on the streaming platforms. What they charge for it takes three different shapes, and the shape matters more than the sticker price, because they fail you in different ways.",
+    "sections": [
+      {
+        "heading": "The annual fee model",
+        "body": "You pay once a year and keep your royalties. Cheap in a good year and quietly dangerous in a bad one: stop paying and the releases come down, which means a catalogue you built over years rests on a renewal you have to keep affording. Worth it if you release often. Worth watching if you do not."
+      },
+      {
+        "heading": "The percentage model",
+        "body": "No upfront cost, and a cut of everything forever. It reads as the safe option because nothing leaves your pocket on day one. On a release that does nothing, it costs you nothing, which is most releases. On the one that works, it is the most expensive option you could have chosen, and you cannot change your mind retroactively."
+      },
+      {
+        "heading": "The per-release model",
+        "body": "Pay per single or album, keep everything after. Predictable, and it suits someone with a small number of releases they intend to keep up forever."
+      },
+      {
+        "heading": "What none of them cover",
+        "body": "Distribution gets your music onto a platform. It does not get anybody to listen to it, and it is not a sales channel: a distributor cannot sell your album to a fan, only make it streamable. That is why distribution and direct sales are not alternatives to each other. One is shelf space and the other is a till."
+      },
+      {
+        "heading": "The rand problem",
+        "body": "Most distributors price in dollars and pay out in dollars, so a South African artist pays a conversion going in and takes another coming out, on top of the fee itself. It is small on each transaction and it is not small over a year."
+      }
+    ],
+    "steps": [
+      "Work out how many releases a year you actually put out before choosing a model. Two a year and ten a year point at different answers.",
+      "Check what happens to your existing releases if you stop paying.",
+      "Keep a direct sales page alongside distribution, so the fans who want to buy can, rather than only stream.",
+      "Price in rand where you can, so you are not paying a spread twice."
+    ],
+    "honestNote": "You still need a distributor. Feelz Machine is not one and does not pretend to be: it will not put your music on Spotify or Apple Music. It is the place you sell to the people distribution brought you, which is a different job, and the two work better together than either does alone.",
+    "related": [
+      {
+        "label": "Feelz Machine vs Spotify",
+        "href": "/vs/spotify"
+      },
+      {
+        "label": "Feelz Machine vs Bandcamp",
+        "href": "/vs/bandcamp"
+      },
+      {
+        "label": "How to get paid for your music",
+        "href": "/guides/get-paid-for-music-south-africa"
+      }
+    ]
+  }
+}

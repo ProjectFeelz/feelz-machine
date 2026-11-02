@@ -7,6 +7,9 @@ const { createClient } = require('@supabase/supabase-js');
 // Shared with netlify/functions/seo-links.js so the sitemap and the on-page
 // links cannot disagree about which genre pages exist.
 const { genreSlug } = require('../lib/seoCatalogue');
+// The same JSON src/data/guides.js and seo-links.js read, so a guide cannot
+// be submitted under a slug the site does not serve.
+const guides = require('../../src/data/guides.json');
 
 const BASE_URL = 'https://www.feelzmachine.com';
 
@@ -124,6 +127,16 @@ async function buildSitemap() {
     { url: '/vs/soundcloud',   priority: '0.7', changefreq: 'monthly' },
     { url: '/vs/bandcamp',     priority: '0.7', changefreq: 'monthly' },
     { url: '/vs/apple-music',  priority: '0.7', changefreq: 'monthly' },
+    // The answer pages. These and the four /vs/ pages above are the only URLs
+    // on this site pointed at queries that already have search volume, which
+    // is why they carry a higher priority than an artist page.
+    { url: '/guides',          priority: '0.8', changefreq: 'monthly' },
+    // Derived from the JSON rather than listed, so adding a guide to
+    // src/data/guides.json puts it in the sitemap with no second edit and a
+    // guide can never be submitted under a slug the site does not serve.
+    ...Object.keys(guides).map(slug => ({
+      url: `/guides/${slug}`, priority: '0.7', changefreq: 'monthly',
+    })),
   ];
 
   // In parallel. These were five sequential awaits, which is five round trips

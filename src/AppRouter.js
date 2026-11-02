@@ -32,6 +32,11 @@ const BrowsePage = React.lazy(() => import('./pages/BrowsePage'));
 // netlify/lib/seoCatalogue.js for the whole diagnosis.
 const ArtistsIndexPage = React.lazy(() => import('./pages/ArtistsIndexPage'));
 const GenrePage = React.lazy(() => import('./pages/GenrePage'));
+// Answer pages. The comparison pages at /vs/* already earn their keep in
+// principle and had never been crawled; these are the same idea pointed at
+// the questions a South African artist actually searches for.
+const GuidesIndexPage = React.lazy(() => import('./pages/GuidesIndexPage'));
+const GuidePage = React.lazy(() => import('./pages/GuidePage'));
 const SplitsPage = React.lazy(() => import('./pages/SplitsPage'));
 const LoginPage = React.lazy(() => import('./pages/LoginPage'));
 const ResetPasswordPage = React.lazy(() => import('./pages/ResetPasswordPage'));
@@ -521,6 +526,8 @@ export default function AppRouter() {
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="/learn" element={<LearnPage />} />
                 <Route path="/vs/:platform" element={<ComparisonPage />} />
+                <Route path="/guides" element={<GuidesIndexPage />} />
+                <Route path="/guides/:slug" element={<GuidePage />} />
                 <Route path="/album/:id" element={<AlbumDetailPage />} />
                 {/* TrackDetailPage consolidated into TrackPage below */}
                 <Route path="/affiliates" element={<AffiliatePage />} />

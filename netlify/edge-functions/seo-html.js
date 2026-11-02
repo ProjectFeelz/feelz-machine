@@ -89,6 +89,21 @@ const ROUTE_PATTERNS = [
   // anywhere to flow.
   { re: /^\/newsletter\/([^/]+)\/?$/, type: 'newsletter', meta: false, links: true },
 
+  // ── The pages with search volume behind them ─────────────────────────────
+  //
+  // /vs/spotify is reported by Search Console as "URL is unknown to Google":
+  // in the sitemap, never crawled. All four comparison pages served the home
+  // page's title and description, because nothing here knew they existed.
+  //
+  // They are worth more than the artist pages and it is worth saying why.
+  // projectfeelz.com takes 8,600 clicks a fortnight from queries like "fresh
+  // air plugin": product names people already knew before searching. Nobody is
+  // searching for the artists here yet, so those pages are a long tail.
+  // "Bandcamp alternative" has volume today, and this site can answer it.
+  { re: /^\/vs\/([^/]+)\/?$/, type: 'comparison', meta: false, links: true },
+  { re: /^\/guides\/?$/, type: 'guides-index', meta: false, links: true },
+  { re: /^\/guides\/([^/]+)\/?$/, type: 'guide', meta: false, links: true },
+
   { re: /^\/$/, type: 'home', meta: false, links: true },
   { re: /^\/browse\/?$/, type: 'browse', meta: false, links: true },
   { re: /^\/artists\/?$/, type: 'artists', meta: false, links: true },
@@ -260,6 +275,21 @@ export default async (request, context) => {
       body += `<p style="font-size:.95rem;line-height:1.6;color:rgba(255,255,255,.55);margin:0 0 2rem">${esc(intro)}</p>`;
     }
 
+    // A guide's own words, before the links. Sent as `prose` rather than as
+    // sections of anchors, because a question page a crawler sees as a heading
+    // and nothing else is a page Google has no reason to rank for the
+    // question. This is the whole article, in the document, for a reader who
+    // never runs JavaScript.
+    if (linkData && Array.isArray(linkData.prose)) {
+      for (const part of linkData.prose) {
+        if (!part || !part.body) continue;
+        if (part.heading) {
+          body += `<h2 style="font-size:1.1rem;font-weight:600;color:#fff;margin:2rem 0 .5rem">${esc(part.heading)}</h2>`;
+        }
+        body += `<p style="font-size:.95rem;line-height:1.7;color:rgba(255,255,255,.6);margin:0 0 1rem">${esc(part.body)}</p>`;
+      }
+    }
+
     if (hasLinks) {
       for (const section of linkData.sections) {
         if (!section || !Array.isArray(section.links) || !section.links.length) continue;
@@ -321,5 +351,6 @@ export const config = {
     // seo-links finds no post with that slug, answers 404, and the page is
     // served exactly as it arrived.
     '/newsletter/*',
+    '/vs/*', '/guides', '/guides/*',
   ],
 };

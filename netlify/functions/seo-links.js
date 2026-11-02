@@ -41,6 +41,10 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const { BASE_URL, genreSlug, loadCatalogue } = require('../lib/seoCatalogue');
+const comparisons = require('../lib/comparisons');
+// The same JSON the React page reads, so there is exactly one copy of the
+// guide content. See the note at the top of src/data/guides.js.
+const guides = require('../../src/data/guides.json');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -70,6 +74,11 @@ const json = (statusCode, body) => ({
 // four hundred links on one page reads as a link farm, and the point is a page
 // a person could use. The catalogue is small enough that nothing is cut today.
 const SECTION_CAP = 60;
+
+const guideLinks = () => Object.values(guides).map(g => ({
+  href: `/guides/${g.slug}`,
+  label: g.title,
+}));
 
 const artistHref = a => `/artist/${a.slug}`;
 const trackHref  = t => `/track/${t.slug}`;
@@ -301,6 +310,101 @@ exports.handler = async (event) => {
             heading: 'More from the newsletter',
             links: others.map(p => ({ href: `/newsletter/${p.slug}`, label: p.title || p.slug })),
           }] : []),
+        ],
+      });
+    }
+
+    // ── The comparison pages ────────────────────────────────────────────────
+    //
+    // /vs/spotify, /vs/soundcloud, /vs/bandcamp, /vs/apple-music. Search
+    // Console reports /vs/spotify as "URL is unknown to Google": in the
+    // sitemap, never crawled, never indexed. All four served the home page's
+    // title and the home page's description, because og-meta has no type for
+    // them and seo-html had never been told they existed.
+    //
+    // These are the pages with volume behind them. projectfeelz.com takes
+    // 8,600 clicks a fortnight from queries that are product names people
+    // already knew. The equivalent here is not an artist nobody is searching
+    // for yet, it is "bandcamp alternative" and "how much does Spotify pay".
+    //
+    // The sourced facts on each page stay in src/data/platformComparisons.js
+    // and are rendered by React. What goes in the document is the title, the
+    // description and the hook, which is what decides whether the page is
+    // distinguishable from the home page at all, plus links onward.
+    if (type === 'comparison') {
+      const c = comparisons.COMPARISONS[slug];
+      if (!c) return json(404, { error: 'unknown_comparison' });
+
+      const others = comparisons.comparisonSlugs().filter(s => s !== slug);
+      return json(200, {
+        title: c.title,
+        description: c.description,
+        canonical: `${BASE_URL}/vs/${c.slug}`,
+        heading: `Feelz Machine vs ${c.name}`,
+        intro: c.hook,
+        sections: [
+          {
+            heading: 'Compare with other platforms',
+            links: others.map(s => ({
+              href: `/vs/${s}`,
+              label: `Feelz Machine vs ${comparisons.COMPARISONS[s].name}`,
+            })),
+          },
+          { heading: 'Guides', links: guideLinks() },
+          newestTracks,
+          { heading: 'Artists on Feelz Machine', links: [{ href: '/artists', label: 'All artists', sub: `${cat.artists.length} artists` }] },
+        ],
+      });
+    }
+
+    // ── The guides ──────────────────────────────────────────────────────────
+    //
+    // Same idea as the comparison pages, pointed at the questions a South
+    // African artist types into Google rather than at a platform name. The
+    // content is in src/data/guides.json, read by both the React page and this
+    // function so there is one copy of it.
+    //
+    // The whole guide goes into the document, not just its title: a question
+    // page that a crawler sees as a heading and nothing else is a page Google
+    // has no reason to rank for the question.
+    if (type === 'guide') {
+      const g = guides[slug];
+      if (!g) return json(404, { error: 'unknown_guide' });
+
+      return json(200, {
+        title: g.metaTitle,
+        description: g.metaDescription,
+        canonical: `${BASE_URL}/guides/${g.slug}`,
+        heading: g.title,
+        intro: g.intro,
+        // The prose is sent as sections of text rather than as links, and
+        // seo-html renders a section with a body and no links as a heading and
+        // a paragraph. That is what a reader of the HTML gets to read.
+        prose: (g.sections || []).map(s => ({ heading: s.heading, body: s.body })),
+        sections: [
+          { heading: 'Read next', links: (g.related || []).map(r => ({ href: r.href, label: r.label })) },
+          { heading: 'More guides', links: guideLinks().filter(l => l.href !== `/guides/${g.slug}`) },
+        ],
+      });
+    }
+
+    if (type === 'guides-index') {
+      return json(200, {
+        title: 'Guides for independent artists | Feelz Machine',
+        description: 'Straight answers on getting paid for music as an independent artist in South Africa: what distribution costs, how to sell direct, and what each route actually pays.',
+        canonical: `${BASE_URL}/guides`,
+        heading: 'Guides',
+        intro: 'Straight answers on getting paid for music as an independent artist in South Africa.',
+        sections: [
+          { heading: 'Guides', links: guideLinks() },
+          {
+            heading: 'How Feelz Machine compares',
+            links: comparisons.comparisonSlugs().map(s => ({
+              href: `/vs/${s}`,
+              label: `Feelz Machine vs ${comparisons.COMPARISONS[s].name}`,
+            })),
+          },
+          { heading: 'Artists on Feelz Machine', links: [{ href: '/artists', label: 'All artists', sub: `${cat.artists.length} artists` }] },
         ],
       });
     }
