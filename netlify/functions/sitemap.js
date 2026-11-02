@@ -131,6 +131,7 @@ async function buildSitemap() {
     // on this site pointed at queries that already have search volume, which
     // is why they carry a higher priority than an artist page.
     { url: '/guides',          priority: '0.8', changefreq: 'monthly' },
+    { url: '/faq',             priority: '0.8', changefreq: 'monthly' },
     // Derived from the JSON rather than listed, so adding a guide to
     // src/data/guides.json puts it in the sitemap with no second edit and a
     // guide can never be submitted under a slug the site does not serve.

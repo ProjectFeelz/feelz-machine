@@ -45,6 +45,7 @@ const comparisons = require('../lib/comparisons');
 // The same JSON the React page reads, so there is exactly one copy of the
 // guide content. See the note at the top of src/data/guides.js.
 const guides = require('../../src/data/guides.json');
+const faq = require('../../src/data/faq.json');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -75,10 +76,13 @@ const json = (statusCode, body) => ({
 // a person could use. The catalogue is small enough that nothing is cut today.
 const SECTION_CAP = 60;
 
-const guideLinks = () => Object.values(guides).map(g => ({
-  href: `/guides/${g.slug}`,
-  label: g.title,
-}));
+const guideLinks = () => [
+  ...Object.values(guides).map(g => ({
+    href: `/guides/${g.slug}`,
+    label: g.title,
+  })),
+  { href: '/faq', label: 'Questions about Feelz Machine, answered' },
+];
 
 const artistHref = a => `/artist/${a.slug}`;
 const trackHref  = t => `/track/${t.slug}`;
@@ -384,6 +388,49 @@ exports.handler = async (event) => {
         sections: [
           { heading: 'Read next', links: (g.related || []).map(r => ({ href: r.href, label: r.label })) },
           { heading: 'More guides', links: guideLinks().filter(l => l.href !== `/guides/${g.slug}`) },
+        ],
+      });
+    }
+
+    // ── The FAQ ─────────────────────────────────────────────────────────────
+    //
+    // Nobody opens an FAQ page on purpose, which is not what it is for. People
+    // type questions into Google in the words they would say them: "does feelz
+    // machine take a cut", "do I still need a distributor". A page carrying
+    // those exact questions as headings with a direct answer under each matches
+    // that query shape better than anything else on this site.
+    //
+    // It only works because this function puts the questions AND the answers in
+    // the document. An FAQ that a crawler sees as a heading and nothing else
+    // answers no question at all.
+    //
+    // Sent as prose rather than links, so seo-html renders each question as an
+    // h2 with its answer beneath it.
+    if (type === 'faq') {
+      const prose = [];
+      (faq.groups || []).forEach(group => {
+        (group.questions || []).forEach(item => {
+          prose.push({ heading: item.q, body: item.a });
+        });
+      });
+
+      return json(200, {
+        title: 'Questions about Feelz Machine, answered | Feelz Machine',
+        description: 'Straight answers about selling music on Feelz Machine: what it costs, how artists get paid in rand, whether you still need a distributor, and how the background music licensing works.',
+        canonical: `${BASE_URL}/faq`,
+        heading: 'Questions, answered',
+        intro: 'What it costs, how artists get paid, and what this is not.',
+        prose,
+        sections: [
+          { heading: 'Guides', links: guideLinks() },
+          {
+            heading: 'How Feelz Machine compares',
+            links: comparisons.comparisonSlugs().map(sl => ({
+              href: `/vs/${sl}`,
+              label: `Feelz Machine vs ${comparisons.COMPARISONS[sl].name}`,
+            })),
+          },
+          { heading: 'Artists on Feelz Machine', links: [{ href: '/artists', label: 'All artists', sub: `${cat.artists.length} artists` }] },
         ],
       });
     }

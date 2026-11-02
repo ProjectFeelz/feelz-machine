@@ -1,0 +1,122 @@
+{
+  "groups": [
+    {
+      "heading": "Getting paid",
+      "questions": [
+        {
+          "q": "Does Feelz Machine take a cut of my sales?",
+          "a": "No. Feelz Machine takes no commission on a sale. When somebody buys your music the money goes to you, less only the card or PayPal processing fee charged by the payment provider on the way through. On a rand sale the buyer covers that fee, so the price you set is the amount you are owed."
+        },
+        {
+          "q": "How do I get paid in rand instead of dollars?",
+          "a": "South African buyers pay by card in rand through Paystack, and your share settles into your own South African bank account rather than into a platform balance you have to withdraw from. Add your bank details on your profile before your first sale so nothing sits waiting."
+        },
+        {
+          "q": "Do I need a PayPal account to sell music?",
+          "a": "Not for rand sales, which go by card through Paystack to a local bank account. You do need a PayPal email to receive payouts from buyers outside South Africa and to receive competition prize money, because those are paid in dollars."
+        },
+        {
+          "q": "When do I get paid after someone buys my music?",
+          "a": "A direct sale reaches you as the purchase completes rather than on a monthly statement. There is no payout threshold to clear and no minimum balance to reach first."
+        },
+        {
+          "q": "How much does a download pay compared to a stream?",
+          "a": "Not comparable. One album sale at R60 is worth roughly what fifteen thousand streams pay at typical per-stream rates. Streaming is where people listen; selling is where the money is."
+        },
+        {
+          "q": "Is there a fee to upload music?",
+          "a": "No. Uploading and publishing are free, and the free tier can sell music. Paid tiers add features rather than unlocking the ability to earn."
+        }
+      ]
+    },
+    {
+      "heading": "How it compares",
+      "questions": [
+        {
+          "q": "Is Feelz Machine a replacement for Spotify?",
+          "a": "No, and it is not trying to be. Spotify has a far larger audience than any independent platform and you should keep releasing there. Feelz Machine is where you sell to the people who already found you, which is a different job. Spotify's own 2025 reporting puts the 100,000th highest-earning artist on the entire platform at $7,300 for the full year, which is the case for not treating it as the only place that matters."
+        },
+        {
+          "q": "Do I still need a distributor?",
+          "a": "Yes. Feelz Machine is not a distributor and will not put your music on Spotify or Apple Music. A distributor gets you shelf space on the streaming platforms. Feelz Machine is the till. They work better together than either does alone."
+        },
+        {
+          "q": "How is this different from Bandcamp?",
+          "a": "Bandcamp artists keep roughly 82% of a typical sale. Feelz Machine takes no platform cut at all, so the only deduction is the payment processor's fee. Feelz Machine also pays South African artists in rand to a local bank account, and adds background music licensing to shops, which Bandcamp does not do."
+        },
+        {
+          "q": "Can I use Feelz Machine and other platforms at the same time?",
+          "a": "Yes. Nothing here is exclusive and nothing asks you to take your music down from anywhere else."
+        }
+      ]
+    },
+    {
+      "heading": "Selling beats",
+      "questions": [
+        {
+          "q": "Can I sell beats on Feelz Machine?",
+          "a": "Yes. Beats live at their own pages with BPM and key, which is what producers filter by, and you can sell both leases and exclusives. Fill the BPM and key in when you upload: a beat without them is far harder for a buyer to find."
+        },
+        {
+          "q": "What is the difference between a lease and an exclusive?",
+          "a": "A lease is permission to use the beat under conditions you set, sold to as many buyers as you like. An exclusive is the beat itself, sold once, usually with stems. Say clearly which one a buyer is getting, because the most common way a beat sale goes wrong is a buyer who thought they bought one and got the other."
+        },
+        {
+          "q": "What should I charge for a beat in South Africa?",
+          "a": "Look at what beats in your genre go for locally rather than at American prices, because that is what your buyer is comparing you to. Then set a price you would be happy to receive forty times, since volume at a fair price beats one exclusive you spend six months chasing."
+        }
+      ]
+    },
+    {
+      "heading": "Getting heard",
+      "questions": [
+        {
+          "q": "How do people find my music on Feelz Machine?",
+          "a": "Through the genre pages, the artist directory, the feed, the Browse page, and anywhere you share your own link. Your profile also appears in a rotating row on Plugin Gallery, which has over 58,000 producers on it. The order in that row is reshuffled on every page load, so no artist holds a permanent place in it."
+        },
+        {
+          "q": "Why is my profile not showing up anywhere?",
+          "a": "The artist directory and the genre pages only include artists with published music. A profile with everything still in drafts will not appear in either, and will not be submitted to search engines, because a page with nothing on it is not worth sending anybody to."
+        },
+        {
+          "q": "Does my artwork matter?",
+          "a": "More than almost anything else you control. In a row of cards the image is the entire decision, made in about half a second, and a blank square beside seven covers is a card nobody clicks."
+        }
+      ]
+    },
+    {
+      "heading": "Feelz Retail",
+      "questions": [
+        {
+          "q": "What is Feelz Retail?",
+          "a": "Background music licensing for businesses. Shops, cafes and bars legally need licensed music and pay monthly for it, and almost none of that money reaches independent artists. Feelz Retail splits that subscription income among the artists whose tracks actually played."
+        },
+        {
+          "q": "How is the Feelz Retail money divided?",
+          "a": "By qualifying plays. A play counts once thirty seconds of actual playback has happened, measured from the player's real position rather than a timer, so a track that was skipped does not earn the same as one that played out in a shop. The pool is then divided between the artists whose tracks qualified."
+        },
+        {
+          "q": "Does it cost me anything to be in Feelz Retail?",
+          "a": "No. Artists are not charged to have their music licensed to venues. The venue pays the monthly subscription."
+        }
+      ]
+    },
+    {
+      "heading": "For listeners",
+      "questions": [
+        {
+          "q": "Is Feelz Machine free to use?",
+          "a": "Yes. Listening is free, and free downloads are capped at three a month. Anything you pay for is never capped."
+        },
+        {
+          "q": "Where does my money go when I buy a track?",
+          "a": "To the artist. Feelz Machine takes no cut of a sale, now or later. What you pay reaches them less only the payment processor's fee."
+        },
+        {
+          "q": "Can I pay in rand?",
+          "a": "Yes, by card through Paystack. You do not need a PayPal account to buy music in rand."
+        }
+      ]
+    }
+  ]
+}

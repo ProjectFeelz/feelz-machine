@@ -103,6 +103,7 @@ const ROUTE_PATTERNS = [
   { re: /^\/vs\/([^/]+)\/?$/, type: 'comparison', meta: false, links: true },
   { re: /^\/guides\/?$/, type: 'guides-index', meta: false, links: true },
   { re: /^\/guides\/([^/]+)\/?$/, type: 'guide', meta: false, links: true },
+  { re: /^\/faq\/?$/, type: 'faq', meta: false, links: true },
 
   { re: /^\/$/, type: 'home', meta: false, links: true },
   { re: /^\/browse\/?$/, type: 'browse', meta: false, links: true },
@@ -351,6 +352,6 @@ export const config = {
     // seo-links finds no post with that slug, answers 404, and the page is
     // served exactly as it arrived.
     '/newsletter/*',
-    '/vs/*', '/guides', '/guides/*',
+    '/vs/*', '/guides', '/guides/*', '/faq',
   ],
 };
