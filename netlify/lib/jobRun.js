@@ -159,21 +159,82 @@ function withRunRecord(job, fn) {
  * Like everything else here it never throws on its own account: a job must not
  * fail because the record of it failed.
  */
+// ── Finding the count, and why an exact list of names did not work ──────────
+//
+// This was a fixed list of twelve key names. Measured against what the thirteen
+// wrapped jobs actually return, it found the count in four of them.
+//
+// The one that mattered: engagement-drip-cron returns
+// { success: true, totalSent, segments, runAt }. `totalSent` is not `sent`, so
+// every run recorded items 0. The drip was working the whole time. On 2
+// November it fired at 08:00:57 and nine engagement notifications landed at
+// 08:01:25, and the run record said it had done nothing. check-job-health read
+// that nothing, called the job silent, and emailed about it. Five of those
+// emails went out about a job that was doing its work correctly.
+//
+// So the match is on the SHAPE of a key name rather than a list of exact ones.
+// `totalSent`, `total_active_users`, `trackCount`, `emails_sent` and `artists`
+// are all obviously counts to a reader, and a list of literal names will never
+// keep up with the next one somebody writes.
+//
+// Two rules that the old version got wrong as well:
+//
+//   Booleans are not counts. `skipped` was on the old list and
+//   monthly-wrapped returns { skipped: true, reason }, so Number(true) gave a
+//   tidy items 1 for a run that deliberately did nothing. A boolean now counts
+//   as no count at all.
+//
+//   `skipped` is not a count of work either way, so it is gone from the words
+//   below. A job that skipped did nothing, and 0 is the honest number.
 const COUNT_KEYS = [
   'items', 'count', 'sent', 'processed', 'deleted', 'created', 'updated',
-  'notified', 'released', 'scored', 'skipped', 'total',
+  'notified', 'released', 'scored', 'total',
 ];
+
+// Whole words a count-ish key ends with, tested after stripping anything that
+// is not a letter and lowercasing: totalSent and total_sent both become
+// "totalsent", which ends with "sent".
+const COUNT_WORDS = [
+  'items', 'count', 'total', 'sent', 'processed', 'deleted', 'created',
+  'updated', 'notified', 'released', 'scored', 'rows', 'emails', 'messages',
+  'eligible', 'artists', 'posts', 'entries', 'venues', 'tracks',
+];
+
+function countish(key) {
+  const k = String(key).replace(/[^A-Za-z]/g, '').toLowerCase();
+  return COUNT_WORDS.some(w => k === w || k.endsWith(w));
+}
+
+// A number, or the length of an array. Explicitly NOT a boolean: `true` is not
+// one of anything.
+function numberFrom(v) {
+  if (Array.isArray(v)) return v.length;
+  if (typeof v === 'boolean') return null;
+  if (v === null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
 
 function countFrom(result) {
   try {
     if (!result || typeof result.body !== 'string') return 0;
     const parsed = JSON.parse(result.body);
     if (!parsed || typeof parsed !== 'object') return 0;
+
+    // The exact names first, in order, so a body carrying several of them
+    // reports the same figure it always did.
     for (const k of COUNT_KEYS) {
-      const v = parsed[k];
-      if (Number.isFinite(Number(v))) return Math.trunc(Number(v));
-      if (Array.isArray(v)) return v.length;
+      const n = numberFrom(parsed[k]);
+      if (n !== null) return n;
     }
+
+    // Then anything that reads like a count, in the order the body lists it.
+    for (const k of Object.keys(parsed)) {
+      if (!countish(k)) continue;
+      const n = numberFrom(parsed[k]);
+      if (n !== null) return n;
+    }
+
     return 0;
   } catch {
     // A body that is not JSON is perfectly normal. It means no count, not a

@@ -118,12 +118,37 @@ exports.handler = async (event) => {
       if (existing) return { statusCode: 200, body: JSON.stringify({ already: true }) };
     }
 
-    // Credits based on conversion type
-    const creditsEarned = affiliate.role === 'listener'
-      ? conversionType === 'listener_subscription' ? 200
-      : conversionType === 'artist_subscription'   ? 100
-      : conversionType === 'tip'                   ? 25
-      : 50  // default: signup
+    // ── Credits, for every role and not only listeners ──────────────────────
+    //
+    // This read `affiliate.role === 'listener' ? (amounts) : 0`, so an
+    // affiliate who was not a listener earned nothing, ever. Measured on the
+    // live table before this change:
+    //
+    //   artist      5 affiliates   1081 clicks   33 signups   0 credits
+    //   beatmaker   1 affiliate       1 click     1 signup    0 credits
+    //   listener    1 affiliate       0 clicks    0 signups   0 credits
+    //
+    // 34 referred signups between May and September earned nothing at all,
+    // because the only role the formula paid is the one role that has never
+    // referred anybody. The rewards in src/pages/AffiliatePage.js cost 300 to
+    // 1000 credits, so the entire reward shelf has been unreachable since it
+    // was built, and nothing on the page would have shown that.
+    //
+    // Credits are not money and do not become money. Cash commission is a
+    // separate path: it is paid on a SALE, through commission_zar and the
+    // payout flow. A signup is not a sale and carries no commission, so paying
+    // an artist credits for one double-pays nothing. It pays for outreach that
+    // was already being done for free.
+    //
+    // effectiveType, not conversionType: the latter is undefined on the
+    // account-creation call, which is exactly the signup case, and reading it
+    // here would have put the default branch at the mercy of a field the
+    // caller does not send.
+    const creditsEarned =
+        effectiveType === 'listener_subscription' ? 200
+      : effectiveType === 'artist_subscription'   ? 100
+      : effectiveType === 'tip'                   ? 25
+      : effectiveType === 'signup'                ? 50
       : 0;
     const newBalance = (affiliate.credits_balance || 0) + creditsEarned;
 
