@@ -211,6 +211,7 @@ exports.handler = async (event) => {
         { data: behaviorData },
         { data: downloadData },
         { data: feedbackData },
+        { data: ownArtistData },
       ] = await Promise.all([
         // All-time streams (for genre taste)
         supabase.from('streams').select('user_id, track_id, tracks(genre, mood, bpm, duration, artist_id, is_beat)')
@@ -237,6 +238,18 @@ exports.handler = async (event) => {
         supabase.from('downloads').select('user_id, track_id').in('user_id', userIds),
         // Explicit feedback
         supabase.from('listener_feedback').select('user_id, track_id, artist_id, signal').in('user_id', userIds),
+        // THEIR OWN ARTIST PROFILES.
+        //
+        // A listener who is also an artist was being recommended their own
+        // catalogue, and scoring well on it: three Steve C-SA tracks at 146
+        // to 151 sat among the highest in the owner's own feed. Of course
+        // they did. The engine matches on genre, mood and bpm, and nobody
+        // matches your taste like you do.
+        //
+        // It is a bad recommendation all the same. This feed is for finding
+        // music you have not heard, and an artist knows where their own
+        // catalogue lives. It also costs them a discovery slot each time.
+        supabase.from('artists').select('id, user_id').in('user_id', userIds),
       ]);
 
       // Playlist adds. A listener putting a track into their own playlist
@@ -275,6 +288,13 @@ exports.handler = async (event) => {
         const artistId = artistByTrack[pt.track_id];
         if (artistId) (playlistArtistsByUser[uid] = playlistArtistsByUser[uid] || new Set()).add(artistId);
       });
+      // user_id -> Set of artist ids they own. Most listeners have none.
+      const ownArtistsByUser = {};
+      (ownArtistData || []).forEach(a => {
+        if (!a.user_id) return;
+        (ownArtistsByUser[a.user_id] = ownArtistsByUser[a.user_id] || new Set()).add(a.id);
+      });
+
       const feedbackByUser = {};
       (feedbackData || []).forEach(f => {
         if (!feedbackByUser[f.user_id]) feedbackByUser[f.user_id] = { notInterested: new Set(), deepListen: new Set(), skipped: new Set(), hiddenArtists: new Set() };
@@ -302,6 +322,7 @@ exports.handler = async (event) => {
         downloaded.forEach(tid => { const a = artistByTrack[tid]; if (a) downloadedArtists.add(a); });
         const isColdstart  = streams.length === 0;
         const feedback     = feedbackByUser[user_id] || { notInterested: new Set(), deepListen: new Set(), skipped: new Set(), hiddenArtists: new Set() };
+        const ownArtists   = ownArtistsByUser[user_id] || new Set();
 
         // Build taste profile from stream history
         const genreCounts   = {};
@@ -352,6 +373,9 @@ exports.handler = async (event) => {
           if (playlisted.has(track.id)) return null;
           if (feedback.notInterested.has(track.id)) return null;
           if (feedback.hiddenArtists.has(track.artist_id)) return null;
+          // Their own music. Not a recommendation, and it takes a slot that
+          // could have introduced them to somebody else.
+          if (ownArtists.size > 0 && ownArtists.has(track.artist_id)) return null;
 
           let score  = 0;
           let reason = 'recommended';
