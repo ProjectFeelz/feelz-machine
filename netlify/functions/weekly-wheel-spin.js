@@ -196,7 +196,22 @@ const handler = async () => {
     if (userIds.length > 0) {
       for (let i = 0; i < userIds.length; i += 100) {
         const batch = userIds.slice(i, i + 100);
-        await supabase.from('notifications').insert(
+        // WAS .catch(() => {}) ON THE QUERY BUILDER, WHICH IS WHY THIS JOB
+        // HAS NEVER ONCE SUCCEEDED.
+        //
+        // supabase-js v2 returns a PostgrestBuilder, which is thenable but is
+        // not a Promise: it implements .then() and has no .catch(). Calling
+        // .catch() on it throws TypeError synchronously, so the function 500'd
+        // every week with "supabase.from(...).insert(...).catch is not a
+        // function" and job_runs recorded a failure every time.
+        //
+        // The competition row is created further up, so the challenge existed
+        // and nobody was told about it: the notification insert threw before
+        // writing, and the push below never ran either.
+        //
+        // Reading the error rather than swallowing it, because a notification
+        // batch that fails silently is the same bug one layer down.
+        const { error: notifyErr } = await supabase.from('notifications').insert(
           batch.map(uid => ({
             user_id: uid,
             type: 'wheel_challenge',
@@ -204,7 +219,11 @@ const handler = async () => {
             message: `This week: "${prompt}" — Enter your track and win 3 months Pro!`,
             metadata: { competition_id: competition.id, prompt, mode },
           }))
-        ).catch(() => {});
+        );
+        if (notifyErr) {
+          console.error('[weekly-wheel-spin] notification batch failed:',
+            notifyErr.code, notifyErr.message, notifyErr.hint || '');
+        }
       }
 
       await fetch(`${process.env.URL}/.netlify/functions/send-push`, {

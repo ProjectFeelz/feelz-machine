@@ -175,7 +175,7 @@ function pwywMinimum(form) {
 }
 
 const BLANK_TRACK = {
-  title: '', genre: '', mood: '', lyrics: '',
+  title: '', genre: '', genre_secondary: '', mood: '', lyrics: '',
   is_explicit: false, is_downloadable: true, is_published: true,
   is_premium: false, download_price: '0', featured: false,
   // PAY WHAT YOU WANT IS ON BY DEFAULT, and the minimum carries the price.
@@ -210,7 +210,7 @@ const BLANK_TRACK = {
   // What the flag buys is the one thing that matters: episodes stay out of the
   // places where music is DISCOVERED. See the comment on the toggle below for
   // where that line is drawn and why it is drawn there rather than everywhere.
-  is_podcast: false, episode_number: '',
+  is_podcast: false, episode_number: '', isrc: '',
 };
 
 const BLANK_RELEASE = {
@@ -276,6 +276,26 @@ function ConversionBanner({ progress }) {
       </div>
     </div>
   );
+}
+
+/**
+ * Canonical form of an ISRC, or null.
+ *
+ * An ISRC identifies one recording. The artist owns theirs and gets it from
+ * their national agency; the platform stores what they give it and never
+ * invents one, because a made-up code collides with somebody else's real
+ * recording and corrupts their royalty reporting.
+ *
+ * People type it both ways, ZA-A2B-25-00001 and ZAA2B2500001, and those are
+ * the same code. Stripping the separators and upper-casing means the database
+ * holds one value for one recording. Anything that is not the right shape is
+ * returned as-is so the database constraint refuses it and the artist sees an
+ * error, rather than being silently mangled into something valid-looking.
+ */
+function normaliseIsrc(value) {
+  const raw = String(value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  if (!raw) return null;
+  return raw;
 }
 
 function FieldLabel({ children }) {
@@ -832,6 +852,11 @@ function AddTrackToAlbum({
   album,
   existingTrackCount,
   artist,
+  // Needed for tracks.created_by. The album path is a separate component
+  // from the single-track upload and does not call useAuth itself, so
+  // without this prop every album track would record a null uploader while
+  // single uploads recorded a real one.
+  user,
   isPremium,
   canAddDownloadSale,
   downloadSalesRemaining,
@@ -906,6 +931,18 @@ function AddTrackToAlbum({
         title:             trackForm.title.trim(),
         slug:              slugify(trackForm.title),
         genre:             trackForm.genre,
+        // The blend. R&B with Afrobeats under it is two genres and picking
+        // one of them loses half the answer, which costs the artist twice:
+        // once in browse, where they appear under a label that is only
+        // partly true, and once in the recommender, which matches on genre
+        // and so only ever introduces them to half their audience.
+        //
+        // Null rather than '' when unset, and never the same as the primary:
+        // a track tagged Afrobeats/Afrobeats would count double on a genre
+        // match and quietly outrank honestly tagged tracks.
+        genre_secondary:   (trackForm.genre_secondary && trackForm.genre_secondary !== trackForm.genre)
+                             ? trackForm.genre_secondary
+                             : null,
         mood:              trackForm.mood,
         lyrics:            trackForm.lyrics || null,
         lyrics_theme:      trackForm.lyrics_theme || null,
@@ -931,6 +968,15 @@ function AddTrackToAlbum({
         ai_content:        trackForm.ai_content || 'human',
         is_beat:           trackForm.is_beat || false,
         is_podcast:        trackForm.is_podcast || false,
+        // Who uploaded it. tracks recorded created_at and nothing about who,
+        // so working out who published a given track meant looking at who
+        // owns the artist and guessing from the timestamps.
+        created_by:        user?.id || null,
+        // Supplied by the artist, never generated here: an invented ISRC
+        // collides with somebody else's real recording. Stored canonically,
+        // upper case with the dashes stripped, so ZA-A2B-25-00001 and
+        // ZAA2B2500001 are one value. Empty stays null rather than ''.
+        isrc:              normaliseIsrc(trackForm.isrc),
         // Null, not 0, when it is not an episode or the field was left blank.
         // An episode with no number still publishes; it just sorts by date
         // with the rest of the unnumbered ones.
@@ -1023,6 +1069,19 @@ function AddTrackToAlbum({
             <option value="">Select genre…</option>
             {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
           </FSelect>
+        </div>
+        <div>
+          <FieldLabel>Second genre (optional)</FieldLabel>
+          <FSelect value={trackForm.genre_secondary}
+            onChange={(e) => setTrackForm({ ...trackForm, genre_secondary: e.target.value })}>
+            <option value="">None</option>
+            {GENRES.filter(g => g !== trackForm.genre)
+                   .map(g => <option key={g} value={g}>{g}</option>)}
+          </FSelect>
+          <p className="text-[11px] text-white/35 mt-1.5 leading-relaxed">
+            For a blend. R&amp;B built on Afrobeats drums is both, and tagging
+            only one means half the people who would like it never see it.
+          </p>
         </div>
         <div>
           <FieldLabel>Mood</FieldLabel>
@@ -1118,6 +1177,34 @@ function AddTrackToAlbum({
           onChange={(val) => setTrackForm({ ...trackForm, youtube_url: val })}
         />
       </TierGate>
+
+      {/* ISRC. Optional, and it has to stay optional: plenty of independent
+          artists do not have one, and refusing their upload over it would be
+          absurd. For the ones who do, it is how a play on here is matched to
+          the right recording when royalties are reported elsewhere, and how
+          the same song is recognised across services.
+
+          Deliberately not generated for anybody who leaves it blank. An
+          invented code is somebody else's real recording, and the damage
+          lands on them rather than on us. */}
+      <div>
+        <FieldLabel>ISRC (optional)</FieldLabel>
+        <input
+          type="text"
+          value={trackForm.isrc}
+          onChange={(e) => setTrackForm({ ...trackForm, isrc: e.target.value })}
+          placeholder="ZA-A2B-25-00001"
+          maxLength={20}
+          spellCheck={false}
+          autoCapitalize="characters"
+          className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/10 rounded-xl text-sm text-white placeholder-white/25 focus:outline-none focus:border-purple-400/40 font-mono tracking-wide"
+        />
+        <p className="text-[11px] text-white/35 mt-1.5 leading-relaxed">
+          The code for this specific recording, from your distributor or your
+          national ISRC agency. Dashes optional. Leave it blank if you do not
+          have one.
+        </p>
+      </div>
 
       <div>
         <FieldLabel>AI Content Disclosure <span className="text-red-400">*</span></FieldLabel>
@@ -1627,6 +1714,18 @@ export default function TrackUploadPanel() {
         title:             trackForm.title.trim(),
         slug:              slugify(trackForm.title),
         genre:             trackForm.genre,
+        // The blend. R&B with Afrobeats under it is two genres and picking
+        // one of them loses half the answer, which costs the artist twice:
+        // once in browse, where they appear under a label that is only
+        // partly true, and once in the recommender, which matches on genre
+        // and so only ever introduces them to half their audience.
+        //
+        // Null rather than '' when unset, and never the same as the primary:
+        // a track tagged Afrobeats/Afrobeats would count double on a genre
+        // match and quietly outrank honestly tagged tracks.
+        genre_secondary:   (trackForm.genre_secondary && trackForm.genre_secondary !== trackForm.genre)
+                             ? trackForm.genre_secondary
+                             : null,
         mood:              trackForm.mood,
         lyrics:            trackForm.lyrics || null,
         lyrics_theme:      trackForm.lyrics_theme || null,
@@ -1654,6 +1753,15 @@ export default function TrackUploadPanel() {
         ai_content:        trackForm.ai_content || 'human',
         is_beat:           trackForm.is_beat || false,
         is_podcast:        trackForm.is_podcast || false,
+        // Who uploaded it. tracks recorded created_at and nothing about who,
+        // so working out who published a given track meant looking at who
+        // owns the artist and guessing from the timestamps.
+        created_by:        user?.id || null,
+        // Supplied by the artist, never generated here: an invented ISRC
+        // collides with somebody else's real recording. Stored canonically,
+        // upper case with the dashes stripped, so ZA-A2B-25-00001 and
+        // ZAA2B2500001 are one value. Empty stays null rather than ''.
+        isrc:              normaliseIsrc(trackForm.isrc),
         // Null, not 0, when it is not an episode or the field was left blank.
         // An episode with no number still publishes; it just sorts by date
         // with the rest of the unnumbered ones.
@@ -2979,6 +3087,7 @@ export default function TrackUploadPanel() {
                               album={album}
                               existingTrackCount={albumTracks.length}
                               artist={artist}
+                              user={user}
                               isPremium={isPremium}
                               canAddDownloadSale={canAddDownloadSale}
                               downloadSalesRemaining={downloadSalesRemaining}

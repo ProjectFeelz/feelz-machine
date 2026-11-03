@@ -50,7 +50,28 @@ async function getPayPalAccessToken() {
     body: 'grant_type=client_credentials',
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error_description || 'Failed to get PayPal token');
+  if (!res.ok) {
+    // SAY WHICH CREDENTIALS, AGAINST WHICH ENDPOINT.
+    //
+    // This used to throw PayPal's own text and nothing else, so every run
+    // since September recorded the single line "Authorization error
+    // occurred." That is PayPal's phrase for "these client credentials are
+    // not valid here", and on its own it does not say whether the id is
+    // missing, the secret is wrong, or live credentials are being presented
+    // to sandbox. Those have different fixes and the log could not tell them
+    // apart.
+    //
+    // No secret is logged. Only whether each variable is present, and the
+    // host being called.
+    const which = [
+      process.env.PAYPAL_CLIENT_ID ? 'client_id set' : 'CLIENT_ID MISSING',
+      process.env.PAYPAL_CLIENT_SECRET ? 'secret set' : 'CLIENT_SECRET MISSING',
+      `endpoint ${PAYPAL_BASE}`,
+    ].join(', ');
+    throw new Error(
+      `${data.error_description || data.error || 'Failed to get PayPal token'} (${which})`
+    );
+  }
   return data.access_token;
 }
 
