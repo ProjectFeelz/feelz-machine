@@ -53,13 +53,16 @@ async function getPayPalAccessToken() {
   if (!res.ok) {
     // SAY WHICH CREDENTIALS, AGAINST WHICH ENDPOINT.
     //
-    // This used to throw PayPal's own text and nothing else, so every run
-    // since September recorded the single line "Authorization error
-    // occurred." That is PayPal's phrase for "these client credentials are
-    // not valid here", and on its own it does not say whether the id is
-    // missing, the secret is wrong, or live credentials are being presented
-    // to sandbox. Those have different fixes and the log could not tell them
-    // apart.
+    // This used to throw PayPal's own text and nothing else, so every failed
+    // run recorded the single line "Authorization error occurred." I first
+    // read that as a credential problem; it is more likely the payouts call
+    // below, whose refusal carries exactly that message when an app is not
+    // permitted to send payouts. Either way the log could not tell the two
+    // apart, which is the thing being fixed — not the guess about which it is.
+    //
+    // If it IS this call, the message still does not say whether the id is
+    // missing, the secret is wrong, or live credentials are being presented to
+    // sandbox. Those have different fixes, so each is named.
     //
     // No secret is logged. Only whether each variable is present, and the
     // host being called.
@@ -69,7 +72,7 @@ async function getPayPalAccessToken() {
       `endpoint ${PAYPAL_BASE}`,
     ].join(', ');
     throw new Error(
-      `${data.error_description || data.error || 'Failed to get PayPal token'} (${which})`
+      `token call refused — ${data.error_description || data.error || 'Failed to get PayPal token'} (${which})`
     );
   }
   return data.access_token;
@@ -92,7 +95,30 @@ async function sendPayPalPayout(accessToken, items, batchId) {
     }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message || 'PayPal payout failed');
+  if (!res.ok) {
+    // SAY WHICH OF THE TWO CALLS FAILED, AND WHAT PAYPAL CALLED IT.
+    //
+    // This threw a bare string and so did getPayPalAccessToken, so every
+    // failed run recorded the same five words with no way to tell which HTTP
+    // call produced them. The two have different fixes:
+    //
+    //   token call refused    the client id or secret is wrong, or live
+    //                         credentials are being sent to sandbox
+    //   payout call refused   the credentials are fine and the app is not
+    //                         permitted to send payouts
+    //
+    // PayPal's `name` is the field that separates them — AUTHORIZATION_ERROR
+    // for a permission refusal, INVALID_REQUEST for a malformed batch — and
+    // it was being discarded. So was its information_link, which points at
+    // the page explaining that exact refusal.
+    const name = data.name ? `${data.name}: ` : '';
+    const link = (data.links || []).find(l => l.rel === 'information_link')?.href;
+    throw new Error(
+      `payout call refused — ${name}${data.message || 'PayPal payout failed'} ` +
+      `(HTTP ${res.status}, ${items.length} item(s), batch ${batchId}` +
+      `${link ? `, ${link}` : ''})`
+    );
+  }
   return data;
 }
 

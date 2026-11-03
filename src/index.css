@@ -72,7 +72,29 @@ html {
      not solved with a transform or will-change: the note further up this file
      records that doing so broke position: fixed for every descendant, which
      is every modal, FAB and overlay in the app. */
+  /* BOTH, AND THE ORDER IS THE POINT.
+
+     overflow-x: clip reached Safari in version 16. On iOS 15 and earlier the
+     declaration is not understood, so it is thrown away, and #root was left
+     with NO horizontal containment at all. body has overflow-x: hidden, but
+     as the note above says iOS does not honour that on body, so on an older
+     iPhone there was nothing holding the page still. That is why the bottom
+     nav stopped moving after the last fix and the page itself did not: the
+     nav fix did not depend on this property and this one did.
+
+     @supports asks the browser rather than guessing at versions. Anything
+     with clip uses clip and keeps sticky working. Anything without falls back
+     to hidden, which does contain the page, at the cost of sticky
+     descendants inside #root on those older devices. A header that stops
+     sticking on iOS 15 is a much smaller problem than a page that slides
+     sideways on every device that cannot read the first line. */
   overflow-x: clip;
+}
+
+@supports not (overflow-x: clip) {
+  #root {
+    overflow-x: hidden;
+  }
 }
 
 /* ── Global surface & card system ───────────────────────────────────────────

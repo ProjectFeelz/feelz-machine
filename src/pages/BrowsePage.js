@@ -1063,7 +1063,11 @@ export default function BrowsePage() {
                   icon={Sparkles}
                   title={recommendedSource === 'personal' ? 'Recommended For You' : 'Popular In Your Genres'}
                 />
-                <div className="flex space-x-3 overflow-x-auto scrollbar-hide -mx-6 px-6">
+                {/* md:mx-0 md:px-0 to match, which the Stories rail above
+                    got and this one did not. The parent is "px-6 md:px-0", so
+                    above md it has no padding for -mx-6 to spend and this row
+                    ends up 48px wider than the page. */}
+                <div className="flex space-x-3 overflow-x-auto scrollbar-hide -mx-6 px-6 md:mx-0 md:px-0">
                   {recommended.map(track => (
                     <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group"
                       onClick={() => handlePlayTrack(track, recommended)}>

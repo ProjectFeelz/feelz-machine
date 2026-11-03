@@ -213,6 +213,27 @@ const BLANK_TRACK = {
   is_podcast: false, episode_number: '', isrc: '',
 };
 
+/**
+ * The account whose uploads are podcast episodes by default.
+ *
+ * The Feelz Machine artist publishes the show, and the person who uploads it
+ * is doing that and nothing else. The toggle below defaults to off for every
+ * artist, which is right for a music platform and wrong for this one account:
+ * two episodes went up unflagged because a switch that defaults to off, on a
+ * form used once a week, is a switch that gets missed. They then entered the
+ * music feed for every listener, because both the recommender and the For You
+ * filter read that flag and it said these were songs.
+ *
+ * The database refuses a non-podcast track on this artist now, so nothing can
+ * go wrong silently any more. This is the half that stops anyone meeting that
+ * refusal in the first place: the toggle is already on when the form opens,
+ * and it can still be turned off if the account ever posts something that
+ * genuinely is music.
+ *
+ * Matched on slug rather than id so it reads as what it is.
+ */
+const PODCAST_ACCOUNT_SLUG = 'feelz-machine';
+
 const BLANK_RELEASE = {
   release_type: 'single',
   album_title: '',
@@ -1420,7 +1441,11 @@ export default function TrackUploadPanel() {
 
   // Upload state
   const [release, setRelease]                   = useState({ ...BLANK_RELEASE, release_type: isBeatmaker ? 'beat' : 'single' });
-  const [trackForm, setTrackForm]               = useState(BLANK_TRACK);
+  // Podcast account: the toggle starts on. See PODCAST_ACCOUNT_SLUG.
+  const [trackForm, setTrackForm]               = useState(() => ({
+    ...BLANK_TRACK,
+    is_podcast: artist?.slug === PODCAST_ACCOUNT_SLUG,
+  }));
   const [versionFiles, setVersionFiles]         = useState([]);
   const [stemFiles, setStemFiles]               = useState([]);
   const [beatEnabled, setBeatEnabled]           = useState({ free: true, basic: true }); // which tiers are on
@@ -1454,6 +1479,15 @@ export default function TrackUploadPanel() {
   const isWorking      = uploading || converting;
 
   useEffect(() => { if (artist) fetchAlbums(); }, [artist]);
+
+  // The artist arrives after the first render, so the initial state above
+  // cannot see it. This applies the default once it does, and only while the
+  // form is still untouched: if the title has been typed, the person is
+  // mid-upload and their choice of toggle is theirs, not ours to overwrite.
+  useEffect(() => {
+    if (artist?.slug !== PODCAST_ACCOUNT_SLUG) return;
+    setTrackForm(prev => (prev.title || prev.is_podcast ? prev : { ...prev, is_podcast: true }));
+  }, [artist?.slug]);
   useEffect(() => { if (activeTab === 'manage') fetchTracks(); }, [activeTab]);
   useEffect(() => {
     setFilteredTracks(searchTerm

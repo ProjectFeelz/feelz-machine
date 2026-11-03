@@ -298,7 +298,7 @@ export default function SchoolSessionsPage() {
             <span className="text-lime-400">Sessions</span>
           </h1>
           <p className="text-white/50 text-sm lg:text-lg lg:max-w-xl leading-relaxed">
-            Pick a song from the shortlist and cover it, your own vocal performance. Open to anyone in South Africa, and there is cash for the winner.
+            Pick a song from the shortlist and sing it in your own voice. Open to anyone in South Africa, and there is cash for the winner.
           </p>
           {entryCount !== null && entryCount > 0 && (
             <p className="text-xs lg:text-sm text-white/40 font-medium">
@@ -358,7 +358,7 @@ export default function SchoolSessionsPage() {
 
         {/* How it works */}
         <p className="text-xs text-white/50 leading-relaxed border-l-2 border-lime-400 pl-3">
-          <span className="text-white font-semibold">Pick a song from the shortlist and cover it</span>, your own vocal performance over the original track. Solo or as a group; if your group wins, the prize splits evenly across everyone listed.
+          <span className="text-white font-semibold">Pick a song from the shortlist and cover it</span>, which means singing that song in your own voice, over the original track or the beat provided. The words and the melody stay the song's; what you bring is the performance. Solo or as a group; if your group wins, the prize splits evenly across everyone listed.
         </p>
 
         {/* Song shortlist. Tapping one plays the whole shortlist in the app
