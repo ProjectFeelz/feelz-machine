@@ -10,7 +10,6 @@
  *   +80   exact genre match with top listened genre
  *   +60   exact genre match with secondary genre
  *   +50   mood match with your top mood
- *   +40   BPM within ±10 of your avg BPM preference
  *   +35   same artist as your most-streamed artist
  *   +30   collab track featuring an artist you follow
  *
@@ -327,7 +326,6 @@ exports.handler = async (event) => {
         // Build taste profile from stream history
         const genreCounts   = {};
         const moodCounts    = {};
-        const bpmSamples    = [];
         const artistStreams = {};
         const streamedIds   = new Set();
         let beatStreams = 0;
@@ -335,10 +333,9 @@ exports.handler = async (event) => {
 
         streams.forEach(s => {
           if (s.track_id) streamedIds.add(s.track_id);
-          const g = s.tracks?.genre, m = s.tracks?.mood, b = s.tracks?.bpm, a = s.tracks?.artist_id;
+          const g = s.tracks?.genre, m = s.tracks?.mood, a = s.tracks?.artist_id;
           if (g) genreCounts[g]   = (genreCounts[g]   || 0) + 1;
           if (m) moodCounts[m]    = (moodCounts[m]    || 0) + 1;
-          if (b) bpmSamples.push(b);
           if (a) artistStreams[a] = (artistStreams[a]  || 0) + 1;
           if (s.tracks?.is_beat === true)  beatStreams++;
           if (s.tracks?.is_beat === false) songStreams++;
@@ -353,7 +350,8 @@ exports.handler = async (event) => {
         const secondGenre    = profileGenres[1]       || Object.entries(genreCounts).sort((a,b)=>b[1]-a[1])[1]?.[0] || null;
         const topMood        = profileMoods[0]        || Object.entries(moodCounts).sort((a,b)=>b[1]-a[1])[0]?.[0]  || null;
         const topArtistId    = behavior.top_artist_id || Object.entries(artistStreams).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
-        const avgBpm         = behavior.avg_bpm       || (bpmSamples.length ? bpmSamples.reduce((a,b)=>a+b,0)/bpmSamples.length : null);
+        // avgBpm removed with the BPM rule below. See the note at the scoring
+        // step: no track carries a BPM, so this was always null.
         const behaviorTags   = new Set(behavior.tags || []);
 
         // Beats vs songs. Only forms an opinion once there's enough history
@@ -405,8 +403,26 @@ exports.handler = async (event) => {
             // Mood match
             if (topMood && track.mood === topMood)                   { score += 50; if (reason === 'recommended') reason = 'mood_match'; }
 
-            // BPM affinity (within ±10)
-            if (avgBpm && track.bpm && Math.abs(track.bpm - avgBpm) <= 10) { score += 40; }
+            // BPM AFFINITY REMOVED. It was +40 for a track within ±10 of the
+            // listener's average BPM, and it has never awarded a single point.
+            //
+            // tracks.bpm is null on all 146 tracks. The field exists on the
+            // upload form but only inside the beat section of
+            // src/pages/TrackUploadPanel.js, so nobody filling in an ordinary
+            // song ever sees it, and listening_events.bpm is therefore null on
+            // all 3818 rows. avg_bpm on every behaviour profile is null as a
+            // direct result.
+            //
+            // So the rule read as a factor in the scoring table and was dead
+            // weight: a condition that can never be true, making the engine
+            // look like it considers tempo when it does not. Taking it out
+            // leaves what actually runs: follows, genre, mood, artist and
+            // collabs.
+            //
+            // To bring it back, the upload form has to ask every artist for
+            // BPM rather than only beatmakers, or something has to detect it
+            // from the audio. Until one of those happens this is honest about
+            // what the feed is doing.
 
             // Beats vs songs preference. Deliberately a nudge, not a wall:
             // a strong beats listener still sees songs, just fewer of them.

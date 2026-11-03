@@ -766,4 +766,29 @@ const handler = async (event) => {
 // Wrapped so this job is visible in job_runs. The handler above is
 // unchanged; wrapHandler reads the status it returns and writes one row
 // per run, so "ran and did nothing" stops looking like "never ran".
-exports.handler = wrapHandler('engagement-drip-cron', handler);
+//
+// THE NAME WAS WRONG, AND IT IS THE WHOLE REASON THIS JOB LOOKS SILENT.
+//
+// This said 'engagement-drip-cron', which is the OTHER function. Two
+// different functions were writing rows under one name:
+//
+//   engagement-drip-cron        a handoff. It POSTs to this function and
+//                               returns the moment Netlify answers 202. Its
+//                               body is { triggered, status, async }, which
+//                               carries no count, so it records items = 0
+//                               every single time, correctly, because it does
+//                               no work.
+//   this function               does all the work and returns totalSent.
+//
+// Both landed on the cron's name, so the watchdog has been judging the
+// handoff on output it structurally cannot produce, and reporting `silent`
+// for a job that was never going to report items. Meanwhile the half that
+// actually sends the messages had no name of its own and could not be
+// watched at all.
+//
+// Recording under its own name means countFrom() reads totalSent from the
+// body above, so "sent 40 messages" and "sent none for a fortnight" finally
+// look different. Run fm_drip_watch_the_right_half.sql alongside this: it
+// adds this job to job_expectations and stops the cron being judged on
+// idleness.
+exports.handler = wrapHandler('engagement-drip-background', handler);

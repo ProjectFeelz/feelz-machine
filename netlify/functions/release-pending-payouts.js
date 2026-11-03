@@ -258,8 +258,25 @@ exports.handler = async (event) => {
         .in('id', r.rows);
       if (upErr) console.error('[sweep] could not mark rows for', r.artistId, upErr.message);
 
-      await supabase.rpc('settle_pending_balance', { p_artist_id: r.artistId, p_amount: r.amount })
-        .catch(e => console.error('[sweep] settle failed for', r.artistId, e.message));
+      // NOT .catch(). supabase-js returns a PostgrestBuilder, which is
+      // thenable but is not a Promise: it implements .then() and has no
+      // .catch(), so calling .catch() on it throws TypeError synchronously.
+      // That is the exact crash that stopped weekly-wheel-spin dead, recorded
+      // in job_runs as "supabase.from(...).insert(...).catch is not a
+      // function". This line has never run, because the PayPal call above it
+      // fails first, so it would have detonated on the first successful
+      // payout run instead, which is the worst possible time.
+      const { error: settleErr } = await supabase.rpc('settle_pending_balance', {
+        p_artist_id: r.artistId,
+        p_amount: r.amount,
+      });
+      if (settleErr) {
+        // The money HAS left PayPal at this point. A failure here means the
+        // pending balance still shows what was just paid, so it is loud.
+        console.error('[sweep] PAID BUT NOT SETTLED for artist', r.artistId,
+          'amount', r.amount, 'batch', paypalBatchId,
+          'code=', settleErr.code, 'msg=', settleErr.message);
+      }
     }
 
     console.log('[sweep] released', releasing.length, 'artists, batch', paypalBatchId);
@@ -278,8 +295,30 @@ exports.handler = async (event) => {
     };
 
   } catch (err) {
+    // 200, NOT 500, AND THE FAILURE IS STILL RECORDED.
+    //
+    // Netlify retries a scheduled function that answers with a non-2xx. Every
+    // Monday this fired three times inside six seconds, which is three
+    // attempts to move real money for one scheduled run. job_runs has the
+    // trail: 07:00:51, 07:00:54, 07:00:56.
+    //
+    // Nothing was double-paid, because the failure is at PayPal's door and
+    // because sender_batch_id is one id per calendar week, so PayPal would
+    // refuse a second batch anyway. But a retry policy on a payout function
+    // that only holds because of a dedupe key one layer down is not a thing
+    // to leave in place. If a run ever fails AFTER the batch is accepted and
+    // BEFORE the rows are marked, three attempts is three chances to get the
+    // bookkeeping wrong.
+    //
+    // So a handled failure answers 200 and says so in the body. The run is
+    // still written to job_runs with ok = false, which is what the watchdog
+    // reads, so a broken sweep is reported exactly as loudly as before. It is
+    // just reported once.
     console.error('[sweep] failed:', err.message);
     if (!dryRun) await recordRun(JOB, { ok: false, error: err.message, startedAt: started });
-    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ ok: false, retried: false, error: err.message }),
+    };
   }
 };

@@ -323,12 +323,26 @@ exports.handler = async (event) => {
 
     // 5. Update artist payment profiles with pending balance
     for (const record of payoutRecords) {
-      await supabase.rpc('increment_pending_balance', {
+      // NOT .catch(). supabase-js returns a PostgrestBuilder, which is
+      // thenable but is not a Promise: it has .then() and no .catch(), so
+      // calling .catch() throws TypeError synchronously rather than catching
+      // anything. This is the crash that stopped weekly-wheel-spin, and this
+      // copy of it sits on the path that runs for every sale.
+      //
+      // The old comment said the RPC "may not exist yet" and swallowed the
+      // result. It does exist, and a real failure here means the artist's
+      // pending balance does not move while the payout row says it did, so
+      // the two disagree with nothing to say why.
+      const { error: incErr } = await supabase.rpc('increment_pending_balance', {
         p_artist_id: record.artist_id,
         p_amount: record.amount,
-      }).catch(() => {
-        // RPC may not exist yet, fail silently, payout record is the source of truth
       });
+      if (incErr) {
+        console.error('[split-payout] pending balance not incremented for artist',
+          record.artist_id, 'amount', record.amount,
+          'code=', incErr.code, 'msg=', incErr.message,
+          '- the payouts row is still the source of truth');
+      }
     }
 
     // 6. Send notifications to each artist
@@ -471,10 +485,18 @@ exports.handler = async (event) => {
           // Move the money out of the pending pot and into paid-out, so the
           // three tiles on the Profile screen tell the truth.
           for (const p of paidOut) {
-            await supabase.rpc('settle_pending_balance', {
+            // NOT .catch(), for the same reason as the increment above: a
+            // PostgrestBuilder has no .catch and calling it throws.
+            const { error: settleErr } = await supabase.rpc('settle_pending_balance', {
               p_artist_id: p.artistId,
               p_amount: p.amount,
-            }).catch(e => console.error('[split-payout] settle failed:', e.message));
+            });
+            if (settleErr) {
+              // The payout has gone out by this point, so the balance and the
+              // money disagree until somebody fixes it by hand.
+              console.error('[split-payout] PAID BUT NOT SETTLED for artist', p.artistId,
+                'amount', p.amount, 'code=', settleErr.code, 'msg=', settleErr.message);
+            }
           }
         } else {
           console.log('[split-payout] nothing sent, every artist is below their payout threshold.');

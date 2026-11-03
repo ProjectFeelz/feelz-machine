@@ -163,14 +163,24 @@ const handler = async (event) => {
       }
       // Premium winners get verified + a featured placement notification — no tier change needed
       if (currentSlug === 'premium') {
-        await supabase.from('notifications').insert({
+        // NOT .catch(). A PostgrestBuilder is thenable but not a Promise: it
+        // has .then() and no .catch(), so calling .catch() throws TypeError
+        // synchronously. This is the same crash that stopped
+        // weekly-wheel-spin, and here it would take down the rest of this
+        // block, which is what actually gives the winner their featured
+        // placement. A Premium winner would have won and received nothing.
+        const { error: winNotifyErr } = await supabase.from('notifications').insert({
           user_id: winner.artists?.user_id,
           artist_id: winner.artist_id,
           type: 'competition_winner',
           title: '🏆 You won Collab Roulette!',
           message: `You already have Premium — you've been given a featured placement on the home page for the next 7 days!`,
           metadata: { featured_placement: true, days: 7 },
-        }).catch(() => {});
+        });
+        if (winNotifyErr) {
+          console.error('[close-wheel] winner notification failed for', winner.artist_id,
+            'code=', winNotifyErr.code, 'msg=', winNotifyErr.message);
+        }
         // Mark as featured for 7 days
         await supabase.from('artists')
           .update({ featured: true, featured_until: new Date(Date.now() + 7*24*60*60*1000).toISOString() })

@@ -268,15 +268,39 @@ exports.handler = async (event) => {
       eligible = true;
     } else {
       // Listener: account at least 14 days old, 10+ follows, 20+ streams
-      const { data: profile } = await supabase
-        .from('auth.users')
-        .select('created_at')
-        .eq('id', userId)
-        .maybeSingle()
-        .catch(() => ({ data: null }));
+      //
+      // THE AGE CHECK HAS NEVER RUN. Two faults stacked on top of each other:
+      //
+      //   .from('auth.users')  PostgREST does not expose the auth schema, and
+      //                        supabase-js reads that string as a table named
+      //                        "auth.users" in public. There is no such table.
+      //   .catch(...)          a PostgrestBuilder is thenable but not a
+      //                        Promise, so .catch() is not a function on it
+      //                        and this threw TypeError before the query ran.
+      //
+      // Either way `profile` came back undefined, so createdAt fell through to
+      // the default below, which is a date 20 days ago, which clears the
+      // 14-day minimum every single time. The gate has been open since it was
+      // written.
+      //
+      // auth.users is reachable through the admin API rather than PostgREST,
+      // and this function already runs with the service role key.
+      let createdAt = null;
+      const { data: authUser, error: authLookupErr } =
+        await supabase.auth.admin.getUserById(userId);
+      if (authLookupErr) {
+        console.error('[affiliate-track] could not read the account age for', userId,
+          '-', authLookupErr.message);
+      } else {
+        createdAt = authUser?.user?.created_at || null;
+      }
 
-      const createdAt = profile?.created_at || new Date(Date.now() - 20 * 86400000).toISOString();
-      const listenerAge = (Date.now() - new Date(createdAt).getTime()) / 86400000;
+      // Unknown age is now treated as NOT eligible rather than as 20 days old.
+      // An account we cannot date has not proved it is two weeks old, and the
+      // whole point of this gate is to make that proof.
+      const listenerAge = createdAt
+        ? (Date.now() - new Date(createdAt).getTime()) / 86400000
+        : 0;
 
       const { count: followCount } = await supabase
         .from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', userId);
