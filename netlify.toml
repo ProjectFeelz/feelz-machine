@@ -266,9 +266,28 @@
 [functions."weekly-artist-report"]
   schedule = "0 8 * * 1"
 
-# Sun 09:00, new challenge
-[functions."weekly-wheel-spin"]
-  schedule = "0 9 * * 0"
+# COLLAB ROULETTE IS OFF. Competitions moved to Plugin Gallery.
+#
+# weekly-wheel-spin ran every Sunday at 09:00, picked a prompt and created a
+# competition. close-wheel-competition ran at 23:59 the same day to crown a
+# winner. Both are unscheduled rather than deleted: the code and the tables
+# stay where they are, so turning this back on is two lines.
+#
+# It had created 30 competitions and 25 wheel challenges, the most recent on
+# 1 November, against 0 entries, 0 votes and 0 prize payouts. The weekly
+# announcement had been throwing since it was written, so the challenge was
+# generated every Sunday and nobody was told it existed.
+#
+# The 82 prompts you wrote lived only in weekly-wheel-spin.js, which is why
+# they went to Plugin Gallery before this was switched off. See
+# pjf_challenge_prompts.sql.
+#
+# Also run fm_competitions_off.sql, which stops the watchdog expecting these
+# two to run. Without it you keep getting the emails about jobs you turned
+# off on purpose.
+#
+# [functions."weekly-wheel-spin"]
+#   schedule = "0 9 * * 0"
 
 # Sun 09:00, internal check
 [functions."paid-collab-reminder"]
@@ -278,9 +297,9 @@
 [functions."weekly-listener-recap"]
   schedule = "0 18 * * 0"
 
-# Sun 23:59, crowns the winner, pays out, notifies
-[functions."close-wheel-competition"]
-  schedule = "59 23 * * 0"
+# Sun 23:59, crowned the winner. Off with weekly-wheel-spin above.
+# [functions."close-wheel-competition"]
+#   schedule = "59 23 * * 0"
 
 # 1st of the month 09:00
 [functions."monthly-wrapped"]
