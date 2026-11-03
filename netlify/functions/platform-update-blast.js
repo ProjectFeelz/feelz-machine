@@ -31,22 +31,34 @@ exports.handler = async (event) => {
   let body;
   try { body = JSON.parse(event.body || '{}'); } catch { return { statusCode: 400, body: 'Invalid JSON' }; }
 
-  // Auth: verify the caller is an admin via their Supabase JWT
+  // ── Auth ────────────────────────────────────────────────────────────────
+  //
+  // THE ADMIN LIST COMES FROM THE ADMINS TABLE, NOT FROM THIS FILE.
+  //
+  // It used to be `const adminEmails = ['stillflexhere@gmail.com']`, which
+  // meant the set of people who can broadcast to every user on the platform
+  // was a deploy away from being correct, and matched on an email address
+  // rather than an account. An address can be changed on an account; the
+  // admins table is the thing the rest of the codebase already trusts for
+  // this question, so it answers it here too.
   const authHeader = event.headers?.authorization || '';
-  const token = authHeader.replace('Bearer ', '').trim() || body?.token;
-  if (token) {
-    const { createClient } = require('@supabase/supabase-js');
-    const userClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { data: { user } } = await userClient.auth.getUser(token);
-    const adminEmails = ['stillflexhere@gmail.com'];
-    if (!user || !adminEmails.includes(user.email)) {
-      return { statusCode: 403, body: 'Forbidden' };
-    }
-  }
-  // Also accept internal secret for cron/server calls
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim() || body?.token;
   const secret = event.headers?.['x-internal-secret'];
-  if (!token && secret !== process.env.INTERNAL_FUNCTION_SECRET) {
-    return { statusCode: 403, body: 'Forbidden' };
+
+  if (token) {
+    const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+    if (authErr || !user) {
+      return { statusCode: 401, body: JSON.stringify({ error: 'Not signed in' }) };
+    }
+    const { data: admin } = await supabase
+      .from('admins').select('user_id').eq('user_id', user.id).maybeSingle();
+    if (!admin) {
+      return { statusCode: 403, body: JSON.stringify({ error: 'Not an admin' }) };
+    }
+  } else if (!secret || secret !== process.env.INTERNAL_FUNCTION_SECRET) {
+    // No token AND no valid secret. A present-but-invalid token is refused
+    // above and never falls through to the secret check.
+    return { statusCode: 403, body: JSON.stringify({ error: 'Forbidden' }) };
   }
 
   const blast = body?.message || DEFAULT_BLAST;

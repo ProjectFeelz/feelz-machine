@@ -341,6 +341,25 @@ export function PlayerProvider({ children }) {
   const listenBufRef   = useRef({ trackId: null, state: 'idle', url: null, controller: null });
   const stallTimerRef  = useRef(null);
 
+  // WHAT HAPPENS WHEN THERE IS NO BUFFER TO SWAP TO.
+  //
+  // swapToBuffer below covers the case the listen buffer was built for: the
+  // network dies after twenty seconds and the bytes are already in memory. In
+  // every other case it returns early and did nothing at all — no retry, no
+  // fallback, no signal. That is a drop inside the first twenty seconds, a
+  // background fetch that failed or is still running, or a track whose buffer
+  // belongs to the previous song. The element is left with a dead source, and
+  // a media element in that state never recovers on its own: its network state
+  // is terminal, so it sits there silent even once the signal is back.
+  //
+  // From the outside that is a song that stops, or one that glitches as though
+  // it never fully loaded. These two carry the fallback: where the listener
+  // was, so the stream can be reopened at that point, and whether we are
+  // currently stalled, so the bar can say "buffering" instead of claiming the
+  // track is playing while no sound is coming out.
+  const streamResumeAtRef = useRef(0);
+  const [isBuffering, setIsBuffering] = useState(false);
+
   // Driving mode is an explicit statement that this phone is doing one job
   // right now. It buys a longer fight for the speakers, and nothing else.
   // Opening the screen is the consent; there is no version of this that turns
@@ -802,6 +821,14 @@ export function PlayerProvider({ children }) {
 
   useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
 
+  // playNextFromRef is rebuilt whenever extendQueueWithSuggestions or
+  // flushListeningEvent change. The stall effect below registers its listeners
+  // once and must not re-register on every one of those rebuilds, because
+  // tearing down mid-stall would drop the timer that is waiting to recover the
+  // track. So it calls through this, which always points at the current one.
+  const playNextFnRef = useRef(playNextFromRef);
+  useEffect(() => { playNextFnRef.current = playNextFromRef; }, [playNextFromRef]);
+
   // Catches the listener closing the tab or backgrounding the app, which
   // is otherwise the most common way a play goes unrecorded.
   useEffect(() => {
@@ -1047,15 +1074,19 @@ export function PlayerProvider({ children }) {
 
     const clearStallTimer = () => {
       if (stallTimerRef.current) { clearTimeout(stallTimerRef.current); stallTimerRef.current = null; }
+      setIsBuffering(false);
     };
 
+    // Returns whether it actually swapped, so the caller can fall back. It
+    // used to return undefined in every branch and the three early exits were
+    // indistinguishable from success.
     const swapToBuffer = () => {
       clearStallTimer();
       const b = listenBufRef.current;
-      if (b.state !== 'ready' || !b.url) return;
+      if (b.state !== 'ready' || !b.url) return false;
       const track = currentTrackRef.current;
-      if (!track || b.trackId !== track.id) return;
-      if ((audio.currentSrc || audio.src) === b.url) return;   // already on it
+      if (!track || b.trackId !== track.id) return false;
+      if ((audio.currentSrc || audio.src) === b.url) return false;   // already on it
 
       const at = audio.currentTime || 0;
       const onMeta = () => {
@@ -1068,15 +1099,96 @@ export function PlayerProvider({ children }) {
       audio.src = b.url;
       audio.load();
       console.info('[player] network ran dry, finishing this track from the listen buffer');
+      return true;
     };
 
-    const onError = () => swapToBuffer();
+    // Reopen the stream where the listener was.
+    //
+    // Position is read BEFORE src is touched, because assigning src resets
+    // currentTime to zero and the track would restart. A track already being
+    // served from IndexedDB is left alone: a local read does not fail for
+    // network reasons, and reloading it would only throw away its buffer.
+    const reloadStream = () => {
+      const src = audio.currentSrc || audio.src;
+      if (!src || src.startsWith('blob:') || src.includes('/offline-audio/')) return false;
+
+      const at = streamResumeAtRef.current || audio.currentTime || 0;
+      const wantedPlaying = !audio.paused || interruptedRef.current;
+
+      const onMeta = () => {
+        audio.removeEventListener('loadedmetadata', onMeta);
+        // A seek past the end of a shorter reload would throw, and a seek we
+        // cannot make is not worth losing playback over.
+        try {
+          if (at > 0 && (!audio.duration || at < audio.duration)) audio.currentTime = at;
+        } catch { /* carry on from wherever it landed */ }
+        if (wantedPlaying) audio.play().catch(() => { /* the play button is right there */ });
+      };
+
+      // Same reason as the swap: assigning src pauses the element, and onPause
+      // would otherwise read that as the phone taking the audio.
+      deliberatePauseRef.current = true;
+      audio.addEventListener('loadedmetadata', onMeta);
+      audio.src = src;
+      audio.load();
+      console.info('[player] reopening the stream at', Math.round(at), 'seconds');
+      return true;
+    };
+
+    // Buffer first, because its bytes are already here. Only if there is no
+    // buffer does this go back to the network. While the device says it is
+    // offline there is no point reopening a stream into a dead connection, so
+    // it waits for the online event below, which is a real signal rather than
+    // a guess.
+    const recover = () => {
+      if (swapToBuffer()) return;
+      if (navigator.onLine === false) { setIsBuffering(true); return; }
+      reloadStream();
+    };
+
+    const onError = () => {
+      const code = audio.error?.code;
+      // 4 is SRC_NOT_SUPPORTED: the file is wrong, not the network, and
+      // retrying it would spin forever. Hand over to the next track rather
+      // than leaving the queue stopped on a track that can never play.
+      if (code === 4) {
+        clearStallTimer();
+        if (!swapToBuffer()) { setIsPlaying(false); playNextFnRef.current?.(); }
+        return;
+      }
+      recover();
+    };
+
     const onStall = () => {
+      if (audio.ended) return;
+      // Remembered on every stall, so whatever recovers later knows where the
+      // listener actually was rather than where the element claims to be after
+      // a failed load.
+      streamResumeAtRef.current = audio.currentTime || 0;
+      setIsBuffering(true);
       if (stallTimerRef.current) return;
       stallTimerRef.current = setTimeout(() => {
         stallTimerRef.current = null;
-        swapToBuffer();
+        recover();
       }, STALL_GRACE_MS);
+    };
+
+    // The connection came back. Only acts if this element is actually stuck:
+    // a track that kept playing from its buffer must not be interrupted.
+    const onOnline = () => {
+      if (!audio.src) return;
+      const stuck = Boolean(audio.error) || stallTimerRef.current || audio.readyState < 3;
+      if (!stuck) return;
+      clearStallTimer();
+      recover();
+    };
+
+    // Going offline is not a failure on its own: a track with enough buffered
+    // plays on to the end of what it has. This only stops the timer from
+    // reopening a stream into a connection known to be down.
+    const onOffline = () => {
+      streamResumeAtRef.current = audio.currentTime || 0;
+      if (stallTimerRef.current) { clearTimeout(stallTimerRef.current); stallTimerRef.current = null; }
     };
 
     audio.addEventListener('error',      onError);
@@ -1084,9 +1196,13 @@ export function PlayerProvider({ children }) {
     audio.addEventListener('waiting',    onStall);
     audio.addEventListener('playing',    clearStallTimer);
     audio.addEventListener('timeupdate', clearStallTimer);
+    window.addEventListener('online',    onOnline);
+    window.addEventListener('offline',   onOffline);
 
     return () => {
       clearStallTimer();
+      window.removeEventListener('online',  onOnline);
+      window.removeEventListener('offline', onOffline);
       audio.removeEventListener('error',      onError);
       audio.removeEventListener('stalled',    onStall);
       audio.removeEventListener('waiting',    onStall);
@@ -1731,6 +1847,9 @@ export function PlayerProvider({ children }) {
   }, []); // eslint-disable-line
 
   const value = {
+    // True while the audio has stalled waiting for data, so the bar can say
+    // buffering instead of claiming the track is playing in silence.
+    isBuffering,
     currentTrack, isPlaying, duration, currentTime, volume, queue, queueIndex,
     shuffle, repeat, isMinimized, setIsMinimized, desktopPanelView, setDesktopPanelView, playTrack, togglePlay, seek,
     setVolume: setVolumeLevel, setVolumeLevel, playNext, playPrev, addToQueue,

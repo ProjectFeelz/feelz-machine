@@ -194,6 +194,33 @@ exports.handler = async (event) => {
       .neq('paypal_subscription_id', subscriptionId);
     if (retireErr) console.error('[verify-artist-subscription] could not retire old subscription:', retireErr.message);
 
+    // ── WHAT THEY ACTUALLY PAID ───────────────────────────────────────────
+    //
+    // amount_paid was never written here. The column defaults to 0, so every
+    // subscription sold through this route was recorded as zero revenue and
+    // only became correct later, if PayPal's PAYMENT.SALE.COMPLETED webhook
+    // arrived and paypal-webhook.js filled it in. The live 27 October
+    // subscription still reads 0.00, so for that one it did not.
+    //
+    // PayPal already told us, in the response we fetched to verify the
+    // subscription: billing_info.last_payment is the payment that has actually
+    // been taken. That is the authoritative figure and it is in hand, so there
+    // is no reason to leave the row claiming zero until a webhook rescues it.
+    //
+    // Deliberately omitted rather than defaulted when PayPal has no payment
+    // yet, which is the APPROVED case: the subscriber has agreed and billing
+    // has not started. Writing 0 there would be stating a falsehood as a fact,
+    // and because this is an upsert, omitting the key also means a re-run
+    // cannot overwrite a real figure the webhook has since written.
+    const lastPayment = sub?.billing_info?.last_payment;
+    const paidAmount  = Number(lastPayment?.amount?.value);
+    const hasPayment  = Number.isFinite(paidAmount) && paidAmount > 0;
+
+    if (!hasPayment) {
+      console.warn('[verify-artist-subscription] no last_payment on', subscriptionId,
+        '- status', sub.status, '- amount_paid left for the webhook');
+    }
+
     // Upsert, so a webhook that arrived first does not cause a duplicate and a
     // retry from the browser is harmless. onConflict needs the unique index
     // from migration 207.
@@ -209,6 +236,7 @@ exports.handler = async (event) => {
         started_at:             new Date().toISOString(),
         expires_at:             expiresAt,
         updated_at:             new Date().toISOString(),
+        ...(hasPayment ? { amount_paid: paidAmount } : {}),
       }, { onConflict: 'paypal_subscription_id' });
 
     // Read, not discarded. This is the write that decides whether someone who

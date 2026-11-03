@@ -49,6 +49,25 @@ const supabase = createClient(
 const JOB = 'check-job-health';
 
 const describe = (r) => {
+  // 'never ran' USED TO MEAN TWO DIFFERENT THINGS
+  //
+  // The job_health view decided the status from the last SUCCESSFUL run, so a
+  // job that had run six times and failed six times was reported as 'never
+  // ran'. That is not a wording quibble: it is the difference between "the
+  // schedule is not firing, go and look at netlify.toml" and "the schedule is
+  // fine, the job is erroring, go and read the error". The alerts about
+  // release-pending-payouts said never ran every week while the job ran
+  // faithfully every Monday and was refused by PayPal every Monday.
+  //
+  // The view now separates them, and this reads the error back out, because
+  // the whole point of the distinction is what it tells you to do next.
+  if (r.status === 'never ran') {
+    return `No run has ever been recorded. The schedule is not firing at all.`;
+  }
+  if (r.status === 'never succeeded') {
+    return `It has run but never succeeded. The last attempt said: `
+         + `${r.last_error || 'no detail recorded'}`;
+  }
   if (r.status === 'overdue') {
     return r.last_success
       ? `No successful run for ${r.hours_since_success} hours. It should run at least every ${r.max_gap_hours}.`
