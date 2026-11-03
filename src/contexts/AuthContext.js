@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { userRow, userRowResult, invalidateUserRow, clearUserRowCache } from '../utils/userRow';
+import { safeRedirectPath } from '../utils/safeRedirect';
 
 // Which user id an artist-profile creation is currently in flight for.
 let creatingArtistFor = null;
@@ -344,9 +345,15 @@ export function AuthProvider({ children }) {
           if (!prev || prev.id !== session.user.id) {
             // New user — load their profile data async, then handle redirect
             loadUser(session.user).then(() => {
-              const redirect = sessionStorage.getItem('post_login_redirect');
+              // Checked again here, not only where it was stored. Anything
+              // can write to sessionStorage, including script running on any
+              // page of this origin, so the value read back is not
+              // necessarily the value that was put there. The check belongs
+              // next to the navigation it guards.
+              const stored = sessionStorage.getItem('post_login_redirect');
+              sessionStorage.removeItem('post_login_redirect');
+              const redirect = safeRedirectPath(stored);
               if (redirect) {
-                sessionStorage.removeItem('post_login_redirect');
                 window.location.replace(redirect);
               }
             });

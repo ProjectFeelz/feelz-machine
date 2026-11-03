@@ -27,6 +27,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import VinylRecord from '../components/VinylRecord';
 import RetailTonearm from '../components/retail/RetailTonearm';
+import { safeRedirectPath } from '../utils/safeRedirect';
 
 const field = 'w-full pl-10 pr-4 py-3 bg-white/[0.06] rounded-xl text-sm text-white placeholder-white/30 outline-none border border-white/[0.06] focus:border-white/25 transition';
 
@@ -104,7 +105,11 @@ export default function LoginPage() {
   const { signInWithGoogle, signInWithEmail, signUpWithEmail, signInWithMagicLink, user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get('redirect') || null;
+  // Validated, not trusted. This value goes on to drive
+  // window.location.replace() in AuthContext once the sign-in succeeds, and
+  // that follows an absolute URL straight off the site. See
+  // src/utils/safeRedirect.js for what is rejected and why.
+  const redirectTo = safeRedirectPath(searchParams.get('redirect'));
   // Venues arrive from Retail with ?redirect=/retail...; they get the Retail
   // look (record instead of phone) and are sent back there afterwards.
   const isRetail = /^\/retail/.test(redirectTo || '') || searchParams.get('app') === 'retail';
