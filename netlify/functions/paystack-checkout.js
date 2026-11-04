@@ -196,6 +196,9 @@ exports.handler = async (event) => {
       // ['paystack'] asks only the question being asked; a seller with no
       // subaccount comes back on a PayPal route, which is the false below.
       let sellerTakesRand = false;
+      // The platform's cut on THIS seller's subaccount, which the quote has to
+      // gross up for or the number on the button is not the number charged.
+      let quotePlatformPct = 0;
       try {
         const qRouting = await payeeLib.resolvePayee({
           supabase: quoteAdmin,
@@ -205,6 +208,7 @@ exports.handler = async (event) => {
           processors: ['paystack'],
         });
         sellerTakesRand = qRouting.processor === 'paystack' && Boolean(qRouting.subaccountCode);
+        if (sellerTakesRand) quotePlatformPct = Number(qRouting.commissionPct) || 0;
       } catch (e) {
         // Cannot tell, reported as such rather than as a no. A screen that
         // gets null keeps the layout it had before any of this existed, so a
@@ -220,15 +224,19 @@ exports.handler = async (event) => {
         return json(200, { available: false, sellerTakesRand });
       }
 
-      const q = pricing.usdToPaystackChargeGrossedUp(quoteUsd, quoteRate.rate);
+      const q = pricing.usdToPaystackChargeGrossedUp(quoteUsd, quoteRate.rate, quotePlatformPct);
       return json(200, {
         available: q.minor >= 100,
         zar: q.zar,
         currency: 'ZAR',
-        // Spelled out so a screen can explain the number rather than just
-        // show it: this is the artist's price plus the card fee.
+        // Spelled out so a screen can explain the number rather than just show
+        // it. The three parts add up to zar: what the artist nets, the card
+        // fee, and the platform's cut, which the buyer carries along with the
+        // fee. platformZar is 0 on every sale while the commission is 0, which
+        // is what it is today.
         artistZar: q.artistZar,
         feeZar: q.feeZar,
+        platformZar: q.platformZar,
         // true  the seller has a Paystack subaccount, rand is their route
         // false the seller is paid another way, do not offer rand
         // null  could not be determined, fall back to the old layout
@@ -423,7 +431,13 @@ exports.handler = async (event) => {
   // to "what do I actually get", and only one of them matching what the
   // artist was told. So the charge is grossed up here and the artist nets
   // their price either way. See the fee note in netlify/lib/pricing.js.
-  const charge = pricing.usdToPaystackChargeGrossedUp(usdPrice, rate.rate);
+  // routing.commissionPct is this subaccount's own percentage_charge, read
+  // back from Paystack and stored by paystack-subaccount.js. Grossing up for
+  // it is what makes the buyer carry the platform's cut: the artist still nets
+  // the price on their page, whatever the commission is set to. See the note
+  // above paystackPlatformCutZar in netlify/lib/pricing.js.
+  const platformPct = Number(routing.commissionPct) || 0;
+  const charge = pricing.usdToPaystackChargeGrossedUp(usdPrice, rate.rate, platformPct);
   if (!charge.minor || charge.minor < 100) {
     // Paystack rejects trivially small amounts, and a sub-rand charge almost
     // always means a price or a rate is wrong rather than a genuinely cheap
@@ -463,6 +477,12 @@ exports.handler = async (event) => {
     fx_source: rate.source,
     fx_stale: rate.stale === true,
     subaccount_code: routing.subaccountCode,
+    // The split this charge was built for, stored with the charge rather than
+    // read from the environment later. The webhook works out what the artist
+    // netted and what the platform kept, and if it read today's variable it
+    // would describe a sale that was struck under a different one. Same reason
+    // fx_rate is stored here.
+    platform_pct: platformPct,
     status: 'pending',
   });
 

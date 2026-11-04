@@ -64,6 +64,9 @@ const merchFulfil = require('../lib/merch-fulfil');
 // and two places deciding separately what a Paystack status means is how a
 // venue's player ends up disagreeing with its billing.
 const retailSub = require('../lib/retailPaystackSub');
+// The split arithmetic. Imported rather than repeated so this end cannot
+// disagree with the end that grossed the charge up.
+const pricing = require('../lib/pricing');
 
 const PAYSTACK_BASE = 'https://api.paystack.co';
 const SECRET = process.env.PAYSTACK_SECRET_KEY;
@@ -331,15 +334,37 @@ exports.handler = async (event) => {
   const rate = Number(intent.fx_rate);
   const usdPrice = Number(intent.usd_price);
 
-  // What landed in the artist's bank, converted back at the rate this sale
-  // was struck at. Paystack's fee is borne by the subaccount, which is set at
-  // checkout, so it comes out of the artist's side exactly as PayPal's does
-  // on the direct route.
-  const netUsd = rate > 0
-    ? Number((((paidMinor - feesMinor) / 100) / rate).toFixed(2))
-    : usdPrice;
+  // THE GROSS SPLITS THREE WAYS, SO IT IS READ THAT WAY.
+  //
+  // Paystack's subaccount split takes percentage_charge off the transaction
+  // amount and settles it to the main account, and the fee is borne by the
+  // subaccount, set at checkout. So:
+  //
+  //     charged  =  the platform's cut  +  Paystack's fee  +  the artist's net
+  //
+  // This used to read the artist's net as charged minus the fee, which is only
+  // correct while the commission is zero. The moment it was not, the platform's
+  // cut would have been reported as part of the artist's earnings and then a
+  // commission charged on top of that figure, which is a commission on a
+  // commission.
+  //
+  // The percentage comes off the intent row rather than the environment. The
+  // charge was grossed up for the split that applied when the buyer was quoted,
+  // and reading today's variable here would describe a sale struck under a
+  // different one. Intents written before that column existed have no value,
+  // and for those the variable is the best answer available.
+  const intentPct = Number(intent.platform_pct);
+  const platformPct = Number.isFinite(intentPct)
+    ? Math.max(0, Math.min(100, intentPct))
+    : Math.max(0, Math.min(100, PLATFORM_PCT));
 
-  const platformFee = Number(((Math.min(100, Math.max(0, PLATFORM_PCT)) / 100) * netUsd).toFixed(2));
+  const platformZar = pricing.paystackPlatformCutZar(zarCharged, platformPct);
+  const netZar = (paidMinor - Math.round(platformZar * 100) - feesMinor) / 100;
+
+  // Both converted back at the rate this sale was struck at, so the books
+  // agree with what the buyer was shown rather than with today's rate.
+  const netUsd = rate > 0 ? Number((netZar / rate).toFixed(2)) : usdPrice;
+  const platformFee = rate > 0 ? Number((platformZar / rate).toFixed(2)) : 0;
 
   // ── Merch, which finishes somewhere else entirely ─────────────────────────
   //
@@ -642,4 +667,4 @@ exports.handler = async (event) => {
   }));
 
   return ok(recordError ? 'recorded_with_problems' : 'recorded');
-};
+};

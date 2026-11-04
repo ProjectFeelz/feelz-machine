@@ -17,7 +17,7 @@ import { Helmet } from 'react-helmet-async';
 import ReactPlayer from 'react-player';
 import { supabase } from '../supabaseClient';
 import { visibleNow } from '../utils/stories';
-import { resolveStreamSrc, resolveVideoSrc } from '../utils/streamUrl';
+import { resolveStreamSrc, resolveVideoSrc, warmStreamUrls } from '../utils/streamUrl';
 import { parseLyrics, activeLineIndex, wordProgress, lyricTheme } from '../utils/lyrics';
 import { sendNotification } from '../utils/notify';
 import TrackCommentSheet from '../components/TrackCommentSheet';
@@ -1903,6 +1903,30 @@ export default function ForYouPage() {
     if (idx >= filteredTracks.length - 3 && !loadingMore && tracks.length > 0) loadTracks(tracks.length);
   }, [idx, filteredTracks.length, tracks.length, loadingMore, loadTracks]);
 
+  // SIGN THE CARD THAT IS ON SCREEN, NOT JUST THE ONE AFTER IT.
+  //
+  // PlayerContext signs ahead too, but only once a queue exists, which is at
+  // the moment of the tap. So the very first track of a cold load was signed
+  // from scratch while the listener waited, and that is a measured second on
+  // a Johannesburg connection: the whole reason the first song is slow to
+  // start when nothing else is.
+  //
+  // This fires as soon as the feed has rendered, which is the earliest a
+  // browser can know what to sign, and it batches the visible card and the two
+  // behind it into one request rather than three. By the time anybody presses
+  // anything, playbackSrc() has the URL in hand and assignPlaybackSrc never
+  // awaits.
+  //
+  // Free of charge when REACT_APP_PRIVATE_AUDIO is unset: warmStreamUrls
+  // returns immediately and asks for nothing.
+  useEffect(() => {
+    const ids = filteredTracks
+      .slice(Math.max(0, idx), Math.max(0, idx) + 3)
+      .map(t => t?.id)
+      .filter(Boolean);
+    if (ids.length) warmStreamUrls(ids);
+  }, [idx, filteredTracks]);
+
   // Preload next track's audio so it starts instantly when swiped to
   useEffect(() => {
     const next = filteredTracks[idx + 1];
@@ -2514,4 +2538,4 @@ export default function ForYouPage() {
     </div>
     </>
   );
-}
+}

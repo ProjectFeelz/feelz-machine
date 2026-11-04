@@ -17,7 +17,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import TipButton from '../components/TipButton';
 import { supabase } from '../supabaseClient';
-import { resolveStreamSrc, resolveStreamLater } from '../utils/streamUrl';
+import { resolveStreamSrc, resolveStreamLater, playableFallback } from '../utils/streamUrl';
 import { assignPlaybackSrc } from '../utils/offlineStore';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -917,7 +917,15 @@ export default function ListeningSessionPage() {
     // Compared by id for the same reason as syncAudio above.
     if (audioRef.current.dataset.feelzTrackId !== String(currentTrack.id)) {
       audioRef.current.dataset.feelzTrackId = String(currentTrack.id);
-      audioRef.current.src = (await resolveStreamSrc(currentTrack)) || currentTrack.file_url;
+      // playableFallback and not file_url: the bucket is private, so a stored
+      // public-object URL answers 400, and assigning one would error and look
+      // like the session had died. See src/utils/streamUrl.js.
+      const src = (await resolveStreamSrc(currentTrack)) || playableFallback(currentTrack.file_url);
+      if (!src) {
+        console.warn('[session] no playable URL for track', currentTrack.id, '- not starting playback.');
+        return;
+      }
+      audioRef.current.src = src;
     }
     await updateSession({ is_playing: true, started_at: new Date().toISOString() });
     audioRef.current.play().catch(() => {});
@@ -934,7 +942,9 @@ export default function ListeningSessionPage() {
     const next = queue[currentIdx + 1];
     if (!next) return;
     audioRef.current.dataset.feelzTrackId = String(next.tracks?.id || '');
-    audioRef.current.src = (next.tracks ? await resolveStreamSrc(next.tracks) : null) || next.tracks?.file_url || '';
+    audioRef.current.src = (next.tracks ? await resolveStreamSrc(next.tracks) : null)
+                        || playableFallback(next.tracks?.file_url)
+                        || '';
     await updateSession({ current_track_id: next.track_id, playback_pos: 0, is_playing: true, started_at: new Date().toISOString() });
     audioRef.current.play().catch(() => {});
   };
@@ -948,7 +958,9 @@ export default function ListeningSessionPage() {
       setQueue(prev => [...prev, data]);
       if (!session.current_track_id) {
         audioRef.current.dataset.feelzTrackId = String(track.id);
-        audioRef.current.src = (await resolveStreamSrc(track)) || track.file_url || '';
+        audioRef.current.src = (await resolveStreamSrc(track))
+                            || playableFallback(track.file_url)
+                            || '';
         await updateSession({ current_track_id: track.id, playback_pos: 0 });
       }
     }
@@ -1431,4 +1443,4 @@ export default function ListeningSessionPage() {
       `}</style>
     </div>
   );
-}
+}

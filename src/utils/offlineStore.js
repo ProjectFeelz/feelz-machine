@@ -708,9 +708,15 @@ export async function assignPlaybackSrc(audio, track, { load = true } = {}) {
     return immediate;
   }
 
-  // PRIVATE_AUDIO is on and nothing is cached yet. resolveStreamSrc falls back
-  // to file_url itself if signing fails, so a signing outage degrades to the
-  // old behaviour rather than to silence.
+  // PRIVATE_AUDIO is on and nothing is cached yet.
+  //
+  // The comment here used to say resolveStreamSrc falls back to file_url, so a
+  // signing outage degraded to the old behaviour rather than to silence. That
+  // stopped being true the day the bucket went private: file_url is a
+  // public-object link that answers 400, so on a signing failure the only
+  // honest answer is null, and that is what comes back now. Nothing is
+  // assigned and the caller is told, instead of an element being handed a URL
+  // that fails to load and reads as a dead file.
   const signed = await resolveStreamSrc(track);
   if (!signed) return null;
 
@@ -807,4 +813,4 @@ export function offlineCopyIsStale(track) {
   const current   = track.file_url || null;
   if (!savedFrom || !current) return false;
   return savedFrom !== current;
-}
+}

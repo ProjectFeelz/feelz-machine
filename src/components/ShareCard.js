@@ -3,7 +3,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Download, Share2, X, Loader, Link, Check, Film } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { parseLyrics, activeLineIndex } from '../utils/lyrics';
-import { resolveStreamSrc } from '../utils/streamUrl';
+import { resolveStreamSrc, playableFallback } from '../utils/streamUrl';
 import { buildStoryMp4, MEDIARECORDER_MP4_TYPES } from '../utils/storyMp4';
 import { resolveShareUrl, urlEndsInId } from '../utils/shareLink';
 
@@ -273,14 +273,19 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
   // on the day feelz-samples goes private, this is what would have broken,
   // silently, on the one feature artists use to promote themselves.
   //
-  // resolveStreamSrc asks for a short lived signed URL and falls back to
-  // file_url on any failure, and it is a no-op while REACT_APP_PRIVATE_AUDIO
-  // is unset, so this changes nothing until the flag goes on.
-  const [audioUrl, setAudioUrl] = useState(track?.file_url || null);
+  // resolveStreamSrc asks for a short lived signed URL, and it is a no-op
+  // while REACT_APP_PRIVATE_AUDIO is unset.
+  //
+  // The fallback goes through playableFallback rather than straight to
+  // file_url. The bucket IS private now, so a stored public-object URL answers
+  // 400, and handing one to the video composer would produce a share video
+  // with silence under it and no error anybody would see. Null instead means
+  // the composer can say it has no audio.
+  const [audioUrl, setAudioUrl] = useState(playableFallback(track?.file_url));
   useEffect(() => {
     if (!track) { setAudioUrl(null); return; }
     let dead = false;
-    const fallback = track.file_url || null;
+    const fallback = playableFallback(track.file_url);
     resolveStreamSrc(track)
       .then(src => { if (!dead) setAudioUrl(src || fallback); })
       .catch(() => { if (!dead) setAudioUrl(fallback); });
@@ -1273,4 +1278,4 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
       </div>
     </div>
   );
-}
+}

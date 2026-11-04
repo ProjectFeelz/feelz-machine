@@ -316,50 +316,130 @@ function paystackFeeZar(chargeZar) {
 }
 
 /**
- * The whole rand amount to charge so that `targetZar` survives the fee.
+ * THE PLATFORM'S SHARE OF A RAND SALE, AND WHO PAYS IT.
+ *
+ * Paystack's subaccount split takes percentage_charge off the TRANSACTION
+ * AMOUNT and settles it to the main account. So on a rand sale the gross is
+ * divided three ways:
+ *
+ *     charge  =  the platform's cut  +  Paystack's fee  +  what the artist nets
+ *
+ * The owner decided, November 2026: the BUYER carries the platform's cut, the
+ * same way the buyer already carries the card fee. An artist nets the price on
+ * their own page whichever route a buyer picks and whatever the commission is
+ * set to, and a change to the commission never silently reduces what an
+ * existing artist earns.
+ *
+ * That decision is the whole reason these two functions take a percentage. The
+ * alternative, leaving the gross-up alone, would have quietly paid artists
+ * less than their listed price the moment PAYSTACK_PLATFORM_PCT moved off
+ * zero, and nothing on any screen would have said so.
+ *
+ * The percentage passed in must be the one Paystack ACTUALLY has stored on
+ * that subaccount, not whatever the environment variable says today. The two
+ * can differ: percentage_charge is set per subaccount when it is created or
+ * updated, so an older subaccount keeps its old split. Grossing up for a cut
+ * Paystack is not taking overcharges the buyer and pays the surplus to the
+ * artist, which nobody asked for. artist_payment_profiles.paystack_platform_pct
+ * holds the read-back value for exactly this reason, and
+ * netlify/lib/payee.js is what passes it through.
+ */
+function paystackPlatformCutZar(chargeZar, platformPct) {
+  const c = Number(chargeZar);
+  const p = Math.max(0, Math.min(100, Number(platformPct) || 0));
+  if (!Number.isFinite(c) || c <= 0 || p <= 0) return 0;
+  // In cents, like the fee, and for the same reason.
+  return Math.round(c * 100 * (p / 100)) / 100;
+}
+
+/**
+ * What the artist's subaccount actually nets from a charge of `chargeZar`,
+ * once the platform's cut and Paystack's fee have come off it.
+ *
+ * This is the function grossUpZar checks itself against, so the gross-up can
+ * never disagree with the arithmetic that describes the settlement.
+ */
+function paystackSellerNetZar(chargeZar, platformPct) {
+  const c = Number(chargeZar);
+  if (!Number.isFinite(c) || c <= 0) return 0;
+  const cents = Math.round(c * 100)
+              - Math.round(paystackPlatformCutZar(c, platformPct) * 100)
+              - Math.round(paystackFeeZar(c) * 100);
+  return cents / 100;
+}
+
+/**
+ * The whole rand amount to charge so that `targetZar` survives the fee, and
+ * the platform's cut if there is one.
  *
  * The closed form is only an approximation here: the flat fee is waived below
  * R10, which makes the function piecewise, and both the fee and the charge
  * are rounded. So the closed form is used as a starting point and then
- * checked against the same arithmetic the fee itself uses, a rand at a time,
+ * checked against the same arithmetic the settlement uses, a rand at a time,
  * until the remainder really does cover the target. It normally does not loop
  * at all, and it is bounded either way.
  *
  * Rounded UP to a whole rand, like usdToZar: nobody prices anything at
  * R26.02, and rounding up never shortchanges the artist.
+ *
+ * platformPct defaults to 0, so a caller that does not pass one gets exactly
+ * the arithmetic this function did before the platform share existed.
  */
-function grossUpZar(targetZar) {
+function grossUpZar(targetZar, platformPct = 0) {
   const t = Number(targetZar);
   if (!Number.isFinite(t) || t <= 0) return 0;
 
+  const p    = Math.max(0, Math.min(100, Number(platformPct) || 0)) / 100;
   const vat  = 1 + PAYSTACK_FEE_VAT_PCT / 100;
   const pct  = (PAYSTACK_FEE_PCT / 100) * vat;
   const flat = PAYSTACK_FEE_FLAT_ZAR * vat;
 
-  let charge = Math.ceil((t + flat) / (1 - pct));
-  for (let i = 0; i < 20 && charge - paystackFeeZar(charge) < t; i += 1) charge += 1;
+  // Both cuts come off the same gross, so they add up in the denominator.
+  const denom = 1 - p - pct;
+  if (denom <= 0) {
+    // A commission high enough to swallow the whole charge. Refusing is the
+    // only safe answer: any number returned here would be a price that cannot
+    // pay the artist, and the checkout rejects a zero rather than charging it.
+    console.error('[pricing] a platform cut of', platformPct,
+      'percent plus Paystack fees leaves nothing for the artist. No charge computed.');
+    return 0;
+  }
+
+  let charge = Math.ceil((t + flat) / denom);
+  for (let i = 0; i < 40 && paystackSellerNetZar(charge, platformPct) < t; i += 1) charge += 1;
   return charge;
 }
 
 /**
  * The whole path for the Paystack checkout, with the buyer carrying the card
- * fee so the artist nets their price.
+ * fee AND the platform's cut, so the artist nets their price.
  *
- * Returns the buyer's charge AND the artist's share, because the two are now
- * different numbers and every screen and record that shows one of them has to
- * be told which it is holding.
+ * Returns the buyer's charge and every part of it separately, because they are
+ * all different numbers now and every screen and record that shows one of them
+ * has to be told which it is holding.
  */
-function usdToPaystackChargeGrossedUp(usdAmount, rate) {
+function usdToPaystackChargeGrossedUp(usdAmount, rate, platformPct = 0) {
+  const pct = Math.max(0, Math.min(100, Number(platformPct) || 0));
   const artistZar = usdToZar(usdAmount, rate);
-  if (!artistZar) return { zar: 0, minor: 0, currency: 'ZAR', artistZar: 0, feeZar: 0 };
+  if (!artistZar) {
+    return { zar: 0, minor: 0, currency: 'ZAR', artistZar: 0, feeZar: 0, platformZar: 0, platformPct: pct };
+  }
 
-  const zar = grossUpZar(artistZar);
+  const zar = grossUpZar(artistZar, pct);
+  if (!zar) {
+    // Refused upstream. artistZar is still reported so a log can say what was
+    // being aimed at, but zar and minor are zero and the checkout stops.
+    return { zar: 0, minor: 0, currency: 'ZAR', artistZar, feeZar: 0, platformZar: 0, platformPct: pct };
+  }
+
   return {
     zar,
     minor: zarToPaystackMinor(zar),
     currency: 'ZAR',
     artistZar,
     feeZar: paystackFeeZar(zar),
+    platformZar: paystackPlatformCutZar(zar, pct),
+    platformPct: pct,
   };
 }
 
@@ -398,4 +478,7 @@ module.exports = {
   paystackFeeZar,
   grossUpZar,
   usdToPaystackChargeGrossedUp,
-};
+  // the platform's cut of a rand sale, which the buyer carries
+  paystackPlatformCutZar,
+  paystackSellerNetZar,
+};

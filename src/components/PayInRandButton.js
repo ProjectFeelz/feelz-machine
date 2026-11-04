@@ -81,6 +81,14 @@ import { PAYSTACK_IS_LIVE } from '../hooks/useRandQuote';
 const INLINE_SRC = 'https://js.paystack.co/v2/inline.js';
 let inlinePromise = null;
 
+// Rand to two places, with a trailing .00 dropped, so R1.50 and R2 both read
+// the way a price reads rather than R1.5 and R2.00.
+function rand2(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '0';
+  return n.toFixed(2).replace(/\.00$/, '');
+}
+
 // Exported so the merch checkout can open the same overlay rather than
 // shipping a second copy of this loader. One script tag, one promise, however
 // many buttons on the page ask for it.
@@ -443,7 +451,13 @@ export default function PayInRandButton({
           the artist's price, then the processing on top. */}
       {quote && !busy && !awaiting ? (
         <p className="text-[11px] text-white/35 text-center leading-relaxed">
-          R{quote.artistZar} to the artist, R{(quote.zar - quote.artistZar).toFixed(2).replace(/\.00$/, '')} card processing
+          R{quote.artistZar} to the artist,{' '}
+          R{rand2(quote.feeZar != null ? quote.feeZar : quote.zar - quote.artistZar)} card processing
+          {/* Only said when there is one. While the commission is 0, which is
+              what it is today, this line reads exactly as it did before. */}
+          {Number(quote.platformZar) > 0
+            ? `, R${rand2(quote.platformZar)} Feelz Machine`
+            : ''}
         </p>
       ) : null}
       {error ? <p className="text-xs text-red-400">{error}</p> : null}

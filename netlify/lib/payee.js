@@ -225,7 +225,7 @@ async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0, pr
   // what Profile > Edit writes.
   const [profileRes, artistRes] = await Promise.all([
     supabase.from('artist_payment_profiles')
-      .select('paypal_email, paypal_merchant_id, paystack_subaccount_code')
+      .select('paypal_email, paypal_merchant_id, paystack_subaccount_code, paystack_platform_pct')
       .eq('artist_id', artistId).maybeSingle(),
     supabase.from('artists')
       .select('paypal_email').eq('id', artistId).maybeSingle(),
@@ -238,6 +238,40 @@ async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0, pr
   const sellerMerchantId = profileRes.data?.paypal_merchant_id || null;
   const sellerEmail      = profileRes.data?.paypal_email || artistRes.data?.paypal_email || null;
   const subaccountCode   = profileRes.data?.paystack_subaccount_code || null;
+
+  // THE SPLIT PAYSTACK ACTUALLY HAS, NOT THE ONE THE ENVIRONMENT WANTS.
+  //
+  // percentage_charge lives on the subaccount and is set when it is created or
+  // updated, so changing PAYSTACK_PLATFORM_PCT does not reach a subaccount that
+  // already exists. paystack-subaccount.js stores what Paystack echoed back
+  // into paystack_platform_pct, and that is the only number the buyer's charge
+  // can safely be grossed up for.
+  //
+  // UNKNOWN IS TREATED AS ZERO, NOT AS THE ENVIRONMENT VARIABLE.
+  //
+  // A null here means this subaccount predates that column, so what Paystack
+  // has on it is genuinely not known at this end. Falling back to the variable
+  // would be a guess, and the guess fails expensively: if the variable says 10
+  // and the subaccount is really on 0, every buyer is charged 10% more than the
+  // price, Paystack settles all of it to the artist, the platform receives
+  // nothing, and no screen or record disagrees with any of it.
+  //
+  // So an unknown split charges no commission. The platform earns nothing from
+  // that seller until the subaccount is re-saved, which PUTs the current
+  // percentage and stores the echo, and that is the cheap failure.
+  const storedPlatformPct = Number(profileRes.data?.paystack_platform_pct);
+  const platformPctKnown = Number.isFinite(storedPlatformPct);
+  const paystackPlatformPct = platformPctKnown
+    ? Math.max(0, Math.min(100, storedPlatformPct))
+    : 0;
+
+  if (subaccountCode && !platformPctKnown && PAYSTACK_PLATFORM_PCT > 0) {
+    console.warn('[payee] subaccount', subaccountCode, 'for artist', artistId,
+      'has no stored percentage_charge, so this sale takes no platform commission',
+      'even though PAYSTACK_PLATFORM_PCT is', PAYSTACK_PLATFORM_PCT + '.',
+      'Have the artist re-save their bank details, or read the split off the',
+      'Paystack dashboard and set artist_payment_profiles.paystack_platform_pct.');
+  }
 
   // ── Paystack, first because it is the best outcome for the seller ─────────
   //
@@ -256,10 +290,12 @@ async function resolvePayee({ supabase, artistId, trackId, commissionPct = 0, pr
       subaccountCode,
       reason: 'seller_has_paystack_subaccount',
       collaboratorCount,
-      // The platform share is set by PAYSTACK_PLATFORM_PCT rather than the
-      // commissionPct passed in, because this route really can collect it at
-      // payment time and the two numbers answer different questions.
-      commissionPct: PAYSTACK_PLATFORM_PCT,
+      // The platform share is this subaccount's own percentage_charge rather
+      // than the commissionPct passed in, because this route really can collect
+      // it at payment time and the two numbers answer different questions. See
+      // the note above paystackPlatformPct: it is the value Paystack echoed
+      // back, which is the only one the charge can safely be grossed up for.
+      commissionPct: paystackPlatformPct,
       sellerEmail,
       sellerMerchantId: null,
     };
@@ -381,4 +417,4 @@ module.exports = {
   landedWithPlatform,
   resolvePayee,
   purchaseUnitFor,
-};
+};

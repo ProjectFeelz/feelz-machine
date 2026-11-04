@@ -154,45 +154,81 @@ exports.handler = async (event) => {
 
   const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-  // Anonymous is allowed. The token, when present, is only used to decide
-  // whether an artist may hear their own unpublished or unreleased track.
-  let userId = null;
+  // FOUR ROUND TRIPS TO FRANKFURT BECAME TWO.
+  //
+  // This function sits directly in front of the first note of audio: nothing
+  // plays until it answers, because playbackSrc has no URL to assign until it
+  // does. Measured from Johannesburg against the live site it was taking 1.0
+  // to 1.6 seconds, warm, every time.
+  //
+  // That was not a cold start. The project is in eu-central-1, so one round
+  // trip to Supabase is 250ms or so from here, and this did four of them one
+  // after another: verify the token, read the tracks, read the caller's
+  // artists and admin row, then sign. Three of those four do not depend on
+  // each other at all.
+  //
+  //   token verify ─┬─────────────► artists + admins ─┐
+  //                 │                                 ├─► sign
+  //   tracks read ──┴─────────────────────────────────-┘
+  //
+  // So the token verify and the track read start together, the privilege reads
+  // chase the token the moment it resolves, and signing waits for both. Two
+  // round trips deep instead of four, with no change to what is checked or to
+  // what any caller receives.
+  //
+  // Anonymous is still allowed. The token, when present, is only used to
+  // decide whether an artist may hear their own unpublished or unreleased
+  // track.
   const token = (event.headers['authorization'] || '').replace('Bearer ', '').trim();
-  if (token) {
-    const { data: { user } } = await admin.auth.getUser(token);
-    userId = user?.id || null;
-  }
+
+  const authPromise = token
+    ? admin.auth.getUser(token)
+        .then(({ data }) => data?.user?.id || null)
+        // A token that cannot be verified is an anonymous caller, which is the
+        // same thing this did before by reading through an undefined user.
+        .catch(() => null)
+    : Promise.resolve(null);
+
+  // Which of these tracks, if any, belong to the caller. One query rather than
+  // one per track. Admins get the same latitude as an owner.
+  const privilegePromise = authPromise.then(async (uid) => {
+    if (!uid) return { userId: null, ownArtistIds: new Set(), isAdmin: false };
+    const [{ data: ownArtists }, { data: adminRow }] = await Promise.all([
+      admin.from('artists').select('id').eq('user_id', uid),
+      admin.from('admins').select('user_id').eq('user_id', uid).maybeSingle(),
+    ]);
+    return {
+      userId: uid,
+      ownArtistIds: new Set((ownArtists || []).map(a => a.id)),
+      isAdmin: !!adminRow,
+    };
+  });
+
+  const tracksPromise = trackIds.length
+    ? admin
+        .from('tracks')
+        .select('id, file_url, youtube_url, is_published, is_preorder, release_date, artist_id')
+        .in('id', trackIds)
+    : Promise.resolve({ data: [], error: null });
+
+  const [tracksRes, privilege] = await Promise.all([tracksPromise, privilegePromise]);
+
+  const userId = privilege.userId;
+  const ownArtistIds = privilege.ownArtistIds;
+  const isAdmin = privilege.isAdmin;
 
   let tracks = [];
   if (trackIds.length) {
-    const { data, error: trackErr } = await admin
-      .from('tracks')
-      .select('id, file_url, youtube_url, is_published, is_preorder, release_date, artist_id')
-      .in('id', trackIds);
-
-    if (trackErr) {
-      console.error('[stream-url] track lookup failed:', trackErr.message);
+    if (tracksRes.error) {
+      console.error('[stream-url] track lookup failed:', tracksRes.error.message);
       return json(500, { error: 'lookup_failed' });
     }
-    tracks = data || [];
+    tracks = tracksRes.data || [];
     // Only a request that asked for tracks and got none is a 404. A request
     // for versions, beats or memos alongside them is not.
     if (!tracks.length && !versionIds.length && !beatIds.length && !memoIds.length) {
       return json(404, { error: 'track_not_found' });
     }
-  }
-
-  // Which of these tracks, if any, belong to the caller. One query rather than
-  // one per track. Admins get the same latitude as an owner.
-  let ownArtistIds = new Set();
-  let isAdmin = false;
-  if (userId) {
-    const [{ data: ownArtists }, { data: adminRow }] = await Promise.all([
-      admin.from('artists').select('id').eq('user_id', userId),
-      admin.from('admins').select('user_id').eq('user_id', userId).maybeSingle(),
-    ]);
-    ownArtistIds = new Set((ownArtists || []).map(a => a.id));
-    isAdmin = !!adminRow;
   }
 
   const now = Date.now();
@@ -382,4 +418,4 @@ exports.handler = async (event) => {
   }
 
   return json(200, { tracks: results, versions: versionResults, beats: beatResults, memos: memoResults });
-};
+};

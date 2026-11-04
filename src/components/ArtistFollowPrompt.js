@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
-import { resolveStreamSrc } from '../utils/streamUrl';
+import { resolveStreamSrc, playableFallback } from '../utils/streamUrl';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useHaptics } from '../hooks/useHaptics';
@@ -203,8 +203,19 @@ export default function ArtistFollowPrompt({ onDone }) {
     try {
       const audio      = new Audio();
       audioRef.current = audio;
-      // Signed when the bucket is private; file_url otherwise.
-      audio.src        = (await resolveStreamSrc(artist.topTrack)) || artist.topTrack.file_url;
+      // Signed when the bucket is private; file_url only while it is still a
+      // link that resolves. playableFallback returns null for a public storage
+      // URL into the now-private bucket, and assigning one of those loads just
+      // far enough to fire `error` and read as a broken preview button.
+      const src = (await resolveStreamSrc(artist.topTrack))
+               || playableFallback(artist.topTrack.file_url);
+      if (!src) {
+        console.warn('[follow-prompt] no playable URL for a preview of track',
+          artist.topTrack?.id, '- not starting one.');
+        setPreviewLoading(null);
+        return;
+      }
+      audio.src        = src;
       audio.volume     = 0.8;
       audio.preload    = 'auto';
       await new Promise((resolve, reject) => {
@@ -490,4 +501,4 @@ export default function ArtistFollowPrompt({ onDone }) {
       </div>
     </div>
   );
-}
+}

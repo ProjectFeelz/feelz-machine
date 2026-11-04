@@ -242,6 +242,20 @@ exports.handler = async (event) => {
   const row = {
     artist_id: ownArtist.id,
     paystack_subaccount_code: data.subaccount_code,
+    // WHAT PAYSTACK SAYS IT STORED, BECAUSE THAT IS WHAT THE CHARGE IS GROSSED
+    // UP FOR.
+    //
+    // percentage_charge lives on the subaccount, so moving
+    // PAYSTACK_PLATFORM_PCT does not reach a subaccount that already exists.
+    // netlify/lib/payee.js reads this column and netlify/lib/pricing.js grosses
+    // the buyer's charge up by it, so the artist nets their listed price and the
+    // buyer carries the commission.
+    //
+    // It is the ECHOED value and not platformShare on purpose. Grossing up for
+    // a cut Paystack is not actually taking would overcharge the buyer and hand
+    // the surplus to the artist, on every sale, with nothing anywhere
+    // disagreeing about it.
+    paystack_platform_pct: Number.isFinite(storedPlatformPct) ? storedPlatformPct : platformShare,
     paystack_bank_code: bankCode,
     // Paystack echoes the bank it resolved, which is more trustworthy than
     // the label the browser sent.
@@ -274,4 +288,4 @@ exports.handler = async (event) => {
     // rather than from what this function hoped it would store.
     artistSharePct: Number.isFinite(storedPlatformPct) ? 100 - storedPlatformPct : artistShare,
   });
-};
+};
