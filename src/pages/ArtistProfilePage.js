@@ -41,7 +41,7 @@ import ChallengeXPModal from '../components/ChallengeXPModal';
 import { askNotificationPermission } from '../utils/askNotificationPermission';
 import { fetchArtistFallbackCovers, artistImage } from '../utils/artistAvatar';
 import { sendArtistBroadcast, sendNotification } from '../utils/notify';
-import PayInRandButton from '../components/PayInRandButton';
+import PayOptions from '../components/PayOptions';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const EMOJI_REACTIONS = ['🔥', '❤️', '👏', '😮', '😂', '🎵'];
@@ -2405,11 +2405,13 @@ export default function ArtistProfilePage() {
                       }, 0);
                       return null;
                     })()}
-                    <div id="paypal-pwyw-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
-                    {/* Rand. The buyer's number goes with it, and the server
-                        floors it at what the artist set, so a chosen amount is
-                        honoured rather than quietly replaced by the minimum. */}
-                    <PayInRandButton trackId={pwywTrack?.id} amount={parseFloat(pwywFanPrice) || 0} />
+                    {/* Rand first when this seller is paid in rand. The buyer's
+                        number goes with it, and the server floors it at what the
+                        artist set, so a chosen amount is honoured rather than
+                        quietly replaced by the minimum. */}
+                    <PayOptions trackId={pwywTrack?.id} amount={parseFloat(pwywFanPrice) || 0}>
+                      <div id="paypal-pwyw-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
+                    </PayOptions>
                   </>
                 ) : (
                   <button onClick={async () => {
@@ -2490,14 +2492,14 @@ export default function ArtistProfilePage() {
                   <p className="text-xs" style={{ color: `${textColor}40` }}>High-quality MP3 download delivered instantly after payment</p>
                 </div>
                 {purchaseError && <p className="text-xs text-red-400 text-center">{purchaseError}</p>}
-                {!paypalReady && !purchaseError && (
-                  <div className="flex justify-center py-3"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>
-                )}
-                <div id="paypal-checkout-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
-                {/* Rand, through Paystack. The component asks the checkout itself and
-                    removes itself when the artist has no bank account on file, so this
-                    is a no-op on every artist paid through PayPal. */}
-                <PayInRandButton trackId={purchaseTrack.id} />
+                {/* Rand first when this seller is paid in rand, PayPal first when
+                    they are not. */}
+                <PayOptions trackId={purchaseTrack.id}>
+                  {!paypalReady && !purchaseError && (
+                    <div className="flex justify-center py-3"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>
+                  )}
+                  <div id="paypal-checkout-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
+                </PayOptions>
                 <button onClick={() => { setPurchaseTrack(null); setPurchasing(false); setPurchaseError(''); }}
                   className="w-full py-2.5 rounded-xl text-sm transition" style={{ color: `${textColor}40` }}>
                   Cancel
@@ -2938,4 +2940,4 @@ export default function ArtistProfilePage() {
       )}
     </div>
   );
-}
+}

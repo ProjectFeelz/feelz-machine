@@ -16,7 +16,7 @@ import {
 import ShareCard from './ShareCard';
 import { buildShareUrl } from '../utils/shareLink';
 import { TrackCommentsOverlay } from './TrackComments';
-import PayInRandButton from './PayInRandButton';
+import PayOptions from './PayOptions';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 
@@ -693,12 +693,18 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
                                             {parseFloat(fanPrice) > 0 ? (
                                                 <>
                                                     {purchaseError && <p className="text-xs text-red-400 text-center">{purchaseError}</p>}
-                                                    {!paypalReady && !purchaseError && <div className="flex justify-center py-2"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>}
-                                                    <div id="paypal-tas-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
-                                                    {/* Rand, through Paystack. The component asks the checkout itself and
-                                                        removes itself when the artist has no bank account on file, so this
-                                                        is a no-op on every artist paid through PayPal. */}
-                                                    <PayInRandButton trackId={track.id} />
+                                                    {/* Rand first when this seller is paid in rand, PayPal first when
+                                                        they are not. PayOptions decides, and the PayPal container is
+                                                        handed to it untouched: never hidden, never remounted.
+
+                                                        The buyer's chosen amount goes with the rand path now, the way it
+                                                        already did on the artist profile page. Without it a
+                                                        pay-what-you-want offer was floored at the artist's minimum the
+                                                        moment the buyer paid in rand. */}
+                                                    <PayOptions trackId={track.id} amount={parseFloat(fanPrice) || 0}>
+                                                        {!paypalReady && !purchaseError && <div className="flex justify-center py-2"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>}
+                                                        <div id="paypal-tas-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
+                                                    </PayOptions>
                                                 </>
                                             ) : (
                                                 <button onClick={async () => {
@@ -769,12 +775,11 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
                                                 </button>
                                             ) : (
                                                 <>
-                                                    {!paypalReady && !purchaseError && <div className="flex justify-center py-2"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>}
-                                                    <div id="paypal-tas-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
-                                                    {/* Rand, through Paystack. The component asks the checkout itself and
-                                                        removes itself when the artist has no bank account on file, so this
-                                                        is a no-op on every artist paid through PayPal. */}
-                                                    <PayInRandButton trackId={track.id} />
+                                                    {/* Fixed price. Rand first when this seller is paid in rand. */}
+                                                    <PayOptions trackId={track.id}>
+                                                        {!paypalReady && !purchaseError && <div className="flex justify-center py-2"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>}
+                                                        <div id="paypal-tas-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
+                                                    </PayOptions>
                                                 </>
                                             )}
                                         </>
@@ -938,4 +943,4 @@ export default function TrackActionSheet({ track, artist, onClose, initialView =
         )}
         </>
     );
-}
+}

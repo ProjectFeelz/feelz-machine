@@ -59,12 +59,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-
-// Live only when the key says live. Anything else, including a missing key,
-// is treated as not live, so the failure direction is always the safe one.
-const PUBLIC_KEY = process.env.REACT_APP_PAYSTACK_PUBLIC_KEY || '';
-const ALLOW_TEST = process.env.REACT_APP_PAYSTACK_ALLOW_TEST === 'true';
-const PAYSTACK_IS_LIVE = PUBLIC_KEY.startsWith('pk_live_') || ALLOW_TEST;
+// Live only when the key says live. The rule lives in the hook now, imported
+// rather than copied, because two copies of a rule about whether real money
+// can move is one copy too many.
+import { PAYSTACK_IS_LIVE } from '../hooks/useRandQuote';
 
 // PAYING WITHOUT LEAVING THE APP.
 //
@@ -129,6 +127,18 @@ export default function PayInRandButton({
   // button never appears there either way; this only decides whether the
   // notice does.
   announceWhenComingSoon = true,
+  // A quote already fetched by the screen, through useRandQuote. Passed in by
+  // src/components/PayOptions.js, which needs the answer before it can decide
+  // which payment option goes first and should not make the same request
+  // twice to tell the button about it.
+  //
+  // undefined means nobody has asked, so this fetches its own as it always
+  // did. null from a caller that did ask means there is no chargeable rand
+  // price, which is not the same thing.
+  quote: quoteProp = undefined,
+  // Render as the main way to pay rather than the alternative. Set when the
+  // seller is actually paid in rand, which is the only time it is true.
+  primary = false,
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -151,8 +161,13 @@ export default function PayInRandButton({
   // Set while the Paystack overlay is open, so the button can say so and the
   // watcher below knows what reference to ask about.
   const [awaiting, setAwaiting] = useState(null);
-  // The rand price, asked for before the buyer commits to anything.
-  const [quote, setQuote] = useState(null);
+  // The rand price, asked for before the buyer commits to anything. Only used
+  // when the screen did not already have one.
+  const [ownQuote, setOwnQuote] = useState(null);
+
+  // A quote handed in wins, including a handed-in null, which is a real answer
+  // meaning there is no chargeable rand price for this item.
+  const quote = quoteProp !== undefined ? quoteProp : ownQuote;
 
   // Declared above every early return below it, because a hook cannot be
   // skipped on one render and run on the next.
@@ -221,6 +236,9 @@ export default function PayInRandButton({
   // Paystack. A failed quote is not an error worth showing, the button simply
   // keeps its plain label.
   useEffect(() => {
+    // The screen already asked and passed the answer down. Asking again would
+    // be the same request for the same number.
+    if (quoteProp !== undefined) return undefined;
     if (!PAYSTACK_IS_LIVE) return undefined;
     if (!trackId && !albumId) return undefined;
 
@@ -239,16 +257,21 @@ export default function PayInRandButton({
         });
         if (!res.ok) return;
         const q = await res.json();
-        if (!cancelled && q && q.available && q.zar > 0) setQuote(q);
+        if (!cancelled && q && q.available && q.zar > 0) setOwnQuote(q);
       } catch {
         // No quote, no number on the button. Nothing else changes.
       }
     })();
     return () => { cancelled = true; };
-  }, [trackId, albumId, licenceId, amount]);
+  }, [trackId, albumId, licenceId, amount, quoteProp]);
 
   if (unavailable) return null;
   if (!trackId && !albumId) return null;
+
+  // The seller is paid some other way, and the quote said so before anybody
+  // pressed anything. This is the end of the old shape where a buyer learned
+  // it by pressing the button and watching it apologise.
+  if (quote && quote.sellerTakesRand === false) return null;
 
   // Nothing below this line can start a payment while the account is not live.
   if (!PAYSTACK_IS_LIVE) {
@@ -395,8 +418,16 @@ export default function PayInRandButton({
         onClick={() => start()}
         className={
           className ||
-          'w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-white/10 ' +
-          'border border-white/15 hover:bg-white/15 disabled:opacity-50 transition-colors'
+          (primary
+            // The main way to pay this seller, so it looks like the screen's
+            // main action: solid, the same treatment Download and Confirm get
+            // everywhere else on the site. A faint outlined button sitting
+            // above PayPal's full-colour one reads as the lesser option
+            // however it is ordered.
+            ? 'w-full px-4 py-3 rounded-xl text-sm font-bold text-black bg-white ' +
+              'hover:bg-white/90 disabled:opacity-50 transition-colors'
+            : 'w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-white/10 ' +
+              'border border-white/15 hover:bg-white/15 disabled:opacity-50 transition-colors')
         }
       >
         {awaiting
@@ -418,4 +449,4 @@ export default function PayInRandButton({
       {error ? <p className="text-xs text-red-400">{error}</p> : null}
     </div>
   );
-}
+}

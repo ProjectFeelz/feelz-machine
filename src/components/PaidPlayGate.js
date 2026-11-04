@@ -35,7 +35,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Music, Loader, ShoppingCart, X, Headphones } from 'lucide-react';
 import { usePaidPlayLimit } from '../hooks/usePaidPlayLimit';
-import PayInRandButton from './PayInRandButton';
+import PayOptions from './PayOptions';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 
@@ -203,14 +203,15 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
                   <span>Sign in to purchase · ${quote?.buyerPays || track.download_price?.toFixed(2)}</span>
                 </button>
               )}
-              {user && !paypalReady && !error && (
-                <div className="flex justify-center py-3"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>
-              )}
-              {user && <div id="paypal-gate-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />}
-              {/* Rand, through Paystack. The component asks the checkout itself and
-                  removes itself when the artist has no bank account on file, so this
-                  is a no-op on every artist paid through PayPal. */}
-              <PayInRandButton trackId={track.id} />
+              {/* Rand first when this seller is paid in rand, PayPal first when
+                  they are not. The PayPal container keeps its own `user` guard
+                  inside, so nothing about when it mounts has changed. */}
+              <PayOptions trackId={track.id}>
+                {user && !paypalReady && !error && (
+                  <div className="flex justify-center py-3"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>
+                )}
+                {user && <div id="paypal-gate-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />}
+              </PayOptions>
               <button onClick={onClose} className="w-full py-2 text-xs text-white/25 hover:text-white/40 transition">
                 Maybe later
               </button>
@@ -220,4 +221,4 @@ export default function PaidPlayGate({ track, artist, onClose, onPurchaseComplet
       </div>
     </div>
   );
-}
+}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import PriceBreakdown, { useQuote } from '../components/PriceBreakdown';
-import PayInRandButton from '../components/PayInRandButton';
+import PayOptions from '../components/PayOptions';
 import { Helmet } from 'react-helmet-async';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
@@ -602,12 +602,19 @@ export default function BeatDetailPage() {
                 ) : purchasing ? (
                   <div>
                     <PriceBreakdown quote={licenceQuote} sellerName={artist?.artist_name} className="mb-3" />
-                    <div id="beat-paypal-container" className="min-h-[48px]" />
-                    {/* Rand. selectedLic is sent so the server reads THIS
-                        licence's price off the beat. Without it an exclusive
-                        would be charged at the beat's download price. */}
-                    <PayInRandButton trackId={track.id} licenceId={selectedLic?.id || null}
-                      label={`Pay in rand · ${selectedLic?.label || 'licence'}`} />
+                    {/* Rand first when this seller is paid in rand. selectedLic
+                        is sent so the server reads THIS licence's price off the
+                        beat. Without it an exclusive would be charged at the
+                        beat's download price.
+
+                        The space-y here is new: the rand button used to carry its
+                        own spacing wrapper, and PayOptions renders siblings. */}
+                    <div className="space-y-2">
+                      <PayOptions trackId={track.id} licenceId={selectedLic?.id || null}
+                        randLabel={`Pay in rand · ${selectedLic?.label || 'licence'}`}>
+                        <div id="beat-paypal-container" className="min-h-[48px]" />
+                      </PayOptions>
+                    </div>
                     {purchaseError && <p className="text-xs text-red-400 mt-2 text-center">{purchaseError}</p>}
                   </div>
                 ) : (
@@ -747,4 +754,4 @@ export default function BeatDetailPage() {
       )}
     </div>
   );
-}
+}

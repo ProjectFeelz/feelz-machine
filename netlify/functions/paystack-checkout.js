@@ -154,30 +154,70 @@ exports.handler = async (event) => {
       const quoteAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
       let quoteUsd = 0;
+      // Who is selling. Lifted out of the branch below because the quote now
+      // answers two questions, not one: what this costs in rand, and whether
+      // this seller is paid in rand at all.
+      let quoteArtistId = null;
       if (qTrackId) {
         const { data: qTrack } = await quoteAdmin
           .from('tracks')
           .select('id, artist_id, album_id, download_price, pay_what_you_want, minimum_price, beat_licence, is_published, is_preorder, release_date')
           .eq('id', qTrackId).maybeSingle();
         if (!qTrack) return json(404, { error: 'not_found' });
+        quoteArtistId = qTrack.artist_id || null;
         const priced = await pricing_resolveTrackPrice({
           supabase: quoteAdmin, track: qTrack, licenceId: qLicenceId, offeredAmount: qAmount,
         });
-        if (priced.error) return json(200, { available: false });
+        if (priced.error) return json(200, { available: false, sellerTakesRand: false });
         quoteUsd = priced.price;
       } else {
         const { data: qAlbum } = await quoteAdmin
-          .from('albums').select('price').eq('id', qAlbumId).maybeSingle();
+          .from('albums').select('price, artist_id').eq('id', qAlbumId).maybeSingle();
+        quoteArtistId = (qAlbum && qAlbum.artist_id) || null;
         quoteUsd = Number(qAlbum && qAlbum.price) || 0;
       }
 
-      if (!(quoteUsd > 0)) return json(200, { available: false });
+      if (!(quoteUsd > 0)) return json(200, { available: false, sellerTakesRand: false });
+
+      // IS THIS SELLER PAID IN RAND?
+      //
+      // Nothing used to answer that before a payment was started. The rand
+      // button rendered on every selling screen and found out by being
+      // pressed: the checkout replied 409, the button apologised and removed
+      // itself. That shape is wrong twice over. It offers rand to buyers of
+      // artists who are paid through PayPal, and, the more expensive way
+      // round, it gives a South African artist who has added a bank account
+      // no better billing than one who has not, because nothing on the screen
+      // knows the difference.
+      //
+      // resolvePayee is the single authority on who gets paid, so it answers
+      // this too, rather than reading the subaccount column here and becoming
+      // a second opinion that can drift from the first. processors:
+      // ['paystack'] asks only the question being asked; a seller with no
+      // subaccount comes back on a PayPal route, which is the false below.
+      let sellerTakesRand = false;
+      try {
+        const qRouting = await payeeLib.resolvePayee({
+          supabase: quoteAdmin,
+          artistId: quoteArtistId,
+          trackId: qTrackId || null,
+          commissionPct: 0,
+          processors: ['paystack'],
+        });
+        sellerTakesRand = qRouting.processor === 'paystack' && Boolean(qRouting.subaccountCode);
+      } catch (e) {
+        // Cannot tell, reported as such rather than as a no. A screen that
+        // gets null keeps the layout it had before any of this existed, so a
+        // failed lookup never silently removes a way to pay.
+        console.error('[paystack-checkout] quote could not resolve the seller route:', e.message);
+        sellerTakesRand = null;
+      }
 
       let quoteRate;
       try {
         quoteRate = await fx.getUsdZarRate(quoteAdmin);
       } catch {
-        return json(200, { available: false });
+        return json(200, { available: false, sellerTakesRand });
       }
 
       const q = pricing.usdToPaystackChargeGrossedUp(quoteUsd, quoteRate.rate);
@@ -189,6 +229,10 @@ exports.handler = async (event) => {
         // show it: this is the artist's price plus the card fee.
         artistZar: q.artistZar,
         feeZar: q.feeZar,
+        // true  the seller has a Paystack subaccount, rand is their route
+        // false the seller is paid another way, do not offer rand
+        // null  could not be determined, fall back to the old layout
+        sellerTakesRand,
       });
     }
 
@@ -525,4 +569,4 @@ exports.handler = async (event) => {
     artistZar: charge.artistZar,
     feeZar: charge.feeZar,
   });
-};
+};

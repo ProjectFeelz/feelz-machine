@@ -20,7 +20,7 @@ import { buildShareUrl } from '../utils/shareLink';
 import { showReceipt } from '../components/PurchaseReceipt';
 import PriceBreakdown, { useQuote } from '../components/PriceBreakdown';
 import { CommentButton } from '../components/TrackComments';
-import PayInRandButton from '../components/PayInRandButton';
+import PayOptions from '../components/PayOptions';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
 const BASE_URL = 'https://www.feelzmachine.com';
@@ -764,14 +764,16 @@ export default function AlbumDetailPage() {
                   </p>
                 </div>
                 {purchaseError && <p className="text-xs text-red-400 text-center">{purchaseError}</p>}
-                {!paypalReady && !purchaseError && <div className="flex justify-center py-3"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>}
                 <PriceBreakdown quote={buyQuote} sellerName={artist?.artist_name} />
-                <div id="paypal-album-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
-                {/* Rand, through Paystack. The component asks the checkout itself and
-                    removes itself when the artist has no bank account on file, so this
-                    is a no-op on every artist paid through PayPal. */}
-                <PayInRandButton trackId={purchaseTarget.type === 'album' ? null : (purchaseTarget.track?.id || null)}
-                  albumId={purchaseTarget.type === 'album' ? album.id : null} />
+                {/* Rand first when this seller is paid in rand, PayPal first when
+                    they are not. Works for a whole album as well as one track:
+                    the quote reads the album's own artist. */}
+                <PayOptions
+                  trackId={purchaseTarget.type === 'album' ? null : (purchaseTarget.track?.id || null)}
+                  albumId={purchaseTarget.type === 'album' ? album.id : null}>
+                  {!paypalReady && !purchaseError && <div className="flex justify-center py-3"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>}
+                  <div id="paypal-album-container" style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '4px' }} />
+                </PayOptions>
                 <button onClick={() => { setPurchaseTarget(null); setPurchaseError(''); }}
                   className="w-full py-2.5 rounded-xl text-sm text-white/30 hover:text-white/50 transition">
                   Cancel
@@ -801,4 +803,4 @@ export default function AlbumDetailPage() {
       )}
     </div>
   );
-}
+}
