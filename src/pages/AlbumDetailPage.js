@@ -239,13 +239,13 @@ export default function AlbumDetailPage() {
       let albumData = null;
       if (isUUID) {
         const { data } = await supabase.from('albums')
-          .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
+          .select('*, artists!albums_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified)')
           .eq('id', id).maybeSingle();
         albumData = data;
       }
       if (!albumData) {
         const { data: bySlug } = await supabase.from('albums')
-          .select('*, artists(id, artist_name, slug, profile_image_url, is_verified)')
+          .select('*, artists!albums_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified)')
           .eq('slug', id).maybeSingle();
         albumData = bySlug;
       }

@@ -295,7 +295,7 @@ export default function HomePage() {
           .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
           .eq('is_published', true).eq('is_podcast', false).order('created_at', { ascending: false }).limit(60),
         supabase.from('albums')
-          .select('*, artists(artist_name, slug, profile_image_url)')
+          .select('*, artists!albums_artist_id_fkey(artist_name, slug, profile_image_url)')
           .eq('is_published', true).order('created_at', { ascending: false }).limit(40),
         supabase.from('tracks')
           .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url, is_verified, tier)')
@@ -1250,4 +1250,4 @@ export default function HomePage() {
       `}</style>
     </div>
   );
-}
+}

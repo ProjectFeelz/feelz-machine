@@ -332,7 +332,7 @@ export default function BrowsePage() {
           supabase.from('artists')
             .select('id, artist_name, slug, profile_image_url, is_verified, follower_count, display_follower_count, total_streams, tier')
             .ilike('artist_name', `%${q}%`).limit(20),
-          supabase.from('albums').select('*, artists(artist_name, slug)')
+          supabase.from('albums').select('*, artists!albums_artist_id_fkey(artist_name, slug)')
             .eq('is_published', true).ilike('title', `%${q}%`).limit(20),
         ]);
 
@@ -435,7 +435,7 @@ export default function BrowsePage() {
           .select('*, albums(title, cover_artwork_url, price), artists!tracks_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified)')
           .eq('is_published', true).eq('is_podcast', false).order('created_at', { ascending: false }).limit(50),
         supabase.from('albums')
-          .select('*, artists(artist_name, slug)')
+          .select('*, artists!albums_artist_id_fkey(artist_name, slug)')
           .eq('is_published', true).order('release_date', { ascending: false }).limit(60),
         // A card for an artist with no picture and nobody following them is a
         // grey circle with a name under it, and a screen full of those makes
@@ -1457,4 +1457,4 @@ function AlbumTile({ album, navigate }) {
       </p>
     </button>
   );
-}
+}
