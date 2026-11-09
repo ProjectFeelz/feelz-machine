@@ -24,7 +24,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { Mail, Lock, Eye, EyeOff, Loader, ArrowLeft } from 'lucide-react';
 import { supabase } from '../supabaseClient';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, stashAgeConfirmed } from '../contexts/AuthContext';
 import VinylRecord from '../components/VinylRecord';
 import RetailTonearm from '../components/retail/RetailTonearm';
 import { safeRedirectPath } from '../utils/safeRedirect';
@@ -176,10 +176,25 @@ export default function LoginPage() {
   // they pressed it. Showing it up front costs one line of the page and
   // removes a dead end.
   //
-  // What is ENFORCED has not changed: Google needs it on both tabs, because
-  // Google can create an account from either, and signing in with an email and
-  // password does not, which is the `mode !== 'signin'` test in submit below.
+  // WHAT IS ENFORCED, AND WHERE IT IS RECORDED.
+  //
+  // Every path that can CREATE an account asks for the tick: email sign-up,
+  // the magic link, Google from either tab, and the Plugin Gallery bridge.
+  // The bridge used to be the hole in that list. It leaves the origin
+  // entirely and had no check at all, while the banner above it told people
+  // to tick a box that nothing on that path read.
+  //
+  // Two paths deliberately do NOT ask. Signing in with an email and password
+  // creates nothing, and neither does a password reset: an account that
+  // exists already gave its answer, and holding a password reset behind an
+  // age box is a lockout, not a safeguard.
+  //
+  // The tick is also now RECORDED, which is the part that was missing. It
+  // used to be local state and nothing else: it blocked the button and was
+  // thrown away. See the long note above stashAgeConfirmed in
+  // src/contexts/AuthContext.js for the two mechanisms and why it takes two.
   const needsAge = true;
+  const createsAccount = mode === 'signup' || mode === 'link';
   const clean = m => (m || 'Something went wrong.').replace('AuthApiError: ', '');
 
   const submit = async (e) => {
@@ -187,7 +202,7 @@ export default function LoginPage() {
     setError(''); setNotice('');
     const addr = email.trim();
     if (!addr) { setError('Enter your email address.'); return; }
-    if (needsAge && mode !== 'signin' && !ageConfirmed) { setError('Please confirm you are 13 or older.'); return; }
+    if (needsAge && createsAccount && !ageConfirmed) { setError('Please confirm you are 13 or older.'); return; }
 
     setLoading(true);
     try {
@@ -198,13 +213,14 @@ export default function LoginPage() {
       } else if (mode === 'signup') {
         if (password.length < 8) { setError('Use at least 8 characters for your password.'); setLoading(false); return; }
         stashRole();
+        stashAgeConfirmed();
         // The role goes with the sign-up, not just into localStorage.
         //
         // stashRole still writes the local key because it is the faster path
         // when the confirmation link is opened in this same browser. The fourth
         // argument is what makes it work when it is not, which on a phone is
         // most of the time. See signUpWithEmail in AuthContext.
-        const data = await signUpWithEmail(addr, password, '/setup', role);
+        const data = await signUpWithEmail(addr, password, '/setup', role, ageConfirmed);
         // With email confirmation on, Supabase returns no session and an empty
         // identities list if the address is already registered.
         if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
@@ -214,7 +230,8 @@ export default function LoginPage() {
         }
       } else if (mode === 'link') {
         stashRole();
-        await signInWithMagicLink(addr);
+        stashAgeConfirmed();
+        await signInWithMagicLink(addr, ageConfirmed);
         setNotice(`We sent a sign-in link to ${addr}. Tap it to come straight in.`);
       } else if (mode === 'forgot') {
         const { error: e2 } = await supabase.auth.resetPasswordForEmail(addr, {
@@ -236,11 +253,21 @@ export default function LoginPage() {
     // Google can create a new account from either tab, so the age check applies.
     if (!ageConfirmed) { setGoogleAge(true); setError('Please confirm you are 13 or older, then tap Google again.'); return; }
     setLoading(true); setError('');
-    try { stashRole(); await signInWithGoogle(); }
+    // signInWithOAuth takes no user metadata, so localStorage is the only way
+    // the tick survives the trip to Google and back. It comes back to this
+    // same browser, so the key is still here when the session lands.
+    try { stashRole(); stashAgeConfirmed(); await signInWithGoogle(); }
     catch (err) { setError(clean(err.message)); setLoading(false); }
   };
 
   const handlePluginGallery = () => {
+    // THE HOLE THIS CLOSES. The bridge can create a Feelz Machine account for
+    // somebody who has never seen this form's age box, and it had no check at
+    // all, while the banner above it said "Tick the age box and send the
+    // link". Now it asks, and the tick is stashed for the return trip like
+    // Google's, because the bridge leaves the origin and comes back.
+    if (!ageConfirmed) { setError('Please confirm you are 13 or older, then tap Plugin Gallery again.'); return; }
+    stashAgeConfirmed();
     const state = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
     sessionStorage.setItem('pg_bridge_state', state);
     if (redirectTo) sessionStorage.setItem('post_login_redirect', redirectTo);
@@ -339,7 +366,12 @@ export default function LoginPage() {
               </div>
             )}
 
-            {needsAge && (
+            {/* Shown on every tab that can create an account, including
+                sign-in, because Google and the Plugin Gallery bridge both sit
+                under the sign-in tab and both can create one. Not on the
+                password-reset tab, where nothing is created and a box that
+                nothing reads is just a question with no purpose. */}
+            {needsAge && mode !== 'forgot' && (
               <label className="flex items-center space-x-2.5 cursor-pointer text-[12px] text-white/45">
                 <input type="checkbox" checked={ageConfirmed} onChange={e => { setAgeConfirmed(e.target.checked); setError(''); }}
                   className="w-4 h-4 accent-white" />
@@ -439,4 +471,4 @@ export default function LoginPage() {
       )}
     </div>
   );
-}
+}

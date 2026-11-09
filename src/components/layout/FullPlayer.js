@@ -1106,9 +1106,31 @@ export default function FullPlayer() {
                     className="w-14 h-14 flex items-center justify-center active:scale-95 transition-transform">
                     <SkipForward className="w-7 h-7 text-white" fill="white" />
                   </button>
+                  {/* REPEAT ALL NEEDS TO LOOK DIFFERENT FROM REPEAT OFF.
+                      It did not. Both drew the same plain Repeat glyph and
+                      differed only by a text colour, so cycling off -> one ->
+                      all showed Repeat1 and then went back to the same glyph
+                      the off state uses. Pressing through to repeat-all read
+                      as having switched it off, which is why it looked like
+                      the press was ignored. The queue logic was always right:
+                      playNextFromRef wraps to 0 on 'all' and the suggestion
+                      extender is already skipped for it.
+
+                      The dot is what makes it unmistakable, and it is the
+                      convention every music player uses. The title says it in
+                      words for anyone hovering. */}
                   <button onClick={() => { tap(); toggleRepeat(); }}
-                    className={`w-12 h-12 flex items-center justify-center ${repeat !== 'none' ? 'text-white' : 'text-white/30'}`}>
+                    title={repeat === 'one' ? 'Repeating this track'
+                         : repeat === 'all' ? 'Repeating everything'
+                         : 'Repeat off'}
+                    aria-label={repeat === 'one' ? 'Repeating this track'
+                              : repeat === 'all' ? 'Repeating everything'
+                              : 'Repeat off'}
+                    className={`relative w-12 h-12 flex items-center justify-center ${repeat !== 'none' ? 'text-white' : 'text-white/30'}`}>
                     {repeat === 'one' ? <Repeat1 className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
+                    {repeat === 'all' && (
+                      <span className="absolute bottom-2 w-1 h-1 rounded-full bg-white" />
+                    )}
                   </button>
                 </div>
 
@@ -1203,4 +1225,4 @@ export default function FullPlayer() {
       )}
     </>
   );
-}
+}

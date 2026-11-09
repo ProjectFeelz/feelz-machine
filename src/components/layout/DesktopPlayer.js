@@ -122,8 +122,17 @@ export default function DesktopPlayer() {
                <button onClick={playNext} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/10 transition text-white/70 hover:text-white">
                   <SkipForward className="w-5 h-5" fill="currentColor" />
   </button>
-               <button onClick={toggleRepeat} className={`w-8 h-8 flex items-center justify-center rounded-full transition ${repeat !== 'none' ? 'text-white' : 'text-white/30 hover:text-white/60'}`}>
+               {/* The dot marks repeat-all. Without it, 'all' drew the same
+                   glyph as 'off' and differed only by a colour, so pressing
+                   past repeat-one looked like switching repeat off. See the
+                   fuller note on the same control in FullPlayer.js. */}
+               <button onClick={toggleRepeat}
+                 title={repeat === 'one' ? 'Repeating this track'
+                      : repeat === 'all' ? 'Repeating everything'
+                      : 'Repeat off'}
+                 className={`relative w-8 h-8 flex items-center justify-center rounded-full transition ${repeat !== 'none' ? 'text-white' : 'text-white/30 hover:text-white/60'}`}>
 {repeat === 'one' ? <Repeat1 className="w-4 h-4" /> : <Repeat className="w-4 h-4" />}
+{repeat === 'all' && <span className="absolute bottom-0.5 w-1 h-1 rounded-full bg-white" />}
 </button>
   </div>
  {/* Time */}
@@ -202,4 +211,4 @@ export default function DesktopPlayer() {
                   )}
             </>
   );
-}
+}

@@ -684,18 +684,48 @@ export function PlayerProvider({ children }) {
   // only for the track on screen. A failed lookup leaves what was there.
   //
   // Declared above playNextFromRef on purpose, because that calls it.
+  // THE SLUG IS FILLED IN HERE TOO, AND FOR THE SAME REASON.
+  //
+  // Every artist name in the player chrome is a link, and all three write the
+  // same guard: MiniPlayer, DesktopPlayer and FullPlayer each do
+  // `artist_slug && navigate(...)`. So a missing slug does not fail loudly, it
+  // does nothing at all. You tap the artist's name and the app ignores you,
+  // which is indistinguishable from a broken button and is exactly what it
+  // was reported as.
+  //
+  // It is intermittent, which is what makes it hard to place: a track played
+  // from the For You feed or picked up by a queue suggestion carries a slug,
+  // because those two map it. A track played from a story, a post, the
+  // collection page, a listening session or the leaderboard does not, because
+  // those queries never joined artists. Same player, same button, works or
+  // does nothing depending only on where the track came from.
+  //
+  // Note the guard now waits for BOTH to be present. The old
+  // `if (track.artist_name) return` meant a track that arrived with a name and
+  // no slug, which is the common case above, never got one.
   const fillArtistName = useCallback(async (track) => {
-    if (!track?.id || track.artist_name) return;
+    if (!track?.id) return;
+    if (track.artist_name && track.artist_slug) return;
     try {
       const { data } = await supabase
         .from('tracks')
-        .select('artists!tracks_artist_id_fkey(artist_name)')
+        .select('artists!tracks_artist_id_fkey(artist_name, slug)')
         .eq('id', track.id)
         .maybeSingle();
       const name = data?.artists?.artist_name;
-      if (!name) return;
-      setCurrentTrack(prev => (prev && prev.id === track.id ? { ...prev, artist_name: name } : prev));
-      const patch = (list) => (list || []).map(t => (t.id === track.id ? { ...t, artist_name: name } : t));
+      const slug = data?.artists?.slug;
+      if (!name && !slug) return;
+
+      // Only ever adds what is missing, so a caller that resolved one of the
+      // two keeps its own value.
+      const merge = (t) => ({
+        ...t,
+        artist_name: t.artist_name || name || null,
+        artist_slug: t.artist_slug || slug || null,
+      });
+
+      setCurrentTrack(prev => (prev && prev.id === track.id ? merge(prev) : prev));
+      const patch = (list) => (list || []).map(t => (t.id === track.id ? merge(t) : t));
       setQueue(prev => patch(prev));
       queueRef.current = patch(queueRef.current);
     } catch {
@@ -1898,4 +1928,4 @@ export function PlayerProvider({ children }) {
   );
 }
 
-export const usePlayer = () => useContext(PlayerContext);
+export const usePlayer = () => useContext(PlayerContext);

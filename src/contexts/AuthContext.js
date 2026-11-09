@@ -29,6 +29,44 @@ export function pendingCreatorRole(sessionUser) {
   return r;
 }
 
+// ── The 13-or-older confirmation ────────────────────────────────────────────
+//
+// WHAT WAS WRONG. The checkbox on the sign-in page was a local useState and
+// nothing else. It blocked the submit button and was then thrown away: no
+// metadata, no column, no record. user_profiles.age_confirmed existed and
+// nothing in the codebase ever wrote to it, which is why 203 of 227 profiles
+// have it false. So the platform could not answer "did this account confirm an
+// age" for almost anybody, and the Plugin Gallery bridge did not even ask.
+//
+// WHAT THIS IS AND IS NOT. It is self-attestation, a person ticking a box, and
+// recording it is all a tick can ever be worth. It is not identity or age
+// VERIFICATION, and nothing here should be described as that. What it gives is
+// a per-account record, with a time, that the box was ticked, which is the
+// thing a 13+ gate is actually asked to produce.
+//
+// TWO MECHANISMS, BECAUSE NEITHER COVERS EVERY PATH.
+//
+//   user_metadata   set at sign-up for email and magic link. Server side, so it
+//                   survives the confirmation link being opened in the mail
+//                   client's browser, on another device, or after a wipe. This
+//                   is the half that actually works on a phone.
+//   localStorage    the only option for Google and the Plugin Gallery bridge,
+//                   because signInWithOAuth takes no user metadata and the
+//                   bridge leaves the origin entirely. Both come back to THIS
+//                   browser, so the key is still here when they land.
+//
+// Same split, and the same reasoning, as pendingCreatorRole above.
+const AGE_KEY = 'pending_age_confirmed';
+
+export function stashAgeConfirmed() {
+  try { localStorage.setItem(AGE_KEY, '1'); } catch {}
+}
+
+export function pendingAgeConfirmed(sessionUser) {
+  if (sessionUser?.user_metadata?.age_confirmed === true) return true;
+  try { return localStorage.getItem(AGE_KEY) === '1'; } catch { return false; }
+}
+
 const AuthContext = createContext({});
 
 export function AuthProvider({ children }) {
@@ -312,6 +350,44 @@ export function AuthProvider({ children }) {
         })();
       }
     } catch {}
+
+    // Record the 13-or-older tick, once, on whichever path brought them here.
+    //
+    // Fire and forget, like the affiliate block above: a person who confirmed
+    // their age does not get held at a spinner because a write is slow, and a
+    // failed write is retried the next time they load the app, because this
+    // runs on every session load and only writes when the column is not
+    // already true.
+    //
+    // The trigger in fm_age_confirmation.sql covers the email and magic-link
+    // paths server side. This covers Google and the Plugin Gallery bridge,
+    // which cannot carry metadata, and acts as the backstop for the other two.
+    (async () => {
+      try {
+        if (!pendingAgeConfirmed(sessionUser)) return;
+        // age_confirmations, not user_profiles.age_confirmed. Only 227 of the
+        // 332 people on this platform have a user_profiles row at all, and its
+        // `name` column is NOT NULL, so there is no safe row to create here.
+        // Every account can have a row in age_confirmations, which is the
+        // point of it being its own table.
+        //
+        // Insert, not upsert with a merge: the first confirmation stands, and a
+        // duplicate key is the normal outcome of loading the app twice.
+        const { error } = await supabase
+          .from('age_confirmations')
+          .insert({ user_id: sessionUser.id, method: 'client' });
+        // 23505 is unique_violation: already recorded, nothing to do.
+        if (error && error.code !== '23505') {
+          // The stash is deliberately left in place, so the next load retries.
+          console.warn('[auth] age confirmation not recorded yet:', error.code, error.message);
+          return;
+        }
+        try { localStorage.removeItem(AGE_KEY); } catch {}
+      } catch (e) {
+        console.warn('[auth] age confirmation write threw:', e.message);
+      }
+    })();
+
     try {
       await Promise.all([
         fetchProfile(sessionUser.id),
@@ -381,12 +457,17 @@ export function AuthProvider({ children }) {
     if (error) throw error;
   };
 
-  const signInWithMagicLink = async (email) => {
+  // ageConfirmed rides in options.data, which signInWithOtp writes to
+  // user_metadata when it creates the account. A magic link is opened in the
+  // mail client as often as not, so this is the half that survives the trip;
+  // stashAgeConfirmed in the caller covers the same browser.
+  const signInWithMagicLink = async (email, ageConfirmed = false) => {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
         emailRedirectTo: `${window.location.origin}/setup`,
         shouldCreateUser: true,
+        ...(ageConfirmed ? { data: { age_confirmed: true } } : {}),
       },
     });
     if (error) throw error;
@@ -399,7 +480,7 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const signUpWithEmail = async (email, password, redirectPath = '/setup', creatorRole = null) => {
+  const signUpWithEmail = async (email, password, redirectPath = '/setup', creatorRole = null, ageConfirmed = false) => {
     // creator_role goes into user_metadata, and that is the whole point.
     //
     // The Artist / Sell beats choice used to live ONLY in localStorage. With
@@ -416,15 +497,21 @@ export function AuthProvider({ children }) {
     // user_metadata is stored on the auth user, server side. It is attached to
     // the session wherever that session is opened, so the choice survives the
     // round trip through the mail client, a new device, and a cleared browser.
-    const meta = (creatorRole === 'artist' || creatorRole === 'beatmaker')
-      ? { creator_role: creatorRole }
-      : undefined;
+    //
+    // age_confirmed rides along for exactly the same reason, and it is the
+    // reason the trigger in fm_age_confirmation.sql can record the tick for a
+    // person who confirms their email from a different device entirely.
+    const meta = {
+      ...((creatorRole === 'artist' || creatorRole === 'beatmaker') ? { creator_role: creatorRole } : {}),
+      ...(ageConfirmed ? { age_confirmed: true } : {}),
+    };
+    const hasMeta = Object.keys(meta).length > 0;
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}${redirectPath}`,
-        ...(meta ? { data: meta } : {}),
+        ...(hasMeta ? { data: meta } : {}),
       },
     });
     if (error) throw error;
@@ -568,4 +655,4 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => useContext(AuthContext);

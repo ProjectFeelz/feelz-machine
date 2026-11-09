@@ -82,30 +82,41 @@ export default function ProfilePage() {
   const [msg, setMsg]                         = useState('');
   const [profileImgFile, setProfileImgFile]   = useState(null);
   const [previewUrl, setPreviewUrl]           = useState(null);
+  // Albums are offered alongside tracks, the same as in the Create menu, so
+  // an artist can lead their profile with a whole project. Albums first:
+  // there are fewer of them and they are the bigger thing.
   useEffect(() => {
     if (!artist?.id) return;
-    setTopPickId(artist.top_pick_track_id || null);
+    setTopPickId(artist.top_pick_album_id || artist.top_pick_track_id || null);
     setTopPickNote(artist.top_pick_note || '');
-    supabase
-      .from('tracks')
-      .select('id, title')
-      .eq('artist_id', artist.id)
-      .eq('is_published', true)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => setMyTracks(data || []));
-  }, [artist?.id, artist?.top_pick_track_id, artist?.top_pick_note]);
+    Promise.all([
+      supabase.from('albums').select('id, title, release_type')
+        .eq('artist_id', artist.id).eq('is_published', true)
+        .order('release_date', { ascending: false }),
+      supabase.from('tracks').select('id, title')
+        .eq('artist_id', artist.id).eq('is_published', true)
+        .order('created_at', { ascending: false }),
+    ]).then(([al, tr]) => setMyTracks([
+      ...((al.data || []).map(a => ({ ...a, _isAlbum: true }))),
+      ...(tr.data || []),
+    ]));
+  }, [artist?.id, artist?.top_pick_track_id, artist?.top_pick_album_id, artist?.top_pick_note]);
 
-  // Goes through set_my_top_pick so ownership of the track is checked in the
-  // database, not trusted from here.
-  const saveTopPick = async (trackId, note = null) => {
-    setTopPickId(trackId);
+  // Goes through set_my_top_pick so ownership is checked in the database, not
+  // trusted from here. Which kind was chosen is read off the list rather than
+  // kept in a second piece of state that could drift from the selection.
+  const saveTopPick = async (pickId, note = null) => {
+    setTopPickId(pickId);
+    const chosen = (myTracks || []).find(i => i.id === pickId);
+    const isAlbum = !!chosen?._isAlbum;
     const { error } = await supabase.rpc('set_my_top_pick', {
-      p_track_id: trackId,
-      p_note: note ?? (trackId ? topPickNote : null),
+      p_track_id: isAlbum ? null : pickId,
+      p_album_id: isAlbum ? pickId : null,
+      p_note: note ?? (pickId ? topPickNote : null),
     });
     if (error) { setMsg('Could not save your top pick: ' + error.message); return; }
-    if (!trackId) setTopPickNote('');
-    setMsg(trackId ? 'Top pick saved' : 'Top pick cleared');
+    if (!pickId) setTopPickNote('');
+    setMsg(pickId ? 'Top pick saved' : 'Top pick cleared');
     setTimeout(() => setMsg(''), 2500);
   };
 
@@ -995,4 +1006,4 @@ function NavRow({ icon: Icon, label, iconColor = 'text-white/30', onClick, borde
       <ChevronRight className="w-4 h-4 text-white/15" />
     </button>
   );
-}
+}

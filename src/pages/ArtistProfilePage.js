@@ -20,7 +20,7 @@ import {
   UserPlus, UserCheck, Instagram, Twitter, Youtube,
   Globe, Music, Loader, Heart, Check, DollarSign, MessageCircle,
   ChevronDown, ChevronUp, Send, Trash2, Shuffle, Users, Plus, ShoppingBag,
-  Radio, X, Search, Info, Bell, BellOff, ChevronRight,
+  Radio, X, Search, Info, Bell, BellOff, ChevronRight, Disc3,
 } from 'lucide-react';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { ArtistProfileSkeleton } from '../components/SkeletonLoader';
@@ -385,7 +385,22 @@ export default function ArtistProfilePage() {
       // separately rather than joined, so a pick pointing at a track that
       // has since been unpublished simply shows nothing instead of
       // breaking the profile query.
-      if (artistData?.top_pick_track_id) {
+      //
+      // A pick is now either a track or an ALBUM. set_my_top_pick keeps the
+      // two columns mutually exclusive, so this checks the album first and
+      // stops; there is never a case where both are set. The album carries
+      // _isAlbum, the same flag BrowsePage uses to tell the two shapes apart,
+      // so the card below can decide between playing and opening a page
+      // without a second piece of state to keep in step.
+      if (artistData?.top_pick_album_id) {
+        supabase
+          .from('albums')
+          .select('id, title, cover_artwork_url, release_date, release_type')
+          .eq('id', artistData.top_pick_album_id)
+          .eq('is_published', true)
+          .maybeSingle()
+          .then(({ data }) => setTopPick(data ? { ...data, _isAlbum: true } : null));
+      } else if (artistData?.top_pick_track_id) {
         supabase
           .from('tracks')
           .select('*, albums(title, cover_artwork_url, price)')
@@ -1758,22 +1773,38 @@ export default function ArtistProfilePage() {
           <p className="text-[10px] uppercase tracking-[0.2em] font-bold mb-2" style={{ color: primaryColor }}>
             My Top Pick
           </p>
+          {/* An album pick opens the album, a track pick plays. Two different
+              promises, so they get two different affordances: the chevron
+              says "there is a page behind this", the play triangle says "this
+              starts now". Sending an album to handlePlayTrack would have
+              played nothing, since an album row has no file_url. */}
           <div
-            onClick={() => handlePlayTrack(topPick)}
+            onClick={() => (topPick._isAlbum ? navigate(`/album/${topPick.id}`) : handlePlayTrack(topPick))}
             className="flex items-center gap-4 p-4 rounded-2xl cursor-pointer transition hover:opacity-90 active:opacity-75"
             style={{ backgroundColor: `${textColor}06`, border: `1px solid ${primaryColor}30` }}>
             <div className="w-20 h-20 lg:w-24 lg:h-24 rounded-xl overflow-hidden flex-shrink-0" style={{ backgroundColor: `${textColor}08` }}>
               {topPick.cover_artwork_url
                 ? <img src={coverUrl(topPick.cover_artwork_url, 400)} alt={topPick.title} className="w-full h-full object-cover" />
-                : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8" style={{ color: `${textColor}20` }} /></div>}
+                : <div className="w-full h-full flex items-center justify-center">
+                    {topPick._isAlbum
+                      ? <Disc3 className="w-8 h-8" style={{ color: `${textColor}20` }} />
+                      : <Music className="w-8 h-8" style={{ color: `${textColor}20` }} />}
+                  </div>}
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-lg font-bold truncate" style={{ color: textColor }}>{topPick.title}</p>
+              {topPick._isAlbum && (
+                <p className="text-[11px] uppercase tracking-wider font-semibold mt-0.5" style={{ color: primaryColor }}>
+                  {topPick.release_type || 'Album'}
+                </p>
+              )}
               {artist.top_pick_note
                 ? <p className="text-sm mt-1 max-w-2xl" style={{ color: `${textColor}70` }}>{artist.top_pick_note}</p>
                 : <p className="text-sm mt-1" style={{ color: `${textColor}45` }}>Chosen by {artist.artist_name}</p>}
             </div>
-            <Play className="w-5 h-5 flex-shrink-0" style={{ color: primaryColor }} />
+            {topPick._isAlbum
+              ? <ChevronRight className="w-5 h-5 flex-shrink-0" style={{ color: primaryColor }} />
+              : <Play className="w-5 h-5 flex-shrink-0" style={{ color: primaryColor }} />}
           </div>
         </div>
       )}
@@ -1833,9 +1864,36 @@ export default function ArtistProfilePage() {
 
       {/* ── New Music row, artist's latest drops ── */}
       {tracks.length > 0 && (() => {
-        const recent = [...tracks]
-          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        // NEW MUSIC CARRIES ALBUMS TOO.
+        //
+        // It was tracks only, so an artist who had just put out a project saw
+        // its individual songs listed and the project itself nowhere, which
+        // is the opposite of how they would describe what they just released.
+        //
+        // Albums are dated by release_date where they have one and created_at
+        // otherwise: a back catalogue album uploaded today is not new music,
+        // and a release dated next Friday should still lead the section the
+        // moment it is published. Tracks keep created_at, which is what they
+        // have always been sorted by.
+        //
+        // _isAlbum is the same flag BrowsePage uses for the same purpose, so
+        // the four cards below can tell the two shapes apart without a second
+        // list to keep in step.
+        const recentDate = (i) => new Date(i._isAlbum ? (i.release_date || i.created_at) : i.created_at);
+        const recent = [
+          ...tracks,
+          ...albums.map(al => ({ ...al, _isAlbum: true })),
+        ]
+          .sort((a, b) => recentDate(b) - recentDate(a))
           .slice(0, 8);
+
+        // One place decides what a card does and what it says underneath, so
+        // the mobile hero, the mobile rail, the desktop hero and the desktop
+        // rail cannot drift apart. An album opens its page; a track plays.
+        const openRecent = (item) => (item._isAlbum ? navigate(`/album/${item.id}`) : handlePlayTrack(item));
+        const recentSubtitle = (item) => (item._isAlbum
+          ? (item.release_type || 'Album')
+          : (item.albums?.title || 'Single'));
         return (
           <div className="mb-8 mx-6 rounded-2xl pt-4 pb-4"
             style={{ background: 'linear-gradient(135deg, rgba(6,182,212,0.18) 0%, rgba(6,182,212,0.08) 60%, rgba(10,30,35,0.95) 100%)', border: '1px solid rgba(6,182,212,0.25)', overflow: 'visible' }}>
@@ -1850,9 +1908,9 @@ export default function ArtistProfilePage() {
             <div className="md:hidden">
               {recent[0] && (() => {
                 const track = recent[0];
-                const withinWeek = (Date.now() - new Date(track.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
+                const withinWeek = (Date.now() - recentDate(track).getTime()) < 7 * 24 * 60 * 60 * 1000;
                 return (
-                  <div className="px-4 mb-3 cursor-pointer" onClick={() => handlePlayTrack(track)}>
+                  <div className="px-4 mb-3 cursor-pointer" onClick={() => openRecent(track)}>
                     <div className="w-full aspect-square rounded-2xl overflow-hidden relative"
                       style={{ boxShadow: withinWeek ? `0 0 0 2px ${secondaryColor}, 0 0 30px ${secondaryColor}60` : 'none' }}>
                       {track.cover_artwork_url
@@ -1863,23 +1921,23 @@ export default function ArtistProfilePage() {
                       )}
                     </div>
                     <p className="text-base font-bold mt-2 truncate" style={{ color: withinWeek ? secondaryColor : textColor }}>{track.title}</p>
-                    <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{track.albums?.title || 'Single'}</p>
+                    <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{recentSubtitle(track)}</p>
                   </div>
                 );
               })()}
               {recent.length > 1 && (
                 <div className="flex space-x-3 overflow-x-auto scrollbar-hide px-4 pb-3" style={{ overflowY: 'visible' }}>
                   {recent.slice(1).map(track => {
-                    const withinWeek = (Date.now() - new Date(track.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
+                    const withinWeek = (Date.now() - recentDate(track).getTime()) < 7 * 24 * 60 * 60 * 1000;
                     return (
-                      <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group" onClick={() => handlePlayTrack(track)}>
+                      <div key={track.id} className="flex-shrink-0 w-32 cursor-pointer group" onClick={() => openRecent(track)}>
                         <div className="aspect-square rounded-xl overflow-hidden mb-1.5 relative" style={{ backgroundColor: `${textColor}08` }}>
                           {track.cover_artwork_url
                             ? <img src={coverUrl(track.cover_artwork_url, 400)} alt={track.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                             : <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${secondaryColor}30, ${accentColor}15)` }}><Music className="w-6 h-6" style={{ color: `${textColor}20` }} /></div>}
                         </div>
                         <p className="text-sm font-medium truncate" style={{ color: textColor }}>{track.title}</p>
-                        <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{track.albums?.title || 'Single'}</p>
+                        <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{recentSubtitle(track)}</p>
                       </div>
                     );
                   })}
@@ -1910,10 +1968,10 @@ export default function ArtistProfilePage() {
             <div className="hidden md:block px-4 pt-1 pb-3">
               {recent[0] && (() => {
                 const track = recent[0];
-                const withinWeek = (Date.now() - new Date(track.created_at).getTime()) < 7 * 24 * 60 * 60 * 1000;
+                const withinWeek = (Date.now() - recentDate(track).getTime()) < 7 * 24 * 60 * 60 * 1000;
                 return (
                   <div
-                    onClick={() => handlePlayTrack(track)}
+                    onClick={() => openRecent(track)}
                     className="flex items-center gap-4 p-3 rounded-2xl cursor-pointer group transition hover:opacity-95"
                     style={{
                       background: `${textColor}08`,
@@ -1936,7 +1994,7 @@ export default function ArtistProfilePage() {
                       )}
                       <p className="text-xl font-bold truncate" style={{ color: textColor }}>{track.title}</p>
                       <div className="flex items-center gap-2 min-w-0">
-                        <p className="text-sm truncate" style={{ color: `${textColor}55` }}>{track.albums?.title || 'Single'}</p>
+                        <p className="text-sm truncate" style={{ color: `${textColor}55` }}>{recentSubtitle(track)}</p>
                         <PreorderTag track={track} variant="inline" />
                       </div>
                     </div>
@@ -1968,7 +2026,7 @@ export default function ArtistProfilePage() {
                 return (
                   <div key={track.id}
                     className="flex-shrink-0 w-32 cursor-pointer group opacity-80 hover:opacity-100 transition-opacity"
-                    onClick={() => handlePlayTrack(track)}>
+                    onClick={() => openRecent(track)}>
                     <div className="aspect-square rounded-xl overflow-hidden mb-1.5 relative"
                       style={{ backgroundColor: `${textColor}08`, boxShadow: showGlow ? `0 0 0 2px ${secondaryColor}, 0 0 20px ${secondaryColor}60, 0 0 40px ${secondaryColor}30` : 'none' }}>
                       {track.cover_artwork_url
@@ -1979,7 +2037,7 @@ export default function ArtistProfilePage() {
                       )}
                     </div>
                     <p className="text-sm font-medium truncate" style={{ color: showGlow ? secondaryColor : textColor }}>{track.title}</p>
-                    <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{track.albums?.title || 'Single'}</p>
+                    <p className="text-xs truncate" style={{ color: `${textColor}50` }}>{recentSubtitle(track)}</p>
                   </div>
                 );
               })}

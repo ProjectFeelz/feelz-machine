@@ -7,7 +7,7 @@ import { useTier, FEATURE_LABELS } from '../contexts/useTier';
 import { useAuth } from '../contexts/AuthContext';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 import {
-  X, ChevronDown, Loader, Check, Send, Music, Youtube, Search, Radio, Plus,
+  X, ChevronDown, Loader, Check, Send, Music, Youtube, Search, Radio, Plus, Disc3,
 } from 'lucide-react';
 import { VoiceMemoUpload } from './VoiceMemo';
 import { StoryUpload } from './ArtistStories';
@@ -63,36 +63,56 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
   const loadTopPick = async () => {
     if (!artist?.id) return;
     setTopPickLoading(true);
-    const [{ data: tracks, error: tErr }, { data: me, error: aErr }] = await Promise.all([
+    // Albums as well as tracks. An artist who has just put out a project
+    // usually wants the project at the top of their profile rather than one
+    // song off it, and before this the project was not on the list at all.
+    const [{ data: tracks, error: tErr }, { data: albums, error: alErr }, { data: me, error: aErr }] = await Promise.all([
       supabase.from('tracks').select('id, title')
         .eq('artist_id', artist.id).eq('is_published', true)
         .order('created_at', { ascending: false }),
-      supabase.from('artists').select('top_pick_track_id, top_pick_note')
+      supabase.from('albums').select('id, title, release_type')
+        .eq('artist_id', artist.id).eq('is_published', true)
+        .order('release_date', { ascending: false }),
+      supabase.from('artists').select('top_pick_track_id, top_pick_album_id, top_pick_note')
         .eq('id', artist.id).maybeSingle(),
     ]);
-    if (tErr) console.error('[create] top pick tracks failed:', tErr.message);
-    if (aErr) console.error('[create] top pick current failed:', aErr.message);
-    setTopPickTracks(tracks || []);
-    setTopPickId(me?.top_pick_track_id || null);
+    if (tErr)  console.error('[create] top pick tracks failed:', tErr.message);
+    if (alErr) console.error('[create] top pick albums failed:', alErr.message);
+    if (aErr)  console.error('[create] top pick current failed:', aErr.message);
+
+    // Albums first: there are far fewer of them and they are the bigger
+    // thing, so they do not get buried under a long track list.
+    setTopPickTracks([
+      ...(albums || []).map(a => ({ ...a, _isAlbum: true })),
+      ...(tracks || []),
+    ]);
+    setTopPickId(me?.top_pick_album_id || me?.top_pick_track_id || null);
     setTopPickNote(me?.top_pick_note || '');
     setTopPickLoading(false);
   };
 
   // Ownership of the track is checked inside set_my_top_pick, in the
   // database — not trusted from here.
-  const saveTopPick = async (trackId) => {
+  const saveTopPick = async (pickId) => {
     setTopPickSaving(true);
     setTopPickMsg('');
+    // Which kind was chosen is read off the list rather than carried in a
+    // second piece of state that could fall out of step with the selection.
+    // set_my_top_pick takes one or the other and clears the other column, so
+    // a pick is never both.
+    const chosen = (topPickTracks || []).find(i => i.id === pickId);
+    const isAlbum = !!chosen?._isAlbum;
     const { error } = await supabase.rpc('set_my_top_pick', {
-      p_track_id: trackId,
-      p_note: trackId ? (topPickNote.trim() || null) : null,
+      p_track_id: isAlbum ? null : pickId,
+      p_album_id: isAlbum ? pickId : null,
+      p_note: pickId ? (topPickNote.trim() || null) : null,
     });
     if (error) {
       setTopPickMsg('Could not save: ' + error.message);
     } else {
-      setTopPickId(trackId);
-      if (!trackId) setTopPickNote('');
-      setTopPickMsg(trackId ? 'Top pick saved' : 'Top pick cleared');
+      setTopPickId(pickId);
+      if (!pickId) setTopPickNote('');
+      setTopPickMsg(pickId ? 'Top pick saved' : 'Top pick cleared');
       setTimeout(() => { close(); setTopPickMsg(''); }, 1100);
     }
     setTopPickSaving(false);
@@ -348,7 +368,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   tint: MENU_TINTS.profile,
                   items: [
                     { id: 'edit',    icon: '✏️', label: 'Edit Profile', sub: 'Update your bio, photo and links' },
-                    { id: 'toppick', icon: '⭐', label: 'Top Pick',     sub: 'Choose the track your profile leads with' },
+                    { id: 'toppick', icon: '⭐', label: 'Top Pick',     sub: 'Choose the track or album your profile leads with' },
                     // Merch is parked (src/config/features.js). The entry stays
                     // visible rather than vanishing, because an artist who set a
                     // store up should be told it is paused, not left wondering
@@ -456,13 +476,14 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                 <div className="py-10 flex justify-center"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>
               ) : topPickTracks.length === 0 ? (
                 <p className="text-sm text-white/40 text-center py-8">
-                  Publish a track first, your top pick is chosen from your own published music.
+                  Publish a track or an album first, your top pick is chosen from your own published music.
                 </p>
               ) : (
                 <>
                   <p className="text-xs text-white/40 leading-relaxed">
-                    This track sits at the very top of your profile, above everything else.
-                    Pick the one you want a first-time listener to hear.
+                    This sits at the very top of your profile, above everything else.
+                    Pick the track you want a first-time listener to hear, or an album
+                    to send them to the whole project.
                   </p>
 
                   {/* Scrolls on its own rather than growing the sheet, which
@@ -479,8 +500,16 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                             borderColor: chosen ? primaryColor : 'rgba(255,255,255,0.06)',
                             background: chosen ? `${primaryColor}1A` : 'rgba(255,255,255,0.02)',
                           }}>
-                          <Music className="w-4 h-4 flex-shrink-0" style={{ color: chosen ? primaryColor : 'rgba(255,255,255,0.3)' }} />
+                          {t._isAlbum
+                            ? <Disc3 className="w-4 h-4 flex-shrink-0" style={{ color: chosen ? primaryColor : 'rgba(255,255,255,0.3)' }} />
+                            : <Music className="w-4 h-4 flex-shrink-0" style={{ color: chosen ? primaryColor : 'rgba(255,255,255,0.3)' }} />}
                           <span className="text-sm text-white truncate flex-1">{t.title}</span>
+                          {t._isAlbum && (
+                            <span className="text-[10px] uppercase tracking-wider flex-shrink-0 px-1.5 py-0.5 rounded"
+                              style={{ color: 'rgba(255,255,255,0.45)', background: 'rgba(255,255,255,0.06)' }}>
+                              {t.release_type || 'Album'}
+                            </span>
+                          )}
                           {chosen && <Check className="w-4 h-4 flex-shrink-0" style={{ color: primaryColor }} />}
                         </button>
                       );
@@ -643,4 +672,4 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
     </div>,
     document.body
   );
-}
+}

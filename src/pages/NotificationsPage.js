@@ -1061,6 +1061,15 @@ export default function NotificationsPage() {
       navigate(artist ? '/dashboard?tab=analytics&section=downloads' : '/library/downloads');
       return;
     }
+    // Straight into the room the message was posted in. Chat notifications
+    // only exist from fm_chat_notifications.sql onwards: before that, a
+    // message in a room notified nobody, and the only way to find out was to
+    // open the room and look.
+    if (type === 'chat_message') {
+      if (meta.room_id) { navigate(`/chat/${meta.room_id}`); return; }
+      navigate('/community');
+      return;
+    }
     if (type === 'tip')                                  { navigate('/dashboard?tab=analytics&section=earnings'); return; }
     if (type === 'payout_pending')                       { navigate('/dashboard?tab=analytics&section=earnings'); return; }
     if (type === 'announcement' || type === 'admin_message') {
@@ -1619,4 +1628,4 @@ export default function NotificationsPage() {
       )}
     </div>
   );
-}
+}
