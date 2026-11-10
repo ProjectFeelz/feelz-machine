@@ -378,8 +378,40 @@ export function PlayerProvider({ children }) {
   // currentTrackRef mirrors currentTrack because the flush runs inside
   // callbacks and event listeners where the state value would be stale.
   const currentTrackRef  = useRef(null);
-  const lastFlushedRef   = useRef(null);
   const geoRef           = useRef(null);
+
+  // ── ONE PLAY, ONE EVENT ───────────────────────────────────────────────────
+  //
+  // Holds a token while the current play is still unrecorded, and is emptied
+  // the moment it is written. A play ends exactly once, in one of three ways
+  // (ended, track_change, page_hide), so a second flush for the same play is
+  // always a duplicate and is dropped.
+  //
+  // WHAT THIS REPLACES, AND WHY THAT WAS NOT ENOUGH
+  //
+  // The old guard was a key of track id plus the current second, so it only
+  // caught two flushes landing in the same wall clock second. page_hide does
+  // not arrive once. visibilitychange fires every time the tab is switched
+  // away from, the phone is locked or the app is backgrounded, and it fires
+  // whether or not anything is playing. A listener who opened a track, let it
+  // run five seconds and then left the tab open all day was writing a fresh
+  // "abandoned at 5%" row every time they glanced at another tab.
+  //
+  // That is not a hypothetical. Between 12 October and 6 November one account
+  // wrote 357 sub-10% plays across 26 tracks: 107 of them on 21 October across
+  // two tracks, 71 on 30 October against a single track, every one of them
+  // page_hide at the same position. Those are not 107 rejections, they are one
+  // play and 106 tab switches.
+  //
+  // This is the single biggest reason the platform's completion rate appeared
+  // to collapse through late October, and the feed model was learning from it:
+  // every one of those rows said a listener started a track and left.
+  //
+  // The under-three-seconds check stays ahead of this on purpose. A play too
+  // short to record does not spend the token, so a listener who starts a track,
+  // hides the tab within a second and comes back to play it properly still gets
+  // that listen recorded.
+  const playUnrecordedRef = useRef(null);
 
   // Approximate location for the play, from Netlify's edge geo header.
   // Resolved once and cached in sessionStorage: it does not change mid
@@ -423,11 +455,12 @@ export function PlayerProvider({ children }) {
     // listening decision. Recording it would be noise.
     if (listened < 3) return;
 
-    // Guard against double flush when two paths fire for the same play,
-    // for example ended followed by a track change.
-    const flushKey = `${track.id}:${Math.floor(Date.now() / 1000)}`;
-    if (lastFlushedRef.current === flushKey) return;
-    lastFlushedRef.current = flushKey;
+    // This play has already been written. Every later flush for it, however
+    // it arrives, is a duplicate. Checked and spent here, synchronously,
+    // before the first await, so two paths firing in the same tick cannot
+    // both get through.
+    if (!playUnrecordedRef.current) return;
+    playUnrecordedRef.current = null;
 
     // Take the stream id NOW, while we are still synchronous.
     //
@@ -849,7 +882,14 @@ export function PlayerProvider({ children }) {
     }
   }, [extendQueueWithSuggestions, flushListeningEvent]);
 
-  useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
+  // Every change of track starts a new play, and a new play is unrecorded
+  // until it ends. This one line is what arms the guard above, and it sits
+  // here rather than in playTrack because several paths set currentTrack:
+  // playTrack, the queue advancing, and restoring the last track on load.
+  useEffect(() => {
+    currentTrackRef.current = currentTrack;
+    playUnrecordedRef.current = currentTrack ? Symbol('play') : null;
+  }, [currentTrack]);
 
   // playNextFromRef is rebuilt whenever extendQueueWithSuggestions or
   // flushListeningEvent change. The stall effect below registers its listeners
@@ -863,12 +903,20 @@ export function PlayerProvider({ children }) {
   // is otherwise the most common way a play goes unrecorded.
   useEffect(() => {
     const onHide = () => { flushListeningEvent('page_hide'); };
-    window.addEventListener('pagehide', onHide);
-    document.addEventListener('visibilitychange', () => {
+    // Named, so it can actually be removed. The visibilitychange listener used
+    // to be registered with an inline arrow and left out of the cleanup, so it
+    // outlived the effect. It does no harm while flushListeningEvent keeps a
+    // stable identity, which it does today, but the day anything is added to
+    // its dependencies every re-register would stack another live listener on
+    // top of the last, and one tab switch would fire the flush several times.
+    const onVisibility = () => {
       if (document.visibilityState === 'hidden') onHide();
-    });
+    };
+    window.addEventListener('pagehide', onHide);
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       window.removeEventListener('pagehide', onHide);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [flushListeningEvent]);
 
@@ -881,6 +929,10 @@ export function PlayerProvider({ children }) {
       if (repeatRef.current === 'one') {
         audio.currentTime = 0;
         audio.play().catch(console.error);
+        // Repeat-one restarts without changing currentTrack, so the effect
+        // that arms the guard never runs. Arm it here instead: playing a
+        // track through twice is two listens and should read as two.
+        playUnrecordedRef.current = Symbol('play');
       } else {
         playNextFromRef();
       }
