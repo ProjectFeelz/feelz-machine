@@ -43,11 +43,21 @@ export default function SchoolSessionsVotePage() {
     if (!comp?.id) return;
     setLoading(true);
 
+    // EVERY ENTRY, not just the finalists.
+    //
+    // This was .eq('is_finalist', true), and finalists are not picked until
+    // after entries close on 30 November. So for the whole month in which
+    // entrants are actually recording and posting, this page was empty and
+    // every link anyone shared pointed at nothing.
+    //
+    // People's Choice is now open across all entries, which is also the only
+    // version that makes a shared "vote for me" link worth sending on the day
+    // you enter. Judges still choose the finalists and the winner, separately,
+    // and that has not changed.
     const { data: entries } = await supabase
       .from('school_sessions_entries')
-      .select('id, entrant_full_name, is_winner, is_group, entrant_tiktok_handle, song:school_sessions_shortlist_songs(title), track:tracks(title, slug, cover_artwork_url), school:school_sessions_schools(name), school_name_freetext, members:school_sessions_entry_members(member_name)')
-      .eq('competition_id', comp.id)
-      .eq('is_finalist', true);
+      .select('id, entrant_full_name, is_winner, is_finalist, is_group, entrant_tiktok_handle, song:school_sessions_shortlist_songs(title), track:tracks(title, slug, cover_artwork_url), school:school_sessions_schools(name), school_name_freetext, members:school_sessions_entry_members(member_name)')
+      .eq('competition_id', comp.id);
     setFinalists(entries || []);
 
     const { data: counts } = await supabase.rpc('get_school_sessions_vote_counts', { p_competition_id: comp.id });
@@ -123,7 +133,7 @@ export default function SchoolSessionsVotePage() {
         <div className="space-y-2">
           <h1 className="text-2xl font-bold">People's Choice vote</h1>
           <p className="text-sm text-white/50">
-            Judges pick the finalists and the winner. This vote is a separate People's Choice pick, one vote per person.
+            Every entry is here. Judges pick the finalists and the winner; this is the separate People's Choice pick, one vote per person.
           </p>
           {totalVotes > 0 && <p className="text-xs text-white/30">{totalVotes} vote{totalVotes === 1 ? '' : 's'} so far</p>}
         </div>
@@ -134,9 +144,9 @@ export default function SchoolSessionsVotePage() {
           </div>
         )}
 
-        {finalists.length === 0 && phase !== 'not_open' && (
+        {finalists.length === 0 && (
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/50">
-            Finalists haven't been announced yet.
+            No entries yet. <Link to="/sessions" className="text-lime-400">Be the first</Link>.
           </div>
         )}
 
@@ -174,11 +184,14 @@ export default function SchoolSessionsVotePage() {
                         className="text-[11px] text-lime-400/70 mt-1 inline-block">@{f.entrant_tiktok_handle} on TikTok</a>
                     )}
                   </div>
-                  {f.track?.slug && (
-                    <Link to={`/track/${f.track.slug}`} className="w-8 h-8 rounded-full bg-white/[0.06] flex items-center justify-center flex-shrink-0 ml-2">
-                      <Play className="w-3.5 h-3.5 text-white/60" />
-                    </Link>
-                  )}
+                  {/* The entry's own page, not the track page. It is the
+                      thing an entrant shares, so it is also the thing this
+                      list should point at. */}
+                  <Link to={`/sessions/entry/${f.id}`}
+                    className="w-8 h-8 rounded-full bg-white/[0.06] flex items-center justify-center flex-shrink-0 ml-2"
+                    aria-label={`Open ${f.entrant_full_name}'s entry`}>
+                    <Play className="w-3.5 h-3.5 text-white/60" />
+                  </Link>
                 </div>
 
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/[0.06]">

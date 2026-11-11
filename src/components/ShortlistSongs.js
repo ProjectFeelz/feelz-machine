@@ -2,10 +2,16 @@
 //
 // The Sessions shortlist, as something you can actually use:
 //
-//   tap a song   plays it in the app player with the whole shortlist queued,
-//                so skip moves to the other shortlisted song
-//   Lyrics       opens the words underneath, in place
-//   Beat         saves the instrumental to the device (BeatDownloadButton)
+//   tap a song     plays it in the app player with the shortlist queued, so
+//                  skip moves to the next song if there is more than one
+//   Lyrics         opens the words underneath, in place
+//   Backing track  saves the file entrants record over (BeatDownloadButton)
+//
+// The download is no longer a bare instrumental. It is the song with the
+// chorus already on it, because entrants were taking the instrumental away and
+// writing something entirely their own over it, which is not the competition.
+// The label says backing track rather than beat for the same reason: a beat is
+// the thing you write a new song over, and that is the idea to stop giving.
 //
 // Nothing here navigates. An entrant half way through the entry form can
 // listen, read and download without losing what they have typed, and "back"
@@ -51,7 +57,16 @@ export default function ShortlistSongs({ songs = [], compact = false }) {
   };
 
   return (
-    <div className={compact ? 'space-y-1.5' : 'grid lg:grid-cols-2 gap-1.5 lg:gap-2.5'}>
+    // Two columns only when there is something to put in the second one.
+    // The shortlist is down to a single song, and `grid lg:grid-cols-2` left
+    // it sitting in the left half of the panel with a hole beside it. One
+    // song gets the full width, which is also the right emphasis now that it
+    // is THE song rather than one of a set.
+    <div className={
+      compact || songs.length < 2
+        ? 'space-y-1.5'
+        : 'grid lg:grid-cols-2 gap-1.5 lg:gap-2.5'
+    }>
       {songs.map(song => {
         const track    = forPlayer(song);
         const playable = !!track;
@@ -84,7 +99,7 @@ export default function ShortlistSongs({ songs = [], compact = false }) {
                 </button>
               )}
 
-              {song.beat_url && <BeatDownloadButton song={song} label="Beat" />}
+              {song.beat_url && <BeatDownloadButton song={song} label="Backing track" />}
 
               {!playable && song.reference_url && (
                 <a href={song.reference_url} target="_blank" rel="noopener noreferrer"

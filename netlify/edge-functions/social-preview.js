@@ -122,6 +122,20 @@ export default async (request, context) => {
   // amount of fixing og-meta will help.
   const forced = url.searchParams.get('_preview') === '1';
 
+  // THE WAY OUT OF THE LOOP.
+  //
+  // Deciding who is a crawler from a user agent is a guess, and the cost of
+  // guessing wrong used to be unbounded: a person misread as a crawler got the
+  // preview stub, the stub's meta refresh pointed at the SAME url, that second
+  // request carried the same user agent, and they were handed the stub again.
+  // In Instagram's in-app browser that is what "the link never opens" was.
+  //
+  // og-meta now puts _app=1 on the url it refreshes to, and this one check
+  // means the second request is never judged again. It is checked before the
+  // user agent on purpose. A crawler never follows a meta refresh, so it never
+  // arrives here carrying the marker and no preview card is affected.
+  if (url.searchParams.get('_app') === '1') return context.next();
+
   const userAgent = request.headers.get('user-agent') || '';
 
   // Search engines run JavaScript. They get the real page.
@@ -212,4 +226,4 @@ export default async (request, context) => {
 // link into WhatsApp before anything else ships behind it.
 export const config = {
   path: ['/artist/*', '/track/*', '/beat/*', '/album/*', '/sessions', '/schoolsessions', '/t/*', '/a/*'],
-};
+};

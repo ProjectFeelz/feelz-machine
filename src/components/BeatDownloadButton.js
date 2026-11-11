@@ -1,8 +1,13 @@
 // src/components/BeatDownloadButton.js
 //
-// Downloads a Sessions beat without leaving the app. The file is
+// Downloads the Sessions backing track without leaving the app. The file is
 // fetched and saved from this page (see src/utils/downloadInApp.js), so no tab
 // is opened and nothing navigates away mid-entry.
+//
+// The column is still called beat_url and so is this component, because the
+// storage slot and every caller already use that name. What goes in it has
+// changed: it is the song with the chorus on it, not a bare instrumental. The
+// words a person reads say backing track, which is what it now is.
 
 import React, { useState } from 'react';
 import { Download, Loader, Check } from 'lucide-react';
@@ -36,14 +41,14 @@ const prettySize = (bytes) => {
   return mb >= 1 ? `${mb.toFixed(1)}MB` : `${Math.round(bytes / 1024)}KB`;
 };
 
-export default function BeatDownloadButton({ song, label = 'Beat', showSize = false, className = '' }) {
+export default function BeatDownloadButton({ song, label = 'Backing track', showSize = false, className = '' }) {
   const [state, setState] = useState('idle'); // idle | busy | done | error
   const [pct, setPct] = useState(0);
 
   if (!song?.beat_url) return null;
 
   const name = song.beat_filename
-    || `${(song.title || 'beat').replace(/[^a-zA-Z0-9 _-]/g, '')} (beat).mp3`;
+    || `${(song.title || 'backing track').replace(/[^a-zA-Z0-9 _-]/g, '')} (backing track).mp3`;
 
   const go = async (e) => {
     e.preventDefault();

@@ -1,5 +1,5 @@
 import { coverUrl } from '../utils/coverUrl';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { localInputToInstant, instantToLocalInput, describeLocalRelease } from '../utils/releaseTime';
 import { entriesAreOpen } from '../utils/schoolPhase';
 import { supabase } from '../supabaseClient';
@@ -906,6 +906,24 @@ function AddTrackToAlbum({
 
   const isWorking = uploading || converting;
 
+  // ── ONE TAP, ONE TRACK ────────────────────────────────────────────────────
+  //
+  // A ref rather than the `uploading` state, because state is the thing that
+  // was too slow. The submit button is disabled on `isWorking`, but nothing
+  // set `uploading` until after the duplicate-title query below had come back,
+  // and that is a round trip to Frankfurt. For the whole of it the button was
+  // still live, so a second tap started a second upload, and because neither
+  // had written anything yet both passed the duplicate check and both went on
+  // to upload their own copy of the audio and insert their own row.
+  //
+  // That is not theoretical. One account produced five copies of the same
+  // track 0.85 seconds apart, another three, another two, each with its own
+  // file in storage.
+  //
+  // A ref is set synchronously, so the second call returns on the line below
+  // before React has rendered anything.
+  const submitInFlight = useRef(false);
+
   const showMessage = (type, text) => {
     setMessage({ type, text });
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
@@ -913,6 +931,16 @@ function AddTrackToAlbum({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitInFlight.current) return;
+    submitInFlight.current = true;
+    try {
+      await submitTrack();
+    } finally {
+      submitInFlight.current = false;
+    }
+  };
+
+  const submitTrack = async () => {
     if (!trackForm.audio_file) { showMessage('error', 'Audio file is required'); return; }
     if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
     if (!trackForm.cover_file && !album?.cover_artwork_url) { showMessage('error', 'Add artwork, or give the album a cover first'); return; }
@@ -1667,8 +1695,24 @@ export default function TrackUploadPanel() {
     return data.id;
   };
 
+  // The same latch as handleSubmit above, for the same reason. This handler is
+  // the worse of the two: it awaits a beat count, a duplicate-title query and
+  // an artwork query before it marks itself busy, so the window in which the
+  // button is still live is three round trips wide.
+  const uploadInFlight = useRef(false);
+
   const handleUpload = async (e) => {
     e.preventDefault();
+    if (uploadInFlight.current) return;
+    uploadInFlight.current = true;
+    try {
+      await uploadTrack();
+    } finally {
+      uploadInFlight.current = false;
+    }
+  };
+
+  const uploadTrack = async () => {
     if (!trackForm.audio_file) { showMessage('error', 'Audio file is required'); return; }
     if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
     if (!isAlbumRelease && !trackForm.cover_file) { showMessage('error', 'Cover artwork is required'); return; }
@@ -2030,15 +2074,20 @@ export default function TrackUploadPanel() {
         if (aErr) throw aErr;
 
         // One notice to followers for the release, not one per track.
+        //
+        // It sends the ALBUM now. This used to send the first track's id with
+        // the album's title, so nineteen followers got "released a new track!
+        // Hold Me Down" for a twelve track album and tapping it opened that
+        // one song. The notice is the only thing most followers see of a
+        // release, so it has to lead to the release.
         if (toPublish.length) {
           try {
             const { data: { session: authSession } } = await supabase.auth.getSession();
-            const first = albumTrackQueue.find(t => t._publish !== false);
             fetch('/.netlify/functions/notify-new-track', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                track_id: first.id, track_title: release.album_title || first.title,
+                album_id: sessionAlbumId,
                 artist_id: artist.id, artist_slug: artist.slug, token: authSession?.access_token,
               }),
             });
@@ -2332,6 +2381,30 @@ export default function TrackUploadPanel() {
         cover_artwork_url: coverUrl,
       }).eq('id', albumId);
       if (aErr) throw aErr;
+
+      // THE OTHER WAY AN ALBUM GOES LIVE.
+      //
+      // finishAlbum is not the only path. An album saved as a draft and
+      // published later from this tab reached followers through nothing at
+      // all, which is the quietest possible way to release a record.
+      //
+      // Only on the false to true crossing, so re-saving a published album to
+      // fix a typo does not tell everybody again. The function also refuses a
+      // second notice for the same album, and a unique index refuses it after
+      // that, so three things have to fail before anyone is told twice.
+      if (before.is_published !== true && editAlbumForm.is_published === true) {
+        try {
+          const { data: { session: authSession } } = await supabase.auth.getSession();
+          fetch('/.netlify/functions/notify-new-track', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              album_id: albumId,
+              artist_id: artist.id, artist_slug: artist.slug, token: authSession?.access_token,
+            }),
+          });
+        } catch {}
+      }
 
       if (coverUrl) {
         // Tracks with no artwork always take the album cover.

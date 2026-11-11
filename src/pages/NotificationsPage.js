@@ -11,7 +11,7 @@ import {
   UserPlus, Check, X, ChevronLeft, Loader,
   CheckCheck, Trash2, Music, Download, Megaphone,
   Radio, FileText, Play, DollarSign, Send, ChevronDown,
-  Star, Zap, Award, Gift,
+  Star, Zap, Award, Gift, Disc3,
   ExternalLink, Settings,
 } from 'lucide-react';
 import useNotifications from '../contexts/useNotifications';
@@ -40,6 +40,7 @@ const TYPE_CONFIG = {
   mention:            { icon: MessageCircle, color: 'text-purple-400', bg: 'bg-purple-500/10',  label: 'Mention' },
   tier_granted:       { icon: Star,          color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Tier Update' },
   new_track:          { icon: Music,         color: 'text-purple-400', bg: 'bg-purple-500/10',  label: 'New Track' },
+  new_album:          { icon: Disc3,         color: 'text-purple-400', bg: 'bg-purple-500/10',  label: 'New Release' },
   playlist_add:       { icon: Music,         color: 'text-blue-400',   bg: 'bg-blue-500/10',    label: 'Playlist Add' },
   competition_winner: { icon: Award,         color: 'text-yellow-400', bg: 'bg-yellow-500/10',  label: 'Winner!' },
   engagement:         { icon: Zap,           color: 'text-purple-400', bg: 'bg-purple-500/10',  label: 'For You' },
@@ -960,6 +961,26 @@ export default function NotificationsPage() {
       return;
     }
 
+    // An album opens the album page rather than playing something.
+    //
+    // A track notification starts the song, because that is the whole of a
+    // single and there is nothing else to decide. An album is twelve of
+    // them: autoplaying track one would pick for the listener, and the page
+    // is where the artwork, the tracklist and the buy button are.
+    if (type === 'new_album') {
+      const albumId   = meta.album_id;
+      const albumSlug = meta.album_slug;
+      const artistSlug = meta.artist_slug;
+      if (!albumId && !albumSlug) return;
+      // Two segments when both parts are known, because an album slug is
+      // only unique per artist. The id route is the fallback and always
+      // resolves.
+      navigate(albumSlug && artistSlug
+        ? `/album/${artistSlug}/${albumSlug}`
+        : `/album/${albumId}`);
+      return;
+    }
+
     if (type === 'new_track') {
       // Resolve track_id from metadata or notification row directly (handles old format)
       const trackId    = meta.track_id    || notif.track_id;
@@ -1628,4 +1649,4 @@ export default function NotificationsPage() {
       )}
     </div>
   );
-}
+}

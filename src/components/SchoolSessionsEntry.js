@@ -4,9 +4,14 @@
 // visitor passes the region/school gate, so people not taking part never
 // see it in the page source.
 //
-// Entrants submit a vocal performance/cover over one of a shortlisted set
-// of songs, solo or as a group (the prize splits evenly across
-// group members if they win).
+// Entrants write and record their OWN VERSES over a backing track that
+// already has the chorus on it, solo or as a group (the prize splits evenly
+// across group members if they win).
+//
+// The wording matters more than it looks. While this said "cover" and the
+// download said "beat", entrants were taking the instrumental and entering a
+// brand new song of their own. The chorus is the thing that makes every entry
+// the same song, so every string a person reads now says so.
 
 import React, { useState, useEffect } from 'react';
 import { GraduationCap, Plus, X } from 'lucide-react';
@@ -155,7 +160,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
         <p className="text-xs text-white/40 mt-1">
           {phase === 'awareness'
             ? (opens
-                ? `Entries open on ${opens}. Record your cover now and it is ready to go.`
+                ? `Entries open on ${opens}. Record your verses now and it is ready to go.`
                 : 'Entries are not open yet.')
             : (closed
                 ? `Entries closed on ${closed}. Judging is under way.`
@@ -202,7 +207,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               Entering also puts you in the running for a VIP card: a seat in one of
               the judging rounds, earned by bringing people to the platform rather
               than by winning. Two per school, and it is yours whether or not your
-              cover places.{' '}
+              entry places.{' '}
               <a href="/sessions#vip" className="text-lime-300 underline underline-offset-2">
                 How it works
               </a>
@@ -210,7 +215,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
           </div>
 
           <div>
-            <Label>Which song are you covering?</Label>
+            <Label>Which song are you writing to?</Label>
             <select value={form.songId}
               onChange={e => set('songId', e.target.value)}
               className="w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none">
@@ -260,7 +265,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               onChange={e => set('tiktokHandle', e.target.value.replace(/^@/, ''))}
               placeholder="username (without the @)" />
             <p className="text-[11px] text-white/30 mt-1">
-              Part of entering, post about your cover. Judges pick the winner; the public vote adds a People's Choice pick.
+              Part of entering, post your version. Judges pick the winner; the public vote adds a People's Choice pick.
             </p>
           </div>
 
@@ -270,7 +275,7 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               onChange={e => set('tiktokVideoUrl', e.target.value)}
               placeholder="Paste the link to your posted video" />
             <p className="text-[11px] text-white/30 mt-1">
-              Post a video of your cover to TikTok and paste the link here, this is how we track and verify real entries.
+              Post a video of your version to TikTok and paste the link here, this is how we track and verify real entries.
             </p>
           </div>
 

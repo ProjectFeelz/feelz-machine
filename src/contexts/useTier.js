@@ -407,6 +407,17 @@ function useTierInternal() {
     setTrackCount(count || 0);
   };
 
+  // COUNTED ON download_priced_at, NOT created_at.
+  //
+  // This used to filter on created_at, so it counted tracks UPLOADED this
+  // month that happen to carry a price. Uploading with no price and adding
+  // the price a minute later cost nothing against the cap, which made the
+  // limit two only for anybody who did not think about it.
+  //
+  // download_priced_at records when a price actually went on, stamped by a
+  // trigger, and the database enforces the cap against the same column. This
+  // query matches it so the number an artist is shown is the number they will
+  // get, rather than the app offering a slot the database then refuses.
   const fetchMonthlyDownloadSalesCount = async (artistId) => {
     if (!artistId) return;
     const startOfMonth = new Date();
@@ -417,7 +428,7 @@ function useTierInternal() {
       .select('*', { count: 'exact', head: true })
       .eq('artist_id', artistId)
       .gt('download_price', 0)
-      .gte('created_at', startOfMonth.toISOString());
+      .gte('download_priced_at', startOfMonth.toISOString());
     if (error) {
       console.warn('[useTier] monthly download sales count failed, sales limits may not be enforced:',
         error.code, error.message, error.hint || '');

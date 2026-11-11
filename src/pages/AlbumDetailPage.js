@@ -38,7 +38,9 @@ function formatNumber(n) {
 }
 
 export default function AlbumDetailPage() {
-  const { id } = useParams();
+  // Two routes land here: /album/<id-or-slug> and the share link,
+  // /album/<artistSlug>/<albumSlug>. artistSlug is undefined on the first.
+  const { id, artistSlug } = useParams();
   const navigate = useNavigate();
   // Back that works on a cold deep link. navigate(-1) does nothing when
   // this page IS the first history entry, which is every shared link and
@@ -111,7 +113,7 @@ export default function AlbumDetailPage() {
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [user, tracks]);
 
-  useEffect(() => { fetchAlbum(); }, [id]);
+  useEffect(() => { fetchAlbum(); }, [id, artistSlug]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (user && showAddToPlaylist) fetchPlaylists(); }, [showAddToPlaylist, user]);
 
   // Which of these tracks the signed in listener has liked. Its own effect, so
@@ -243,11 +245,31 @@ export default function AlbumDetailPage() {
           .eq('id', id).maybeSingle();
         albumData = data;
       }
+      // By slug. When the URL carries the artist handle, the lookup is scoped
+      // to that artist, because albums.slug is unique per artist and not
+      // globally: two artists can both have an album called "Demos", and
+      // without the handle whichever row came back first would win.
+      //
+      // maybeSingle raises PGRST116 on more than one row rather than
+      // returning the first, so an unscoped lookup across a collision used to
+      // fail outright and send both albums to Browse. Ordered and limited
+      // instead, so a collision still opens something deterministic.
+      // !inner is what makes the artist filter exclude the ALBUM. A plain
+      // embed filtered on artists.slug still returns the album row, just with
+      // artists set to null, so without the inner join a mismatched handle
+      // would open the album anyway and then render with no artist on it.
       if (!albumData) {
-        const { data: bySlug } = await supabase.from('albums')
-          .select('*, artists!albums_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified)')
-          .eq('slug', id).maybeSingle();
-        albumData = bySlug;
+        const embed = artistSlug
+          ? 'artists!albums_artist_id_fkey!inner(id, artist_name, slug, profile_image_url, is_verified)'
+          : 'artists!albums_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified)';
+        let bySlugQuery = supabase.from('albums')
+          .select(`*, ${embed}`)
+          .eq('slug', id);
+        if (artistSlug) bySlugQuery = bySlugQuery.eq('artists.slug', artistSlug);
+        const { data: bySlug } = await bySlugQuery
+          .order('created_at', { ascending: true })
+          .limit(1);
+        albumData = bySlug?.[0] || null;
       }
       if (!albumData) { navigate('/browse'); return; }
       setAlbum(albumData);

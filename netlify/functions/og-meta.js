@@ -337,6 +337,22 @@ exports.handler = async (event) => {
     };
   }
 
+  // WHERE THE REDIRECT GOES, AND WHY IT IS NOT JUST pageUrl.
+  //
+  // This stub is meant for a crawler, which reads the meta tags and never
+  // follows the refresh. But the edge function in front of it decides who is a
+  // crawler from the user agent, and that decision is a guess. An in-app
+  // browser that guesses wrong, Instagram's above all, gets this page INSTEAD
+  // of the app, follows the refresh, arrives at the same URL with the same
+  // user agent, and is handed this page again. That is a loop, and from the
+  // outside it looks like the link simply never opens.
+  //
+  // _app=1 breaks it. social-preview.js and social-preview-handle.js both pass
+  // a request carrying it straight through to the app without looking at the
+  // user agent at all, so the second request can only ever be the real page.
+  // A crawler never gets this far, so nothing about the card changes.
+  const appUrl = pageUrl + (pageUrl.includes('?') ? '&' : '?') + '_app=1';
+
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -358,7 +374,7 @@ exports.handler = async (event) => {
   <meta name="twitter:title" content="${esc(title)}" />
   <meta name="twitter:description" content="${esc(description)}" />
   <meta name="twitter:image" content="${esc(cardImg)}" />
-  <meta http-equiv="refresh" content="0; url=${esc(pageUrl)}" />
+  <meta http-equiv="refresh" content="0; url=${esc(appUrl)}" />
 </head>
 <body>Redirecting...</body>
 </html>`;
@@ -368,4 +384,4 @@ exports.handler = async (event) => {
     headers: { 'Content-Type': 'text/html', 'Cache-Control': 'public, max-age=1800' },
     body: html,
   };
-};
+};

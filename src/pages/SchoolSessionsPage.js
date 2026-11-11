@@ -13,9 +13,9 @@
 
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
-  Loader, ArrowRight, Megaphone,
+  Loader, ArrowRight, Megaphone, Share2, Check,
   Upload as UploadIcon, ThumbsUp, PlayCircle, BookOpen, Music, Trophy,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -55,6 +55,82 @@ function BigCountdown({ to, label }) {
             <p className="text-[10px] lg:text-xs text-white/40 mt-0.5">{u.label}</p>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// YOUR OWN ENTRY, WITH THE LINK TO SEND PEOPLE.
+//
+// Without this an entrant has no way to find their own share link: they would
+// have to open the gallery and hunt for themselves among everybody else. The
+// link is the whole point of entering early, so it belongs at the top of the
+// page the moment they have one, not buried in a list.
+//
+// Renders nothing at all for anybody who has not entered, which is most
+// people most of the time.
+function YourEntryCard({ compId, user }) {
+  const [entry, setEntry] = React.useState(null);
+  const [copied, setCopied] = React.useState(false);
+
+  React.useEffect(() => {
+    let dead = false;
+    if (!compId || !user) { setEntry(null); return undefined; }
+    (async () => {
+      // Via the artist row, because an entry is owned by the artist profile
+      // rather than by the login.
+      const { data: mine } = await supabase
+        .from('artists').select('id').eq('user_id', user.id).limit(1).maybeSingle();
+      if (!mine || dead) return;
+      const { data } = await supabase
+        .from('school_sessions_entries')
+        .select('id, entrant_full_name, song:school_sessions_shortlist_songs(title)')
+        .eq('competition_id', compId)
+        .eq('artist_id', mine.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!dead) setEntry(data || null);
+    })();
+    return () => { dead = true; };
+  }, [compId, user]);
+
+  if (!entry) return null;
+
+  const url = `https://www.feelzmachine.com/sessions/entry/${entry.id}`;
+
+  const share = async () => {
+    try {
+      if (navigator.share) { await navigator.share({ title: 'Vote for me on Feelz Machine Sessions', url }); return; }
+    } catch { /* dismissed, fall through to copying */ }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch { /* nothing to do, the link is shown below anyway */ }
+  };
+
+  return (
+    <div className="rounded-xl border border-lime-400/30 bg-lime-400/[0.05] p-4 space-y-2.5">
+      <p className="text-lime-400 text-xs font-bold tracking-widest uppercase">You are in</p>
+      <p className="text-sm text-white">
+        {entry.entrant_full_name}
+        {entry.song?.title ? <span className="text-white/50"> on {entry.song.title}</span> : null}
+      </p>
+      <p className="text-xs text-white/50">
+        This is your link. Put it in your TikTok bio and send it to anyone who will vote for you.
+      </p>
+      <p className="text-[11px] text-white/30 break-all font-mono">{url.replace('https://www.', '')}</p>
+      <div className="flex items-center gap-2">
+        <button onClick={share}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-lime-400 text-black text-xs font-bold">
+          {copied ? <Check className="w-3.5 h-3.5" /> : <Share2 className="w-3.5 h-3.5" />}
+          {copied ? 'Copied' : 'Share my entry'}
+        </button>
+        <Link to={`/sessions/entry/${entry.id}`}
+          className="px-3 py-2 rounded-lg border border-white/10 text-xs font-semibold text-white/60 hover:text-white">
+          See the page
+        </Link>
       </div>
     </div>
   );
@@ -114,7 +190,8 @@ function EntryGallery({ compId }) {
       <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Entries so far</p>
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5 lg:gap-3">
         {entries.map(e => (
-          <div key={e.id} className={`rounded-xl overflow-hidden border ${
+          <Link key={e.id} to={`/sessions/entry/${e.id}`}
+            className={`block rounded-xl overflow-hidden border transition hover:border-white/20 ${
             e.is_winner   ? 'border-lime-400 bg-lime-400/[0.10]'
             : e.is_finalist ? 'border-lime-400/40 bg-lime-400/[0.04]'
             : 'border-white/[0.06] bg-white/[0.02]'}`}>
@@ -146,7 +223,7 @@ function EntryGallery({ compId }) {
                 </p>
               )}
             </div>
-          </div>
+          </Link>
         ))}
       </div>
       {hasMore && (
@@ -244,9 +321,9 @@ export default function SchoolSessionsPage() {
   // but the canonical tag has to name one of the two and it should name the
   // one the competition is actually called.
   const pageUrl = `${BASE_URL}/sessions`;
-  const pageTitle = 'Sessions, a music cover competition · Feelz Machine';
+  const pageTitle = 'Sessions, write your verse · Feelz Machine';
   const pageDesc = comp?.prize_breakdown_text || comp?.prize_description
-    || 'Pick a song from the shortlist and cover it. Cash prizes, judged by a panel, with a public People\u2019s Choice vote too.';
+    || 'The chorus is done. Write your own verses over the backing track. Cash prizes, judged by a panel, with a public People\u2019s Choice vote too.';
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -357,15 +434,24 @@ export default function SchoolSessionsPage() {
         </div>
 
         {/* How it works */}
+        {/* THE SENTENCE THAT DECIDES WHETHER AN ENTRY IS VALID.
+            Entrants were downloading the instrumental and writing a brand new
+            song over it, then entering that. Nothing here said in plain words
+            that the chorus is the song's and only the verses are theirs, so
+            the first line now says exactly that and the download is the
+            backing track with the chorus already on it. */}
         <p className="text-xs text-white/50 leading-relaxed border-l-2 border-lime-400 pl-3">
-          <span className="text-white font-semibold">Pick a song from the shortlist and cover it</span>, which means singing that song in your own voice, over the original track or the beat provided. The words and the melody stay the song's; what you bring is the performance. Solo or as a group; if your group wins, the prize splits evenly across everyone listed.
+          <span className="text-white font-semibold">Download the backing track and write your own verses</span>. The chorus is already on the file and it stays as it is, that is the part that makes every entry the same song. The verses are yours: your words, your voice, your take. Solo or as a group; if your group wins, the prize splits evenly across everyone listed.
+          <span className="block mt-1.5 text-white/40">Writing a completely new song over the backing track is the one thing that does not count, however good it is.</span>
         </p>
+
+        <YourEntryCard compId={compId} user={user} />
 
         {/* Song shortlist. Tapping one plays the whole shortlist in the app
             player, so nobody leaves this page half way through entering. */}
         {songs.length > 0 && (
           <div className="space-y-2.5 lg:space-y-3">
-            <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Songs up for grabs</p>
+            <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">{songs.length === 1 ? 'The song' : 'Songs up for grabs'}</p>
             <ShortlistSongs songs={songs} />
           </div>
         )}
@@ -405,12 +491,12 @@ export default function SchoolSessionsPage() {
               when: comp?.entries_open_at ? `Until ${phaseDate(comp.entries_open_at)}` : null,
               desc: hasCourses
                 ? 'Get ready, take the courses below, check the song shortlist, spread the word.'
-                : 'Get ready, check the song shortlist, and spread the word.' },
+                : 'Get ready, learn the chorus, and start writing your verses.' },
               { key: 'submissions', icon: UploadIcon, title: 'Submissions',
                 when: comp?.entries_open_at && comp?.entries_close_at
                   ? `${phaseDate(comp.entries_open_at)} to ${phaseDate(comp.entries_close_at)}`
                   : null,
-                desc: 'Pick a song from the shortlist, record your cover, and toggle "Enter into Sessions" when you upload.' },
+                desc: 'Download the backing track, record your verses over it, and toggle "Enter into Sessions" when you upload.' },
               { key: 'voting', icon: ThumbsUp, title: 'Voting',
                 when: comp?.voting_close_at ? `Ends ${phaseDate(comp.voting_close_at)}` : null,
                 desc: 'Judges announce finalists and pick the winner. The public votes separately for the People\u2019s Choice pick.' },
@@ -461,7 +547,7 @@ export default function SchoolSessionsPage() {
               // somebody decides whether a competition is meant for them, and
               // naming a school at all answers that question wrongly. The form
               // no longer asks either.
-              ['A cover of one of the songs above', 'Your own vocal over the original track. Solo or as a group.'],
+              ['Your verses over the backing track', 'The chorus on the file stays; the verses are yours. Solo or as a group.'],
               ['A TikTok post of it, tagging us', 'This one is required. You paste the link when you enter, so post it before you upload.'],
             ].map(([what, why]) => (
               <li key={what} className="flex items-start gap-2.5">

@@ -69,6 +69,12 @@ export default async (request, context) => {
   // it is not registered, and the netlify.toml pattern is what to look at.
   const forced = url.searchParams.get('_preview') === '1';
 
+  // Same escape hatch as social-preview.js, for the same reason: og-meta's
+  // stub refreshes to a url carrying _app=1, and a request carrying it is the
+  // app's, whatever the user agent looks like. Without this the handle forms
+  // would keep the loop that the other file just lost.
+  if (url.searchParams.get('_app') === '1') return context.next();
+
   const userAgent = request.headers.get('user-agent') || '';
 
   if (!forced && SEARCH_ENGINE.test(userAgent)) return context.next();
@@ -129,4 +135,4 @@ export default async (request, context) => {
 //
 // The paths this function answers on are declared in netlify.toml, as a regular
 // expression, because a URL pattern will not take the "@". See the
-// [[edge_functions]] block there.
+// [[edge_functions]] block there.

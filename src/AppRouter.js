@@ -102,6 +102,7 @@ const RecentlyDiscoveredPage = React.lazy(() => import('./pages/RecentlyDiscover
 const ListenerProfilePage = React.lazy(() => import('./pages/ListenerProfilePage'));
 const SchoolSessionsPage = React.lazy(() => import('./pages/SchoolSessionsPage'));
 const SchoolSessionsVotePage = React.lazy(() => import('./pages/SchoolSessionsVotePage'));
+const SchoolSessionsEntryPage = React.lazy(() => import('./pages/SchoolSessionsEntryPage'));
 const SchoolSessionsTermsPage = React.lazy(() => import('./pages/SchoolSessionsTermsPage'));
 const SchoolSessionsJudgePanel = React.lazy(() => import('./pages/SchoolSessionsJudgePanel'));
 const AdminSchoolSessions = React.lazy(() => import('./pages/AdminSchoolSessions'));
@@ -498,6 +499,10 @@ export default function AppRouter() {
                 <Route path="/sessions/terms" element={
                   <PageTitle title="Sessions: Terms"><SchoolSessionsTermsPage /></PageTitle>
                 } />
+                {/* One entry, shareable. This is the link an entrant puts in
+                    a TikTok bio, so it has to work before voting opens, not
+                    only once finalists exist. */}
+                <Route path="/sessions/entry/:id" element={<SchoolSessionsEntryPage />} />
                 <Route path="/sessions/judge" element={<SchoolSessionsJudgePanel />} />
 
                 <Route path="/schoolsessions" element={
@@ -509,6 +514,7 @@ export default function AppRouter() {
                 <Route path="/schoolsessions/terms" element={
                   <PageTitle title="Sessions: Terms"><SchoolSessionsTermsPage /></PageTitle>
                 } />
+                <Route path="/schoolsessions/entry/:id" element={<SchoolSessionsEntryPage />} />
                 <Route path="/schoolsessions/judge" element={<SchoolSessionsJudgePanel />} />
                 <Route path="/for-you" element={<Navigate to="/" replace />} />
                 <Route path="/browse" element={<BrowsePage />} />
@@ -547,6 +553,25 @@ export default function AppRouter() {
                 <Route path="/guides/:slug" element={<GuidePage />} />
                 <Route path="/faq" element={<FaqPage />} />
                 <Route path="/album/:id" element={<AlbumDetailPage />} />
+                {/* THE SHARE LINK. Do not remove this without changing
+                    src/utils/shareLink.js at the same time.
+
+                    buildShareUrl emits /album/<artistSlug>/<albumSlug> for
+                    every album, because an album slug is only unique per
+                    artist and the handle makes it unambiguous. og-meta builds
+                    the same two-segment URL for the preview card, and the
+                    sitemap lists it.
+
+                    Only the one-segment route above existed, so a two-segment
+                    URL matched nothing, fell through to NotFoundRedirect and
+                    was sent to "/". Every album anyone shared opened on For
+                    You, and the album pages themselves were fine, which is why
+                    this looked like a broken link rather than a missing route.
+
+                    The artist handle is not decoration here either: with it
+                    the album is resolved within that artist, so two artists
+                    with an album called the same thing both work. */}
+                <Route path="/album/:artistSlug/:id" element={<AlbumDetailPage />} />
                 {/* TrackDetailPage consolidated into TrackPage below */}
                 <Route path="/affiliates" element={<AffiliatePage />} />
                 <Route path="/payment/success" element={<PaymentSuccess />} />
