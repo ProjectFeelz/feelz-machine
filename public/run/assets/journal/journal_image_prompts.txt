@@ -1,0 +1,174 @@
+FEELZ RUN · JOURNAL PICTURES
+
+Each find in the game is a picture you flip over to read. Make one image per entry below and save it as
+FEELZ_RUN_web\assets\journal\<ID>.webp (or .png renamed to .webp), 4:3, about 1000 x 750.
+Until a picture exists, the game shows a faded sepia view of that mission's place instead.
+
+STYLE LINE (paste before every prompt):
+Graphic-novel game concept art, bold black ink outlines, cel shading, muted dusty colours with gold accents, close-up still life, the object fills the frame, soft light from one side, worn and lived-in, 4:3 landscape. No readable text, no logos, no people's faces.
+
+
+=== M01 · AGAINST THE STORM ===
+
+M01_memory_1  (Memory trace: A child's drawing)
+Prompt: A personal keepsake found in the ruins of the Lower City. Crayon on a scrap of card: a small figure in a beanie holding a bigger one's hand, under brown rain.
+
+M01_record_1  (City record: Curfew notice)
+Prompt: An official document or posted notice of the Circle, the city's rulers, weathered and torn. By order of the Circle: no movement between layers during dust storms. Wardens will enforce.
+
+M01_lyric  (Lyric fragment: "I'm a little bit lost but I'm not going down")
+Prompt: Words left by a stranger on a surface in the city; show the marks and the surface, the words themselves illegible scratches. Scratched into the shelter wall by someone who waited out the same storm.
+
+=== M02 · GET OUT THE WAY ===
+
+M02_memory_1  (Memory trace: Initials on a bunk)
+Prompt: A personal keepsake found in the ruins of the Lower City. Two letters carved deep into the hostel bunk frame. One of them is his brother's.
+
+M02_record_1  (City record: Checkpoint rules)
+Prompt: An official document or posted notice of the Circle, the city's rulers, weathered and torn. Movement between layers requires a pass of sufficient rank. Unregistered workers will be returned.
+
+M02_lyric  (Lyric fragment: "I got an assignment, got limited time")
+Prompt: Words left by a stranger on a surface in the city; show the marks and the surface, the words themselves illegible scratches. Written on Koda's work order, in his own hand.
+
+=== M03 · GHETTO GOSPEL ===
+
+M03_memory_1  (Memory trace: The hiding spot)
+Prompt: A personal keepsake found in the ruins of the Lower City. Behind a market stall, a hollow where Koda and his brother used to hide from Wardens.
+
+M03_record_1  (City record: Curfew sweep order)
+Prompt: An official document or posted notice of the Circle, the city's rulers, weathered and torn. Tonight's sweep: confiscate instruments, disperse gatherings.
+
+M03_lyric  (Lyric fragment: "That's why we need a ghetto gospel")
+Prompt: Words left by a stranger on a surface in the city; show the marks and the surface, the words themselves illegible scratches. Painted on the mural above the fire pit.
+
+=== M04 · BLESSINGS ===
+
+M04_memory_1  (Memory trace: Mama's prayer card)
+Prompt: A personal keepsake found in the ruins of the Lower City. Worn soft at the edges. "Mama said we would make it."
+
+M04_record_1  (City record: Dock labour contract)
+Prompt: An official document or posted notice of the Circle, the city's rulers, weathered and torn. Wages paid in water rations, set by the Circle, revised without notice.
+
+M04_lyric  (Lyric fragment: "Never thought I'd get this far")
+Prompt: Words left by a stranger on a surface in the city; show the marks and the surface, the words themselves illegible scratches. Scratched into the railing at the top of the tower.
+
+=== M05 · CHEMISTRY ===
+
+M05_memory_1  (Memory trace: Deja vu: the fountain)
+Prompt: A personal keepsake found in the ruins of the Lower City. He has never been here. He knows this fountain.
+
+M05_record_1  (City record: Sentinel duty roster)
+Prompt: An official document or posted notice of the Circle, the city's rulers, weathered and torn. Note: anomaly sightings in the sky-gardens. Increase patrols.
+
+M05_lyric  (Lyric fragment: "I ain't never seen no angel in my life before")
+Prompt: Words left by a stranger on a surface in the city; show the marks and the surface, the words themselves illegible scratches. Engraved on the rim of the largest fountain.
+
+=== M06 · GOD IS MY WOMAN ===
+
+M06_memory_1  (Memory trace: A carved heart)
+Prompt: A personal keepsake found in the ruins of the Lower City. A heart carved into ancient Veil stone. He recognises the hand that carved it.
+
+M06_record_1  (City record: Veil crack)
+Prompt: An official document or posted notice of the Circle, the city's rulers, weathered and torn. Through a thin place in the ground: the Circle's mines, working far below.
+
+M06_lyric  (Lyric fragment: "Holding on to you is like a paradise of my own")
+Prompt: Words left by a stranger on a surface in the city; show the marks and the surface, the words themselves illegible scratches. Written in drifting gold sand.
+
+=== M07 · CLOSE TO MY HEART ===
+
+M07_memory_1  (Memory trace: Worn grooves)
+Prompt: A personal keepsake found in the ruins of the Lower City. Two worn grooves on an alley step, where two people once sat all day.
+
+M07_record_1  (City record: Circle notice)
+Prompt: An official document or posted notice of the Circle, the city's rulers, weathered and torn. Report anyone seen staring into water.
+
+M07_lyric  (Lyric fragment: "I cannot touch you in any way")
+Prompt: Words left by a stranger on a surface in the city; show the marks and the surface, the words themselves illegible scratches. Visible only in a puddle's reflection.
+
+=== M08 · PATIENCE ===
+
+M08_memory_1  (Memory trace: Mama's prayer beads)
+Prompt: A personal keepsake found in the ruins of the Lower City. Left on the plaza steps, as if someone knew he would sit here.
+
+M08_record_1  (City record: Sentinel report)
+Prompt: An official document or posted notice of the Circle, the city's rulers, weathered and torn. "Subject sat motionless in the plaza for nine hours. No rule against stillness. No action taken."
+
+M08_lyric  (Lyric fragment: "You teach me patience")
+Prompt: Words left by a stranger on a surface in the city; show the marks and the surface, the words themselves illegible scratches. Written by condensation on the fountain's glass rim.
+
+=== M09 · HEADS UP ===
+
+M09_memory_1  (Memory trace: The carved bracelet)
+Prompt: A personal keepsake found in the ruins of the Lower City. Confiscated by a Veil Hunter. His brother never took it off.
+
+M09_record_1  (City record: Veil Hunter briefing)
+Prompt: An official document or posted notice of the Circle, the city's rulers, weathered and torn. "A masked male anomaly, and an unregistered female signal."
+
+M09_lyric  (Lyric fragment: "You provide the silence in a noisy mind")
+Prompt: Words left by a stranger on a surface in the city; show the marks and the surface, the words themselves illegible scratches. Etched faintly beside the shattered tile.
+
+=== M10 · I PRAY ===
+
+M10_memory_1  (Memory trace: A candle stub)
+Prompt: A personal keepsake found in the ruins of the Lower City. Where Koda and his brother prayed as boys.
+
+M10_record_1  (City record: Order: unauthorised light)
+Prompt: An official document or posted notice of the Circle, the city's rulers, weathered and torn. Candles and shrines are banned in the Lower City.
+
+M10_lyric  (Lyric fragment: "In your image you created")
+Prompt: Words left by a stranger on a surface in the city; show the marks and the surface, the words themselves illegible scratches. On the shelter wall, beside the first.
+
+=== M11 · LETTING OFF STEAM ===
+
+M11_memory_1  (Memory trace: Four small lights)
+Prompt: A personal keepsake found in the ruins of the Lower City. A child's drawing: four small lights in a starry sky.
+
+M11_record_1  (City record: Rent notice)
+Prompt: An official document or posted notice of the Circle, the city's rulers, weathered and torn. Rent due to the Circle, in water.
+
+M11_lyric  (Lyric fragment: "You and me against the world")
+Prompt: Words left by a stranger on a surface in the city; show the marks and the surface, the words themselves illegible scratches. Painted in a child's hand across the bunk beds.
+
+=== M12 · MY BROTHERS ===
+
+M12_memory_1  (Memory trace: Initials in the rock)
+Prompt: A personal keepsake found in the ruins of the Lower City. Where seven boys came once. In the memory, they tap their chests twice.
+
+M12_record_1  (City record: Transport manifest)
+Prompt: An official document or posted notice of the Circle, the city's rulers, weathered and torn. Torn. One line survives: Status: TRANSFERRED - VEIL WORKS, DEEP LEVEL.
+
+M12_lyric  (Lyric fragment: "Will I see you again?")
+Prompt: Words left by a stranger on a surface in the city; show the marks and the surface, the words themselves illegible scratches. Traced in the sand at the foot of the last dust figure.
+
+=== M13 · ROSES & BUTTERFLIES ===
+
+M13_memory_1  (Memory trace: A rose in a tin)
+Prompt: A personal keepsake found in the ruins of the Lower City. His mother tending a single rose in a tin can.
+
+M13_record_1  (City record: Veil crack)
+Prompt: An official document or posted notice of the Circle, the city's rulers, weathered and torn. Miners at work far below.
+
+M13_lyric  (Lyric fragment: "You are like roses to a butterfly")
+Prompt: Words left by a stranger on a surface in the city; show the marks and the surface, the words themselves illegible scratches. Spelled out in fallen petals.
+
+=== M14 · SHINE OLIVE GEM ===
+
+M14_memory_1  (Memory trace: The other half)
+Prompt: A personal keepsake found in the ruins of the Lower City. The other half of the cracked mirror.
+
+M14_record_1  (City record: Veil maintenance)
+Prompt: An official document or posted notice of the Circle, the city's rulers, weathered and torn. Suppression levels by layer.
+
+M14_lyric  (Lyric fragment: "Diamonds don't break")
+Prompt: Words left by a stranger on a surface in the city; show the marks and the surface, the words themselves illegible scratches. Carved into a golden spire.
+
+=== M15 · THUG IN LOVE ===
+
+M15_memory_1  (Memory trace: The drawing)
+Prompt: A personal keepsake found in the ruins of the Lower City. The child's drawing from the storm.
+
+M15_record_1  (City record: The Circle's last order)
+Prompt: An official document or posted notice of the Circle, the city's rulers, weathered and torn. Hold the Veil at any cost.
+
+M15_lyric  (Lyric fragment: "There's a city, I can feel it")
+Prompt: Words left by a stranger on a surface in the city; show the marks and the surface, the words themselves illegible scratches. Written in the city's streets, seen from above.

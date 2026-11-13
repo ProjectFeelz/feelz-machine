@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>if (/\/run$/.test(location.pathname)) location.replace(location.pathname + "/" + location.search);</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <!-- Installed like the Feelz Machine app: full screen, no browser bar -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Feelz Run">
+  <link rel="apple-touch-icon" href="assets/icons/icon-180.png">
+  <meta name="description" content="FEELZ RUN by Feelz Machine. Run the F.I.L.L. missions with Koda, in time with the music, solo or as a two player race.">
+  <title>FEELZ RUN</title>
+  <link rel="icon" href="assets/feelz-machine-logo.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="game-shell">
+    <header class="topbar">
+      <a class="wordmark" href="https://www.feelzmachine.com" target="_blank" rel="noopener" aria-label="Feelz Machine">
+        <img class="wordmark-logo" src="assets/feelz-machine-logo.png" alt="">
+        <span>FEELZ <strong>RUN</strong></span>
+      </a>
+      <div class="topbar-tag">F.I.L.L. · FIRST IMPRESSIONS LAST LONGEST</div>
+    </header>
+
+    <section class="game-frame" aria-label="Game">
+      <div class="hud">
+        <div class="hud-item hud-left">
+          <span class="hud-label">RECORDS</span>
+          <strong id="hudRecords">00</strong>
+          <span class="hud-label hud-xp-label">XP</span>
+          <strong class="hud-xp" id="hudXp">0</strong>
+          <strong class="hud-race" id="hudRace"></strong>
+        </div>
+        <div class="hud-center" id="zoneName">INTRO</div>
+        <div class="hud-item hud-right">
+          <span class="hearts" id="hearts" aria-label="Lives"><span class="heart">♥</span><span class="heart">♥</span><span class="heart">♥</span><span class="heart hidden">♥</span></span>
+          <span class="hud-label">CHECKPOINT IN</span>
+          <strong id="timer">0:12</strong>
+          <button class="pause-button" id="pauseButton" type="button" aria-label="Pause">II</button>
+        </div>
+      </div>
+
+      <div class="rotate-hint hidden" id="rotateHint" role="dialog" aria-label="Turn your phone sideways">
+        <div class="rotate-phone" aria-hidden="true"></div>
+        <strong>TURN YOUR PHONE SIDEWAYS</strong>
+        <span>Feelz Run plays full screen in landscape. The game is paused until you turn it.</span>
+      </div>
+
+      <canvas id="gameCanvas" width="960" height="540" aria-label="Game canvas">
+        Your browser does not support HTML Canvas.
+      </canvas>
+      <script>
+        // Edge to edge: the picture is 540 high and as wide as the window's shape (16:9 up to 21:9), so wide screens see more of the world.
+        (function () {
+          var c = document.getElementById("gameCanvas");
+          var a = Math.max(16 / 9, Math.min(21 / 9, window.innerWidth / Math.max(1, window.innerHeight)));
+          c.width = Math.round(270 * a) * 2;
+          document.documentElement.style.setProperty("--game-ar", String(c.width / 540));
+        })();
+      </script>
+
+      <div class="overlay start-screen" id="startOverlay">
+        <div class="start-panel">
+          <div class="brand-row"><img class="brand-logo" src="assets/feelz-machine-logo.png" alt="Feelz Machine"><span>FEELZ MACHINE PRESENTS</span></div>
+          <h1 class="start-title"><span class="st-big">FEELZ</span><span class="st-run">RUN<span>.</span></span></h1>
+          <p class="track-line" id="trackLine"></p>
+          <div class="strip-wrap">
+            <button class="strip-arrow" id="stripPrev" type="button" aria-label="Previous missions">‹</button>
+            <div class="mission-strip" id="missionStrip" aria-label="Missions"></div>
+            <button class="strip-arrow" id="stripNext" type="button" aria-label="More missions">›</button>
+          </div>
+          <div class="mode-toggle" role="group" aria-label="Players">
+            <button type="button" data-mode="1" class="active">1 PLAYER</button>
+            <button type="button" data-mode="2">2 PLAYER RACE</button>
+            <button type="button" data-mode="ai">VS RIVAL</button>
+            <button type="button" data-mode="free">FREE ROAM</button>
+          </div>
+          <div class="mode-toggle ai-levels hidden" id="aiLevels" role="group" aria-label="Rival difficulty">
+            <button type="button" data-ai="easy">EASY</button>
+            <button type="button" data-ai="normal" class="active">NORMAL</button>
+            <button type="button" data-ai="hard">HARD</button>
+          </div>
+          <div class="start-actions" id="playActions">
+            <button class="primary-button start-play" id="playButton" type="button"><span class="play-icon">▶</span> PLAY</button>
+            <button class="secondary-button" id="skillsButton" type="button">SKILLS</button>
+            <button class="secondary-button" id="journalButton" type="button">JOURNAL</button>
+            <button class="secondary-button hidden" id="leaderboardButton" type="button">LEADERBOARD</button>
+          </div>
+          <div class="signin-gate hidden" id="signinGate">
+            <p class="gate-copy">Feelz Run is free with your Feelz Machine account, listener or artist. Sign in and your level, skills and credits follow you everywhere.</p>
+            <div class="start-actions">
+              <a class="primary-button start-play" id="signinLink" href="/login?redirect=%2Frun%2F">SIGN IN WITH FEELZ MACHINE</a>
+              <a class="secondary-button" id="signupLink" href="/login?redirect=%2Frun%2F&amp;mode=signup">CREATE A FREE ACCOUNT</a>
+            </div>
+            <p class="control-hint">Got a Plugin Gallery account? Choose Sign in with Plugin Gallery on the next page.</p>
+          </div>
+          <div class="player-card" id="playerCard">
+            <div class="pc-top"><span class="pc-name" id="pcName">GUEST</span><span class="pc-level">LV <strong id="pcLevel">1</strong></span></div>
+            <div class="xp-bar"><div class="xp-fill" id="pcXpFill"></div></div>
+            <div class="pc-xp" id="pcXp">0 / 100 XP</div>
+            <div class="pc-stats">
+              <div><span>VINYL</span><strong id="pcVinyl">0</strong></div>
+              <div><span>NOTES</span><strong id="pcNotes">0</strong></div>
+              <div><span>JOURNAL</span><strong id="pcJournal">0</strong></div>
+            </div>
+            <div class="pc-wallet"><span>RP <strong id="pcRp">0</strong></span><span>CREDITS <strong id="pcCredits">0</strong></span></div>
+            <p class="pc-save" id="pcSave">Progress saved on this device</p>
+            <button class="text-button hidden" id="accountButton" type="button">PLAYER SETTINGS</button>
+          </div>
+          <p class="control-hint hidden" id="freeNote">FREE ROAM · WALK THE WORLD AT YOUR OWN PACE · NO CLOCK, NO ENFORCERS · FIVE HIDDEN GEMS IN EACH MISSION, UP IN THE HARDEST PLACES TO REACH</p>
+          <p class="control-hint" id="controlsSolo">MOVE A / D · JUMP W OR SPACE (AGAIN IN THE AIR TO DOUBLE JUMP) · CROUCH S (WHILE RUNNING TO SLIDE) · HIT F<br>REACH EACH CHECKPOINT BEFORE ITS PART OF THE SONG ENDS · CLIMB THE PIPES · CONTROLLER: A JUMP, B CROUCH, X HIT</p>
+          <p class="control-hint hidden" id="controlsRace">P1: A / D MOVE · W JUMP · S CROUCH · F HIT &nbsp; P2: ← / → MOVE · ↑ JUMP · ↓ CROUCH · / HIT<br>OR A CONTROLLER EACH · MOST RECORDS WINS, FIRST TO THE FINISH GETS A BONUS</p>
+          <p class="pad-hint">CONTROLLER CONNECTED · PRESS A OR START</p>
+        </div>
+      </div>
+
+      <div class="overlay hidden" id="authOverlay">
+        <div class="overlay-card auth-card">
+          <button class="close-x" type="button" data-close aria-label="Close">×</button>
+          <p class="eyebrow" id="authEmailLine">YOUR FEELZ MACHINE ACCOUNT</p>
+          <h2>PLAYER<span>.</span></h2>
+          <p class="intro-copy">Your name and flag on the leaderboard. Your email is never shown.</p>
+          <label class="field">PLAYER NAME<input type="text" id="authName" maxlength="16" autocomplete="nickname" placeholder="3 to 16 letters or numbers"></label>
+          <label class="field">COUNTRY<select id="authCountry"><option value="">Choose your country</option></select></label>
+          <div class="auth-actions">
+            <button class="primary-button" id="authSave" type="button">SAVE</button>
+            <button class="secondary-button" id="authSignOut" type="button">SIGN OUT</button>
+          </div>
+          <p class="auth-error" id="authError" role="alert"></p>
+        </div>
+      </div>
+
+      <div class="overlay hidden" id="skillsOverlay">
+        <div class="overlay-card skills-card">
+          <button class="close-x" type="button" data-close aria-label="Close">×</button>
+          <p class="eyebrow" id="skillsWallet">LEVEL 1 · 0 RP · 0 CREDITS</p>
+          <h2>SKILLS<span>.</span></h2>
+          <div class="tabs" id="skillTabs">
+            <button type="button" data-tab="movement" class="active">MOVES</button>
+            <button type="button" data-tab="combat">COMBAT</button>
+            <button type="button" data-tab="perk">PERKS</button>
+            <button type="button" data-tab="style">STYLE</button>
+            <button type="button" data-tab="credits">CREDITS</button>
+          </div>
+          <div class="skills-body" id="skillsBody"></div>
+          <p class="auth-error" id="skillsError" role="alert"></p>
+        </div>
+      </div>
+
+      <div class="overlay hidden" id="journalOverlay">
+        <div class="overlay-card journal-card">
+          <button class="close-x" type="button" data-close aria-label="Close">×</button>
+          <p class="eyebrow" id="journalCount">MEMORIES, LYRICS AND CITY RECORDS</p>
+          <h2>JOURNAL<span>.</span></h2>
+          <div class="journal-body" id="journalBody"></div>
+        </div>
+      </div>
+
+      <div class="overlay hidden" id="joinOverlay">
+        <div class="overlay-card join-card">
+          <button class="close-x" type="button" data-close aria-label="Close">×</button>
+          <p class="eyebrow">2 PLAYER RACE</p>
+          <h2>WHO'S IN<span>?</span></h2>
+          <div class="join-grid">
+            <div class="join-slot ready" id="joinP1">
+              <span class="join-tag">PLAYER 1</span>
+              <strong id="joinP1Name">P1</strong>
+              <span class="join-note" id="joinP1Note">KEYBOARD: A D W S F</span>
+            </div>
+            <div class="join-slot" id="joinP2">
+              <span class="join-tag">PLAYER 2</span>
+              <strong id="joinP2Name">PRESS A TO JOIN</strong>
+              <span class="join-note" id="joinP2Note">ON A CONTROLLER, OR ↑ ON THE KEYBOARD</span>
+              <div class="join-signin hidden" id="joinSignin">
+                <input id="p2Email" type="email" placeholder="Feelz Machine email" autocomplete="off">
+                <input id="p2Password" type="password" placeholder="Password" autocomplete="off">
+                <button class="secondary-button small" id="p2SignIn" type="button">SIGN IN</button>
+                <span class="join-or">OR</span>
+                <input id="p2Name" type="text" maxlength="16" placeholder="Just type a name">
+              </div>
+              <button class="text-button hidden" id="p2ShowSignin" type="button">PLAYER 2 HAS A FEELZ MACHINE ACCOUNT</button>
+              <p class="auth-error" id="p2Error" role="alert"></p>
+            </div>
+          </div>
+          <button class="primary-button start-play" id="joinStart" type="button" disabled><span class="play-icon">▶</span> START RACE</button>
+        </div>
+      </div>
+
+      <div class="overlay hidden" id="leaderOverlay">
+        <div class="overlay-card leader-card">
+          <button class="close-x" type="button" data-close aria-label="Close">×</button>
+          <p class="eyebrow" id="leaderMission">COMPETE WORLDWIDE</p>
+          <h2>LEADERBOARD<span>.</span></h2>
+          <div class="tabs">
+            <button type="button" data-period="all" class="active">ALL TIME</button>
+            <button type="button" data-period="week">THIS WEEK</button>
+          </div>
+          <ol class="leader-list" id="leaderList"></ol>
+          <p class="leader-you" id="leaderYou"></p>
+        </div>
+      </div>
+
+      <div class="overlay hidden" id="pauseOverlay">
+        <div class="overlay-card pause-card">
+          <div class="brand-row"><img class="brand-logo" src="assets/feelz-machine-logo.png" alt="Feelz Machine"><span>FEELZ RUN</span></div>
+          <h1 class="start-title pause-title"><span class="st-big">PAUSED</span><span class="st-run">TAKE FIVE<span>.</span></span></h1>
+          <p class="track-line" id="pauseTrack"></p>
+          <div class="pause-actions">
+            <button class="primary-button" id="resumeButton" type="button">RESUME ▶</button>
+            <button class="secondary-button" id="restartRunButton" type="button">RESTART MISSION ↻</button>
+            <button class="secondary-button" id="soundButton" type="button">SOUND: ON</button>
+            <button class="secondary-button" id="lyricsButton" type="button">LYRICS: ON</button>
+            <button class="secondary-button" id="menuButton" type="button">MAIN MENU</button>
+          </div>
+          <p class="control-hint">KEYBOARD: ESC OR P TO RESUME · R TO RESTART · M FOR SOUND · L FOR LYRICS<br>CONTROLLER: A OR START TO RESUME · Y TO RESTART</p>
+        </div>
+      </div>
+
+      <div class="overlay hidden finish-overlay" id="finishOverlay">
+        <div class="finish-layout">
+          <div class="finish-stage">
+            <canvas class="dance" id="danceCanvas" width="300" height="440" aria-hidden="true"></canvas>
+            <div class="finish-brand"><img src="assets/feelz-machine-logo.png" alt="Feelz Machine"><span>FEELZ RUN</span></div>
+          </div>
+          <div class="finish-panel">
+            <p class="finish-mission" id="finishMission"></p>
+            <p class="eyebrow" id="finishEyebrow">YOU MADE IT</p>
+            <h2 id="finishTitle">MISSION COMPLETE</h2>
+            <div id="soloResults">
+              <div class="rp-line"><span class="rp-value" id="finalRp">0</span><span class="rp-label">RP</span></div>
+              <p class="final-best" id="finalBest"></p>
+              <dl class="stats">
+                <div><dt>RECORDS</dt><dd id="finalRecords">0</dd></div>
+                <div><dt>NOTES</dt><dd id="finalNotes">0</dd></div>
+                <div><dt>ON TIME</dt><dd id="finalMisses">0</dd></div>
+                <div><dt>KNOCKOUTS</dt><dd id="finalKos">0</dd></div>
+                <div><dt>JOURNAL</dt><dd id="finalJournal">0</dd></div>
+                <div><dt>WIPEOUTS · HITS</dt><dd id="finalWipeouts">0</dd></div>
+              </dl>
+              <p class="notes-split" id="finalNotesSplit"></p>
+              <div class="level-line">
+                <span id="finalLevel">LEVEL 1</span>
+                <span class="xp-gain" id="finalXp">+0 XP</span>
+                <span class="level-up" id="finalLevelUp"></span>
+              </div>
+              <div class="xp-bar"><div class="xp-fill" id="finalXpFill"></div></div>
+              <p class="final-rank" id="finalRank"></p>
+            </div>
+            <div id="raceResults" class="hidden">
+              <div class="race-table">
+                <div class="race-col" id="raceP1">
+                  <h3>P1</h3>
+                  <p class="race-points"><strong id="raceP1Points">0</strong> PTS</p>
+                  <dl><dt>PLACE</dt><dd id="raceP1Place">-</dd><dt>RECORDS</dt><dd id="raceP1Records">0</dd><dt>NOTES</dt><dd id="raceP1Notes">0</dd><dt>KNOCKOUTS</dt><dd id="raceP1Kos">0</dd><dt>TIME</dt><dd id="raceP1Time">-</dd></dl>
+                </div>
+                <div class="race-col" id="raceP2">
+                  <h3>P2</h3>
+                  <p class="race-points"><strong id="raceP2Points">0</strong> PTS</p>
+                  <dl><dt>PLACE</dt><dd id="raceP2Place">-</dd><dt>RECORDS</dt><dd id="raceP2Records">0</dd><dt>NOTES</dt><dd id="raceP2Notes">0</dd><dt>KNOCKOUTS</dt><dd id="raceP2Kos">0</dd><dt>TIME</dt><dd id="raceP2Time">-</dd></dl>
+                </div>
+              </div>
+            </div>
+            <p class="intro-copy" id="finishLine"></p>
+            <p class="final-saved" id="finalSaved"></p>
+            <div class="finish-actions">
+              <a class="primary-button listen-button hidden" id="listenLink" href="#" target="_blank" rel="noopener">LISTEN TO THE TRACK</a>
+              <button class="secondary-button hidden" id="postScoreButton" type="button">SIGN IN TO POST SCORE</button>
+              <button class="primary-button hidden" id="nextMissionButton" type="button">NEXT MISSION →</button>
+              <button class="secondary-button" id="restartButton" type="button">RUN IT BACK ↻</button>
+              <button class="secondary-button" id="finishMenuButton" type="button">MAIN MENU</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lyric-bar" id="lyricBar" aria-live="off"></div>
+
+      <div class="touch-controls" aria-label="Touch controls">
+        <div class="touch-left">
+          <button class="touch-button" id="leftButton" aria-label="Move left">◀</button>
+          <button class="touch-button" id="rightButton" aria-label="Move right">▶</button>
+        </div>
+        <div class="touch-right">
+          <button class="touch-button small" id="downButton" aria-label="Crouch or slide">▼</button>
+          <button class="touch-button small" id="attackButton" aria-label="Hit">HIT</button>
+          <button class="touch-button jump-button" id="jumpButton" aria-label="Jump">JUMP</button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <a href="https://www.feelzmachine.com" target="_blank" rel="noopener">A FEELZ MACHINE GAME</a>
+      <span>MADE TO BE PLAYED LOUD</span>
+    </footer>
+  </main>
+
+  <audio id="songAudio" preload="auto"></audio>
+  <script src="vendor/supabase-2.45.4/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="backend.js"></script>
+  <script src="missions/m01-against-the-storm.js"></script>
+  <script src="missions/m02-get-out-the-way.js"></script>
+  <script src="missions/m03-ghetto-gospel.js"></script>
+  <script src="missions/m04-blessings.js"></script>
+  <script src="missions/m05-chemistry.js"></script>
+  <script src="missions/m06-god-is-my-woman.js"></script>
+  <script src="missions/m07-close-to-my-heart.js"></script>
+  <script src="missions/m08-patience.js"></script>
+  <script src="missions/m09-heads-up.js"></script>
+  <script src="missions/m10-i-pray.js"></script>
+  <script src="missions/m11-letting-off-steam.js"></script>
+  <script src="missions/m12-my-brothers.js"></script>
+  <script src="missions/m13-roses-butterflies.js"></script>
+  <script src="missions/m14-shine-olive-gem.js"></script>
+  <script src="missions/m15-thug-in-love.js"></script>
+  <script src="engine.js"></script>
+  <script src="render.js"></script>
+  <script src="systems.js"></script>
+  <script src="ui.js"></script>
+  <script>if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});</script>
+</body>
+</html>

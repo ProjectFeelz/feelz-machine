@@ -1,0 +1,23 @@
+{
+  "short_name": "Feelz Run",
+  "name": "FEELZ RUN by Feelz Machine",
+  "description": "Run the F.I.L.L. missions with Koda, in time with the music.",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["games", "music", "entertainment"],
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "start_url": "./?source=pwa",
+  "scope": "./",
+  "id": "feelzrun-pwa",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "theme_color": "#000000",
+  "background_color": "#000000",
+  "launch_handler": { "client_mode": "navigate-existing" },
+  "prefer_related_applications": false
+}
