@@ -90,6 +90,10 @@ export default function ListenerCreateMenu({ onClose }) {
               onClick: go('/sessions'),
             }]
           : []),
+        // Feelz Run is a static game in public/run, so it needs a full page
+        // load rather than a router push. Same origin, so it opens inside the
+        // app window.
+        { id: 'game', icon: '\u{1F3AE}', label: 'Feelz Run', sub: 'Play the game, earn credits', onClick: () => { onClose(); window.location.href = '/run/'; } },
       ],
     },
   ];

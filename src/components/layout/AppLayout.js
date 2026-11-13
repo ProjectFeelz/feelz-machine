@@ -11,7 +11,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { myAvatar } from '../../utils/me';
 import { useAppThemeInit } from '../../hooks/useAppTheme';
 import { ListenerThemeProvider } from '../../contexts/ListenerThemeContext';
-import { Bell, Flame, UserCircle, Compass, Gamepad2 } from 'lucide-react';
+import { Bell, Flame, UserCircle, Compass } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
 import { OfflineBanner } from '../../hooks/useOffline';
 import ErrorBoundary from '../ErrorBoundary';
@@ -105,23 +105,14 @@ function MobileBellButton() {
     ? `/artist/${artist.slug}`
     : '/profile';
 
+  if (!user) return null;
+
   return (
     <div
       className="md:hidden fixed top-0 left-0 right-0 z-[60] flex items-center justify-end px-4 pointer-events-none"
       style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)', height: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 44px)' }}
     >
       <div className="flex items-center space-x-1.5 pointer-events-auto">
-        {/* Feelz Run. A full page load, because the game is a static page in
-            public/run. Same origin, so it opens inside the app window. */}
-        <button
-          onClick={() => { window.location.href = '/run/'; }}
-          aria-label="Play Feelz Run"
-          className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/[0.06] transition"
-        >
-          <Gamepad2 className="w-5 h-5 text-white/60" />
-        </button>
-
-        {user && (<>
         {/* Streak flame */}
         {streak > 1 && (
           <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-orange-500/15 border border-orange-500/25">
@@ -170,7 +161,6 @@ function MobileBellButton() {
             <UserCircle className="w-5 h-5 text-white/60" />
           )}
         </button>
-        </>)}
       </div>
     </div>
   );

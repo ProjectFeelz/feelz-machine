@@ -430,6 +430,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                     ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
                       ? [{ id: 'sessions', icon: '🏆', label: 'Enter Sessions', sub: 'The cover competition, open to everyone' }]
                       : []),
+                    { id: 'game', icon: '\u{1F3AE}', label: 'Feelz Run', sub: 'Play the game, earn credits' },
                   ],
                 },
               ].map(({ heading, tint, items }) => (
@@ -455,6 +456,9 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                       else if (id === 'chats') { close(); navigate('/community'); }
                       else if (id === 'course') { close(); navigate('/learn'); }
                       else if (id === 'sessions') { close(); navigate('/sessions'); }
+                      // Feelz Run is a static game in public/run: a full page
+                      // load, same origin, so it opens inside the app window.
+                      else if (id === 'game') { close(); window.location.href = '/run/'; }
                       else setCreateTab(id);
                     },
                   }))} />
