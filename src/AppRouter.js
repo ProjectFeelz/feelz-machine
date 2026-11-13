@@ -203,6 +203,16 @@ function NotFoundRedirect() {
   return <Navigate to="/" replace />;
 }
 
+// Feelz Run is a static game in public/run, not a React page. If /run or a
+// deeper path ever reaches the app shell, hand it to the server with a full
+// page load so the game's own index.html serves it inside the same window.
+function GameRedirect() {
+  useEffect(() => {
+    window.location.replace('/run/' + window.location.search);
+  }, []);
+  return null;
+}
+
 // Handles Printful OAuth redirect, passes code back to artist profile
 function MerchConnectCallback() {
   const navigate = useNavigate();
@@ -449,6 +459,9 @@ export default function AppRouter() {
                   PlayerProvider wraps the entire route table, so the audio
                   element and the queue carry straight through. */}
               <Route path="/driving" element={<DrivingPage />} />
+              {/* Feelz Run lives in public/run as a static game. */}
+              <Route path="/run" element={<GameRedirect />} />
+              <Route path="/run/*" element={<GameRedirect />} />
               {/* Retail renders its own full-screen shell and is a separate
                   product, so it must stay outside AppLayout or it gets the
                   Feelz Machine sidebar on top of its own chrome. Same reason

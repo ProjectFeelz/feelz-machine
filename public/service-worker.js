@@ -19,7 +19,7 @@ const NEVER_CACHE_ORIGINS = [
   'googleapis.com', 'google.com', 'fcm.googleapis.com', 'web.push.apple.com',
 ];
 
-const NEVER_CACHE_PATHS = ['/.netlify/functions/', '/auth/'];
+const NEVER_CACHE_PATHS = ['/.netlify/functions/', '/auth/', '/run/'];
 
 // Paths that are NOT the single-page app, even though the browser asks for
 // them with req.mode === 'navigate'.
@@ -39,6 +39,7 @@ const PASS_THROUGH_NAVIGATIONS = [
   '/.well-known/',      // assetlinks.json for the Android app link
   '/manifest.json',
   '/service-worker.js',
+  '/run/',              // Feelz Run, the game: its own page, not the app
 ];
 
 // ── Offline listening ────────────────────────────────────────────────────────
@@ -254,7 +255,7 @@ self.addEventListener('fetch', e => {
   // Not the app. Let the browser fetch it.
   if (req.mode === 'navigate'
       && url.origin === self.location.origin
-      && PASS_THROUGH_NAVIGATIONS.some(p => url.pathname === p || url.pathname.startsWith(p))) {
+      && (url.pathname === '/run' || PASS_THROUGH_NAVIGATIONS.some(p => url.pathname === p || url.pathname.startsWith(p)))) {
     return;
   }
 

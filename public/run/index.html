@@ -65,6 +65,10 @@
       </script>
 
       <div class="overlay start-screen" id="startOverlay">
+        <a class="text-button hidden" id="backHome" href="/" style="position:absolute;top:max(env(safe-area-inset-top,0px),14px);right:max(env(safe-area-inset-right,0px),18px);z-index:5;margin:0;padding:8px 12px;border-radius:999px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.14);text-decoration:none">← FEELZ MACHINE</a>
+        <script>
+          if (/(^|\.)feelzmachine\.com$/.test(location.hostname)) document.getElementById("backHome").classList.remove("hidden");
+        </script>
         <div class="start-panel">
           <div class="brand-row"><img class="brand-logo" src="assets/feelz-machine-logo.png" alt="Feelz Machine"><span>FEELZ MACHINE PRESENTS</span></div>
           <h1 class="start-title"><span class="st-big">FEELZ</span><span class="st-run">RUN<span>.</span></span></h1>
@@ -322,6 +326,6 @@
   <script src="render.js"></script>
   <script src="systems.js"></script>
   <script src="ui.js"></script>
-  <script>if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});</script>
+  <script>if ("serviceWorker" in navigator && location.protocol === "https:" && !/feelzmachine\.com$/.test(location.hostname)) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 </body>
 </html>
