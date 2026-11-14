@@ -76,7 +76,7 @@ export default function SchoolSessionsJudgePanel() {
       // school_sessions_entries is granted column by column because it holds
       // entrant emails and guardian details, so asking it for a column nobody
       // granted returns 403 for the whole request, not a null for that field.
-      .select('id, entrant_full_name, is_group, is_finalist, is_winner, is_rejected, created_at, school:school_sessions_schools(name), school_name_freetext, song:school_sessions_shortlist_songs(title), tiktok_video_url, track:tracks(id, title, slug, file_url, cover_artwork_url, artists!tracks_artist_id_fkey(artist_name)), members:school_sessions_entry_members(member_name)')
+      .select('id, entrant_full_name, is_group, is_finalist, is_winner, is_rejected, created_at, school:school_sessions_schools(name), school_name_freetext, song:school_sessions_shortlist_songs(title), tiktok_video_url, tiktok_video_id, track:tracks(id, title, slug, file_url, cover_artwork_url, artists!tracks_artist_id_fkey(artist_name)), members:school_sessions_entry_members(member_name)')
       .eq('competition_id', compId)
       .order('created_at', { ascending: false })
       .then(({ data }) => { setEntries(data || []); setLoadingEntries(false); });
@@ -157,6 +157,34 @@ export default function SchoolSessionsJudgePanel() {
   }, [compId]);
 
   React.useEffect(() => { if (isJudge) loadRanking(); }, [isJudge, loadRanking]);
+
+  // UNWRAP THE SHORT LINKS, ONCE.
+  //
+  // 13 of the first 14 entries pasted a vm.tiktok.com link, which is what
+  // TikTok's share sheet gives you on a phone. The id is behind a redirect a
+  // browser cannot read, so a function follows it server side and writes the
+  // answer to the row. Fired here because the judges page is the first place
+  // anybody needs these, and it is idempotent: the second call finds nothing
+  // left to do and returns.
+  React.useEffect(() => {
+    if (!isJudge || !compId || entries.length === 0) return;
+    if (!entries.some(e => e.tiktok_video_url && !e.tiktok_video_id)) return;
+    let dead = false;
+    fetch('/.netlify/functions/tiktok-resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ competitionId: compId }),
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(out => {
+        if (dead || !out || !out.resolved) return;
+        const got = out.resolved;
+        if (Object.keys(got).length === 0) return;
+        setEntries(prev => prev.map(e => (got[e.id] ? { ...e, tiktok_video_id: got[e.id] } : e)));
+      })
+      .catch(() => {});
+    return () => { dead = true; };
+  }, [isJudge, compId, entries]);
 
   const finalistCount = entries.filter(e => e.is_finalist).length;
   const anyVotes = Object.values(ranking).some(r => r.votes > 0);
@@ -463,7 +491,7 @@ export default function SchoolSessionsJudgePanel() {
                   until now. Nothing loads until it is asked for. */}
               {np.tiktok_video_url && (
                 <div className="mt-4 max-w-sm">
-                  <TikTokEmbed url={np.tiktok_video_url} title={`${np.entrant_full_name} on TikTok`} />
+                  <TikTokEmbed url={np.tiktok_video_url} videoId={np.tiktok_video_id} title={`${np.entrant_full_name} on TikTok`} />
                 </div>
               )}
             </div>

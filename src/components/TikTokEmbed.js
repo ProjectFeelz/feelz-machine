@@ -46,11 +46,14 @@ export function tiktokVideoId(url) {
   return m ? m[1] : null;
 }
 
-export default function TikTokEmbed({ url, className = '', title = 'TikTok video' }) {
+export default function TikTokEmbed({ url, videoId, className = '', title = 'TikTok video' }) {
   const [open, setOpen] = React.useState(false);
-  const id = tiktokVideoId(url);
+  // A resolved id beats whatever is in the URL. Almost every entrant pastes a
+  // vm.tiktok.com short link, which hides the id behind a redirect; the
+  // tiktok-resolve function follows it once and stores the answer.
+  const id = videoId || tiktokVideoId(url);
 
-  if (!url) return null;
+  if (!url && !videoId) return null;
 
   // Short link, or something that is not a TikTok URL at all.
   if (!id) {
@@ -65,7 +68,7 @@ export default function TikTokEmbed({ url, className = '', title = 'TikTok video
         <span className="min-w-0">
           <span className="block text-sm font-semibold text-white">Watch on TikTok</span>
           <span className="block text-xs text-white/40 mt-0.5">
-            This one is a short link, so it opens on TikTok
+            This link has not been unwrapped yet, so it opens on TikTok
           </span>
         </span>
       </a>

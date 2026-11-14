@@ -57,7 +57,7 @@ export default function SchoolSessionsVotePage() {
     // and that has not changed.
     const { data: entries } = await supabase
       .from('school_sessions_entries')
-      .select('id, entrant_full_name, is_winner, is_finalist, is_group, entrant_tiktok_handle, tiktok_video_url, song:school_sessions_shortlist_songs(title), track:tracks(title, slug, cover_artwork_url), school:school_sessions_schools(name), school_name_freetext, members:school_sessions_entry_members(member_name)')
+      .select('id, entrant_full_name, is_winner, is_finalist, is_group, entrant_tiktok_handle, tiktok_video_url, tiktok_video_id, song:school_sessions_shortlist_songs(title), track:tracks(title, slug, cover_artwork_url), school:school_sessions_schools(name), school_name_freetext, members:school_sessions_entry_members(member_name)')
       .eq('competition_id', comp.id);
     setFinalists(entries || []);
 
@@ -244,7 +244,7 @@ export default function SchoolSessionsVotePage() {
                     nowhere to play. Nothing loads until it is tapped. */}
                 {f.tiktok_video_url && (
                   <div className="mt-3">
-                    <TikTokEmbed url={f.tiktok_video_url} title={`${f.entrant_full_name} on TikTok`} />
+                    <TikTokEmbed url={f.tiktok_video_url} videoId={f.tiktok_video_id} title={`${f.entrant_full_name} on TikTok`} />
                   </div>
                 )}
               </div>

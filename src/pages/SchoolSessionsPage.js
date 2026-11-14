@@ -204,7 +204,12 @@ function EntryGallery({ compId }) {
           the page one card's height. */}
       <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Entries so far</p>
 
-      <div className="relative -mx-6 lg:-mx-10">
+      {/* The bleed is a PHONE thing.
+          Running the strip past the page padding is what tells a thumb there
+          is more to the right. In the two column layout there is no page edge
+          on that side, only the other column, so on lg it stops bleeding and
+          lines up with the heading above it. */}
+      <div className="relative -mx-6 lg:mx-0">
         {/* The bar itself is hidden. Firefox and old Edge take it from the
             inline style, Chrome and Safari need the pseudo element, and that
             cannot be written inline, so it ships with the component rather
@@ -212,7 +217,7 @@ function EntryGallery({ compId }) {
         <style>{`.ss-roll::-webkit-scrollbar{display:none;height:0}`}</style>
         <div onScroll={onScroll}
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          className="ss-roll flex gap-2.5 lg:gap-3 overflow-x-auto snap-x snap-mandatory px-6 lg:px-10 pb-1">
+          className="ss-roll flex gap-2.5 lg:gap-3 overflow-x-auto snap-x snap-mandatory px-6 lg:px-0 pb-1">
           {entries.map(e => (
             <Link key={e.id} to={`/sessions/entry/${e.id}`}
               className={`block w-36 lg:w-44 flex-shrink-0 snap-start rounded-xl overflow-hidden border transition hover:border-white/20 ${
