@@ -278,14 +278,26 @@ function EntryGallery({ compId }) {
 // One numbered step. The number is a filled circle rather than "1." in the
 // text, because on a page this dense a bare digit at the start of a line is
 // read as part of the sentence.
+//
+// THE INDENT IS DESKTOP ONLY.
+//
+// Hanging the content off the circle costs about 42px of width. On a desktop
+// column that is nothing. On a 360px phone it squeezes the song row inside
+// step one, which carries artwork, a title, Lyrics and Backing track, and
+// that row has no space to give. So on a phone the number sits on the title
+// line and the content below runs the full width, which numbers the step
+// just as clearly and takes nothing away from it.
 function Step({ n, title, children }) {
   return (
-    <div className="flex gap-3.5 lg:gap-4">
-      <span className="w-7 h-7 lg:w-9 lg:h-9 rounded-full bg-lime-400 text-black font-bold text-sm lg:text-base flex items-center justify-center flex-shrink-0">
-        {n}
-      </span>
-      <div className="min-w-0 flex-1 space-y-2.5">
-        <p className="text-base lg:text-lg font-bold text-white leading-tight pt-0.5">{title}</p>
+    <div className="lg:flex lg:gap-4">
+      <div className="flex items-center gap-3 lg:block lg:flex-shrink-0">
+        <span className="w-7 h-7 lg:w-9 lg:h-9 rounded-full bg-lime-400 text-black font-bold text-sm lg:text-base flex items-center justify-center flex-shrink-0">
+          {n}
+        </span>
+        <p className="text-base font-bold text-white leading-tight lg:hidden">{title}</p>
+      </div>
+      <div className="min-w-0 flex-1 space-y-2.5 mt-2.5 lg:mt-0">
+        <p className="hidden lg:block text-lg font-bold text-white leading-tight pt-0.5">{title}</p>
         {children}
       </div>
     </div>
