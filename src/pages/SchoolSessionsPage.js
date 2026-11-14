@@ -358,6 +358,49 @@ export default function SchoolSessionsPage() {
   const pageDesc = comp?.prize_breakdown_text || comp?.prize_description
     || 'The chorus is done. Write your own verses over the backing track. Cash prizes, judged by a panel, with a public People\u2019s Choice vote too.';
 
+  // THE BUTTON, DEFINED ONCE AND PLACED TWICE.
+  //
+  // On a phone it belongs at the foot of the page, where it has always been,
+  // after somebody has read what they are entering. On a desktop it belongs in
+  // the left column beside the prize, where it stays on screen. Those are two
+  // different positions in the DOM, so it is built here and each copy is
+  // hidden at the breakpoint it does not serve. Duplicating the JSX instead
+  // would mean two buttons that drift apart the first time one is edited.
+  const ctaBlock = !eligible ? null
+    : (phase === 'voting' || phase === 'done') ? (
+      <button
+        onClick={() => navigate('/sessions/vote')}
+        className="w-full lg:w-full lg:py-4 py-3.5 bg-lime-400 text-black font-bold lg:text-lg rounded-xl flex items-center justify-center space-x-2 hover:bg-lime-300 transition">
+        <span>{phase === 'done' ? 'See the results' : "Vote, People's Choice"}</span>
+        <ArrowRight className="w-4 h-4" />
+      </button>
+    ) : (
+      // The button stops promising something it will not do.
+      //
+      // With 32 days on the clock it read "Upload your entry" and took a
+      // student to the upload panel, where the toggle now refuses them.
+      // Sending somebody to a door you have just locked is worse than the old
+      // bug it replaced.
+      <button
+        onClick={() => {
+          // Keyed on the anchor instead of the path, so it cannot drift again
+          // with a rename: if the target is an id on this page, scroll to it,
+          // otherwise go wherever it points.
+          const cta = entryCta(comp, { signedIn: !!user });
+          const hash = cta.to.includes('#') ? cta.to.slice(cta.to.indexOf('#') + 1) : '';
+          const target = hash ? document.getElementById(hash) : null;
+          if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } else {
+            navigate(cta.to);
+          }
+        }}
+        className="w-full lg:w-full lg:py-4 py-3.5 bg-lime-400 text-black font-bold lg:text-lg rounded-xl flex items-center justify-center space-x-2 hover:bg-lime-300 transition">
+        <span>{entryCta(comp, { signedIn: !!user }).label}</span>
+        <ArrowRight className="w-4 h-4" />
+      </button>
+    );
+
   return (
     <div className="min-h-screen bg-black text-white">
       <Helmet>
@@ -374,7 +417,21 @@ export default function SchoolSessionsPage() {
         <meta name="twitter:description" content={pageDesc} />
         <meta name="twitter:image" content={`${BASE_URL}/og-default.png`} />
       </Helmet>
-      <div className="max-w-lg lg:max-w-6xl mx-auto px-6 lg:px-10 pt-14 lg:pt-20 pb-24 space-y-10 lg:space-y-14">
+      {/* ONE SCREEN ON A DESKTOP, UNCHANGED ON A PHONE.
+          Stacked, this page was fourteen sections deep and the entry button
+          sat below all of them, so the thing somebody came to do was the last
+          thing they could reach. On lg and up it splits: the pitch, the clock,
+          the prize and the button on the left where they stay put, and
+          everything you actually DO on the right.
+          Below lg nothing changes. The two columns are one column again, in
+          the order they were already in, which is why the button is rendered
+          twice and each copy is hidden at the other breakpoint. */}
+      <div className="max-w-lg lg:max-w-7xl mx-auto px-6 lg:px-10 pt-14 lg:pt-16 pb-24">
+      <style>{`.ss-sticky::-webkit-scrollbar{display:none;width:0}`}</style>
+      <div className="space-y-10 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-12 lg:items-start">
+
+      <div className="space-y-10 lg:space-y-7 lg:col-span-5 lg:sticky lg:top-8 ss-sticky lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
 
         {/* Brand */}
         <div className="flex items-center space-x-2.5">
@@ -407,8 +464,13 @@ export default function SchoolSessionsPage() {
           <h1 className="text-4xl lg:text-6xl font-bold leading-[0.98] uppercase">
             <span className="text-lime-400">Sessions</span>
           </h1>
-          <p className="text-white/50 text-sm lg:text-lg lg:max-w-xl leading-relaxed">
-            Pick a song from the shortlist and sing it in your own voice. Open to anyone in South Africa, and there is cash for the winner.
+          {/* "Pick a song from the shortlist" sent people hunting for a list
+              before they had any idea what the task was. The download is the
+              first thing they do, so it is the first thing the page says, and
+              remix is named alongside sing because plenty of entries are not
+              sung at all. */}
+          <p className="text-white/55 text-sm lg:text-xl lg:max-w-xl leading-relaxed">
+            Download the song below and sing or remix it in your own voice. Open to anyone in South Africa, and there is cash for the winner.
           </p>
           {entryCount !== null && entryCount > 0 && (
             <p className="text-xs lg:text-sm text-white/40 font-medium">
@@ -452,7 +514,7 @@ export default function SchoolSessionsPage() {
         {/* Prize pot */}
         <div className="rounded-xl border border-white/10 bg-lime-400/[0.04] p-5 lg:p-8">
           <p className="text-3xl lg:text-5xl font-bold text-lime-400">{comp?.prize_description || 'R10,000 CASH'}</p>
-          <p className="text-xs lg:text-sm text-white/50 mt-2 lg:mt-3 leading-relaxed lg:max-w-md">
+          <p className="text-xs lg:text-base text-white/50 mt-2 lg:mt-3 leading-relaxed lg:max-w-md">
             {comp?.prize_breakdown_text || 'R5,000 in cash and R5,000 in studio equipment. Split evenly if you enter as a group.'}
           </p>
         </div>
@@ -473,10 +535,18 @@ export default function SchoolSessionsPage() {
             that the chorus is the song's and only the verses are theirs, so
             the first line now says exactly that and the download is the
             backing track with the chorus already on it. */}
-        <p className="text-xs text-white/50 leading-relaxed border-l-2 border-lime-400 pl-3">
+        <p className="text-xs lg:text-base text-white/50 leading-relaxed border-l-2 border-lime-400 pl-3">
           <span className="text-white font-semibold">Download the backing track and write your own verses</span>. The chorus is already on the file and it stays as it is, that is the part that makes every entry the same song. The verses are yours: your words, your voice, your take. Solo or as a group; if your group wins, the prize splits evenly across everyone listed.
           <span className="block mt-1.5 text-white/40">Writing a completely new song over the backing track is the one thing that does not count, however good it is.</span>
         </p>
+
+        {/* Desktop copy of the button. See ctaBlock above. */}
+        {ctaBlock && <div className="hidden lg:block pt-1">{ctaBlock}</div>}
+
+      </div>
+
+      {/* ── Right column: everything you actually do ────────────────────── */}
+      <div className="space-y-10 lg:space-y-8 lg:col-span-7">
 
         <YourEntryCard compId={compId} user={user} />
 
@@ -494,8 +564,8 @@ export default function SchoolSessionsPage() {
             className="flex items-center space-x-3 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 hover:bg-white/[0.05] transition">
             <PlayCircle className="w-4 h-4 text-lime-400 flex-shrink-0" />
             <div>
-              <p className="text-sm font-semibold text-white">Watch the playlist on YouTube</p>
-              <p className="text-xs text-white/40 mt-0.5">Hear the songs before you pick one</p>
+              <p className="text-sm lg:text-base font-semibold text-white">Watch the playlist on YouTube</p>
+              <p className="text-xs lg:text-sm text-white/40 mt-0.5">Hear the songs before you pick one</p>
             </div>
           </a>
         )}
@@ -503,7 +573,7 @@ export default function SchoolSessionsPage() {
         {/* Judges + public vote */}
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 flex items-start space-x-3">
           <ThumbsUp className="w-4 h-4 text-lime-400 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-white/50 leading-relaxed">
+          <p className="text-xs lg:text-base text-white/50 leading-relaxed">
             <span className="text-white font-semibold">A judging panel picks the finalists and the winner</span> (announced closer to the time). The public vote runs alongside as a separate <span className="text-white font-semibold">People's Choice</span> pick, post your cover on TikTok and rally votes.
           </p>
         </div>
@@ -541,18 +611,18 @@ export default function SchoolSessionsPage() {
                     <p.icon className="w-4 h-4" />
                   </div>
                   <div>
-                    <p className={`text-sm font-semibold ${active ? 'text-lime-400' : 'text-white'}`}>
+                    <p className={`text-sm lg:text-base font-semibold ${active ? 'text-lime-400' : 'text-white'}`}>
                       {i + 1}. {p.title} {active && <span className="text-[10px] font-bold uppercase tracking-wide ml-1">· Now</span>}
                     </p>
                     {/* The dates are the whole point of this strip. Three
                         cards labelled Awareness, Submissions and Voting with
                         no dates on them describe a shape, not a schedule. */}
                     {p.when && (
-                      <p className={`text-[11px] font-semibold mt-0.5 ${active ? 'text-lime-400/80' : 'text-white/30'}`}>
+                      <p className={`text-[11px] lg:text-sm font-semibold mt-0.5 ${active ? 'text-lime-400/80' : 'text-white/30'}`}>
                         {p.when}
                       </p>
                     )}
-                    <p className="text-xs text-white/40 mt-0.5">{p.desc}</p>
+                    <p className="text-xs lg:text-sm text-white/40 mt-0.5">{p.desc}</p>
                   </div>
                 </div>
               );
@@ -586,13 +656,13 @@ export default function SchoolSessionsPage() {
               <li key={what} className="flex items-start gap-2.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-lime-400 flex-shrink-0 mt-1.5" />
                 <span className="min-w-0">
-                  <span className="block text-sm text-white">{what}</span>
-                  <span className="block text-xs text-white/40 mt-0.5">{why}</span>
+                  <span className="block text-sm lg:text-base text-white">{what}</span>
+                  <span className="block text-xs lg:text-sm text-white/40 mt-0.5">{why}</span>
                 </span>
               </li>
             ))}
           </ul>
-          <p className="text-[11px] text-white/30 mt-3.5 leading-relaxed">
+          <p className="text-[11px] lg:text-sm text-white/30 mt-3.5 leading-relaxed">
             There is no code to fetch from anyone. The system gives you one when you enter.
           </p>
         </div>
@@ -649,48 +719,9 @@ export default function SchoolSessionsPage() {
           </div>
         )}
 
-        {/* CTA, gated by eligibility; the rest of the page never is */}
-        {eligible ? (
-          phase === 'voting' || phase === 'done' ? (
-            <button
-              onClick={() => navigate('/sessions/vote')}
-              className="w-full lg:w-auto lg:px-10 py-3.5 bg-lime-400 text-black font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-lime-300 transition">
-              <span>{phase === 'done' ? 'See the results' : "Vote, People's Choice"}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          ) : (
-            // The button stops promising something it will not do.
-            //
-            // With 32 days on the clock it read "Upload your entry" and took
-            // a student to the upload panel, where the toggle now refuses
-            // them. Sending somebody to a door you have just locked is worse
-            // than the old bug it replaced.
-            <button
-              onClick={() => {
-                // Matched on '/schoolsessions#' until now, which broke the
-                // moment the canonical path became /sessions: entryCta started
-                // returning /sessions#what-you-need, the test failed, and the
-                // button navigated to the page it was already on with a hash
-                // nothing handles, so the main CTA did nothing at all.
-                //
-                // Keyed on the anchor instead of the path, so it cannot drift
-                // again with a rename: if the target is an id on this page,
-                // scroll to it, otherwise go wherever it points.
-                const cta = entryCta(comp, { signedIn: !!user });
-                const hash = cta.to.includes('#') ? cta.to.slice(cta.to.indexOf('#') + 1) : '';
-                const target = hash ? document.getElementById(hash) : null;
-                if (target) {
-                  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                } else {
-                  navigate(cta.to);
-                }
-              }}
-              className="w-full lg:w-auto lg:px-10 py-3.5 bg-lime-400 text-black font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-lime-300 transition">
-              <span>{entryCta(comp, { signedIn: !!user }).label}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          )
-        ) : null}
+        {/* Phone copy of the button, in the place it has always been. On a
+            desktop the one in the left column is the one you see. */}
+        {ctaBlock && <div className="lg:hidden">{ctaBlock}</div>}
 
         {/* Always visible, regardless of eligibility, this is the whole
             point: schools outside the current run need a way in too. */}
@@ -701,6 +732,9 @@ export default function SchoolSessionsPage() {
             and it re-framed the whole competition as a school thing on the way
             out. Running a tutorial somewhere is still worth doing, it just
             does not belong at the foot of the public entry page. */}
+      </div>
+
+      </div>
       </div>
     </div>
   );
