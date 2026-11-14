@@ -275,6 +275,45 @@ function EntryGallery({ compId }) {
 }
 
 
+// SECTIONS YOU CAN SEE THE EDGES OF.
+//
+// Numbering the steps told you the order. It did not tell you where one
+// section stops and the next begins, because every block sat on the same flat
+// black and the only separator was empty space. On a two column page that
+// reads as one long scroll of unrelated boxes.
+//
+// So the left column is a single surface, which is what makes it read as a
+// column rather than four stacked cards, and each section on the right gets
+// its own wash. The tones stay inside the platform palette: deep blue, deep
+// purple, a red that stays red rather than drifting warm, and chrome. No
+// brown anywhere, which is why every tone is laid over near black at low
+// opacity instead of being mixed into a mid tone.
+//
+// Faint on purpose. At these opacities the page is still black; the tint is
+// only doing the job a border would do, without drawing nine more lines.
+const TONES = {
+  column:  'linear-gradient(180deg, rgba(88,101,242,0.07) 0%, rgba(20,20,28,0.5) 45%, rgba(0,0,0,0) 100%)',
+  steps:   'linear-gradient(135deg, rgba(163,230,53,0.07) 0%, rgba(0,0,0,0) 62%)',
+  need:    'linear-gradient(135deg, rgba(120,120,135,0.10) 0%, rgba(0,0,0,0) 62%)',
+  judging: 'linear-gradient(135deg, rgba(139,92,246,0.10) 0%, rgba(0,0,0,0) 62%)',
+  entries: 'linear-gradient(135deg, rgba(56,132,255,0.09) 0%, rgba(0,0,0,0) 62%)',
+  phases:  'linear-gradient(135deg, rgba(236,72,99,0.08) 0%, rgba(0,0,0,0) 62%)',
+  courses: 'linear-gradient(135deg, rgba(45,212,191,0.08) 0%, rgba(0,0,0,0) 62%)',
+};
+
+function Panel({ tone, children, className = '', id }) {
+  return (
+    <div
+      id={id}
+      className={`rounded-2xl p-5 lg:p-6 ${id ? 'scroll-mt-20' : ''} ${className}`}
+      style={{ background: TONES[tone], border: '1px solid rgba(255,255,255,0.05)' }}
+    >
+      {children}
+    </div>
+  );
+}
+
+
 // One numbered step. The number is a filled circle rather than "1." in the
 // text, because on a page this dense a bare digit at the start of a line is
 // read as part of the sentence.
@@ -462,6 +501,9 @@ export default function SchoolSessionsPage() {
           the order they were already in, which is why the button is rendered
           twice and each copy is hidden at the other breakpoint. */}
       <div className="max-w-lg lg:max-w-7xl mx-auto px-6 lg:px-10 pt-14 lg:pt-16 pb-24">
+      {/* The column wash is desktop only. On a phone there is one column
+          already and tinting it just makes the page muddy. */}
+      <style>{`@media (min-width: 1024px) { .ss-col { background: ${TONES.column}; } }`}</style>
       <div className="space-y-10 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-12 lg:items-start">
 
       {/* NOT STICKY, AND NOT CAPPED.
@@ -473,7 +515,7 @@ export default function SchoolSessionsPage() {
           prize, the VIP card and the entry button among them.
           A plain column cannot do that. The height saving comes from the two
           columns, not from pinning one of them. */}
-      <div className="space-y-10 lg:space-y-7 lg:col-span-5">
+      <div className="ss-col space-y-10 lg:space-y-7 lg:col-span-5 lg:rounded-2xl lg:p-7 lg:border lg:border-white/[0.05]">
 
         {/* Brand */}
         <div className="flex items-center space-x-2.5">
@@ -589,7 +631,7 @@ export default function SchoolSessionsPage() {
             So the sequence is said out loud instead of being implied by
             position. It survives any future layout change for the same
             reason. */}
-        <div className="space-y-6 lg:space-y-7">
+        <Panel tone="steps" className="space-y-6 lg:space-y-7">
           <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">How to enter</p>
 
           <Step n={1} title="Get the song">
@@ -630,7 +672,7 @@ export default function SchoolSessionsPage() {
               Upload your track like any other, and switch <span className="text-white font-semibold">Enter into Sessions</span> on while you do. That toggle is your entry. There is no code to fetch from anyone.
             </p>
           </Step>
-        </div>
+        </Panel>
 
         {/* WHAT YOU'LL NEED
             Above the courses, because the courses are twenty minutes and this
@@ -640,7 +682,7 @@ export default function SchoolSessionsPage() {
             entry form and was mentioned nowhere until the final screen, so a
             student who does not use TikTok recorded a cover and then found out
             they could not enter. */}
-        <div id="what-you-need" className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 lg:p-5 scroll-mt-20">
+        <Panel tone="need" id="what-you-need">
           <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase mb-3">
             What you will need
           </p>
@@ -667,20 +709,24 @@ export default function SchoolSessionsPage() {
           <p className="text-[11px] lg:text-sm text-white/30 mt-3.5 leading-relaxed">
             There is no code to fetch from anyone. The system gives you one when you enter.
           </p>
-        </div>
+        </Panel>
 
         {/* Judges + public vote */}
-        <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 flex items-start space-x-3">
+        <Panel tone="judging" className="flex items-start space-x-3">
           <ThumbsUp className="w-4 h-4 text-lime-400 flex-shrink-0 mt-0.5" />
           <p className="text-xs lg:text-base text-white/50 leading-relaxed">
             <span className="text-white font-semibold">A judging panel picks the finalists and the winner</span> (announced closer to the time). The public vote runs alongside as a separate <span className="text-white font-semibold">People's Choice</span> pick, post your cover on TikTok and rally votes.
           </p>
-        </div>
+        </Panel>
 
-        {compId && <EntryGallery compId={compId} />}
+        {compId && (
+          <Panel tone="entries">
+            <EntryGallery compId={compId} />
+          </Panel>
+        )}
 
         {/* Three-phase timeline */}
-        <div className="space-y-3 lg:space-y-4">
+        <Panel tone="phases" className="space-y-3 lg:space-y-4">
           <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Three months, three phases</p>
           <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-3 lg:gap-4">
             {[
@@ -727,12 +773,12 @@ export default function SchoolSessionsPage() {
               );
             })}
           </div>
-        </div>
+        </Panel>
 
 
         {/* Courses */}
         {(viralCourseUrl || platformCourseUrl) && (
-          <div className="space-y-3 lg:space-y-4">
+          <Panel tone="courses" className="space-y-3 lg:space-y-4">
             <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Free courses to get you ready</p>
             <div className="grid lg:grid-cols-2 gap-2.5 lg:gap-3">
               {/* Plays in place. A YouTube link becomes an inline player that
@@ -779,7 +825,7 @@ export default function SchoolSessionsPage() {
                 />
               )}
             </div>
-          </div>
+          </Panel>
         )}
 
         {/* Phone copy of the button, in the place it has always been. On a
