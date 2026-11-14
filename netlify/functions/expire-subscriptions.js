@@ -65,6 +65,34 @@ exports.handler = async (event) => {
     const summary = (data || []).reduce((acc, r) => ({ ...acc, [r.kind]: r.expired }), {});
     const total = Object.values(summary).reduce((a, b) => a + b, 0);
 
+    // APPLY THE TIER, DO NOT JUST RECORD IT.
+    //
+    // Marking the subscription ended is bookkeeping. Until November nothing
+    // acted on it, so an artist whose plan lapsed kept every album they had
+    // live, forever — a trigger fires when a row is written and a date passing
+    // writes nothing. This is the only thing in the system that runs because
+    // time moved, so the album rule hangs off it.
+    //
+    // It runs every night whether or not anything expired today, because an
+    // artist can also lapse by never renewing, and because enforce_free_tier_
+    // albums is idempotent: it finds nothing on a quiet night and costs one
+    // query. A failure here is logged and does NOT fail the run, since the
+    // expiries above are already written and re-running them is not free.
+    let tiers = null;
+    try {
+      const { data: t, error: tErr } = await supabase.rpc('enforce_free_tier_albums');
+      if (tErr) {
+        console.error('[expire-subscriptions] tier enforcement failed:', tErr.code, tErr.message);
+      } else {
+        tiers = Array.isArray(t) ? t[0] : t;
+        if (tiers && (tiers.albums_hidden || tiers.tracks_hidden)) {
+          console.log('[expire-subscriptions] albums hidden for lapsed plans —', JSON.stringify(tiers));
+        }
+      }
+    } catch (e) {
+      console.error('[expire-subscriptions] tier enforcement threw:', e.message);
+    }
+
     // Logged every run, including the quiet ones. A job that only speaks up
     // when it does something is indistinguishable from a job that has stopped
     // running, and this one is allowed to be quiet for weeks at a time.
@@ -73,9 +101,14 @@ exports.handler = async (event) => {
     // Quiet days are normal here, which is exactly why max_idle_hours on this
     // job is generous: the run record is for proving it ran, not for proving
     // it found somebody to expire.
-    await recordRun(JOB, { ok: true, items: total, detail: total ? summary : null, startedAt: started });
+    await recordRun(JOB, {
+      ok: true,
+      items: total,
+      detail: (total || tiers?.albums_hidden) ? { ...summary, tiers } : null,
+      startedAt: started,
+    });
 
-    return { statusCode: 200, body: JSON.stringify({ ok: true, expired: summary }) };
+    return { statusCode: 200, body: JSON.stringify({ ok: true, expired: summary, tiers }) };
   } catch (err) {
     console.error('[expire-subscriptions] threw:', err.message);
     await recordRun(JOB, { ok: false, error: err.message, startedAt: started });
