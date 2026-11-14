@@ -304,6 +304,33 @@ exports.handler = async (event) => {
         }
       }
 
+      // ── A FEELZ RUN SONG VOUCHER ─────────────────────────────────────────
+      //
+      // Players of the game at /run earn vouchers (10, 25 or 50% off) for the
+      // songs on First Impressions Last Longest. The code arrives from the
+      // game; whether it is real, unused, for THIS track and what it is worth
+      // is decided here by the database (game_voucher_percent, service role
+      // only), never by the request. Only an ordinary download can take one:
+      // not an album, a beat licence or a pay-what-you-want amount.
+      //
+      // The discount comes off the artist's price before anything else, so
+      // the minimum check, the fee and the payee all see the real amount.
+      let voucherCode = null;
+      if (body.voucher) {
+        const plainDownload = !albumId && !licenceId && trackId && (source === 'track' || source.startsWith('album share'));
+        if (!plainDownload) {
+          return { statusCode: 400, body: JSON.stringify({ error: 'That voucher only works on a single song', reason: 'voucher_not_applicable' }) };
+        }
+        voucherCode = String(body.voucher).trim().toUpperCase().slice(0, 32);
+        const { data: pct, error: vErr } = await adminClient.rpc('game_voucher_percent', { voucher_code: voucherCode, track: trackId });
+        if (vErr || !pct) {
+          if (vErr) console.error('[paypal-order] voucher check failed:', vErr.message);
+          return { statusCode: 409, body: JSON.stringify({ error: "That voucher can't be used right now. It may be spent, expired, for another song, or in another checkout.", reason: 'voucher_invalid' }) };
+        }
+        price  = Math.round(price * (100 - pct)) / 100;
+        source = `${source} (Feelz Run voucher, ${pct}% off)`;
+      }
+
       // PayPal refuses anything under about half a dollar. Caught here so it
       // reads as a price problem rather than an opaque failure from PayPal.
       if (price < 0.50) {
@@ -522,6 +549,18 @@ exports.handler = async (event) => {
           statusCode: 400,
           body: JSON.stringify({ error: 'Failed to create order', details: result.body }),
         };
+      }
+
+      // Hold the voucher for this order, so the same code cannot be used in two
+      // checkouts at once. game_voucher_consume marks it spent on capture; an
+      // order that is never paid lets it go after 45 minutes.
+      if (voucherCode) {
+        const { data: held, error: hErr } = await adminClient.rpc('game_voucher_reserve',
+          { voucher_code: voucherCode, track: trackId, ref: 'pp:' + result.body.id });
+        if (hErr || !held) {
+          if (hErr) console.error('[paypal-order] voucher hold failed:', hErr.message);
+          return { statusCode: 409, body: JSON.stringify({ error: 'That voucher was just used in another checkout. Nothing was charged.', reason: 'voucher_taken' }) };
+        }
       }
 
       return {
@@ -1150,6 +1189,15 @@ exports.handler = async (event) => {
             }
           }
         }
+      }
+
+      // A Feelz Run voucher held for this order is now spent. Does nothing for
+      // an order that had no voucher. A failure here never touches the sale.
+      try {
+        const { error: cErr } = await adminClient.rpc('game_voucher_consume', { ref: 'pp:' + orderId });
+        if (cErr) console.error('[paypal-order] voucher consume failed (sale is fine):', cErr.message);
+      } catch (e) {
+        console.error('[paypal-order] voucher consume threw (sale is fine):', e.message);
       }
 
       return {

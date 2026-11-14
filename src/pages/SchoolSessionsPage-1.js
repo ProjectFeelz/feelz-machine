@@ -1,0 +1,707 @@
+// src/pages/SchoolSessionsPage.js
+// Public landing page at /schoolsessions. Linked from the flyer/card QR
+// codes. ALWAYS visible to anyone, regardless of the enabled/region gate,
+// that gate now only controls the "enter" / "vote" call to action, not the
+// page itself, since schools outside the current season need to be able to
+// see this and nominate their district for next time.
+//
+// Format: entrants cover a song from a curated shortlist as a vocal
+// performance, solo or as a group. Judges pick finalists and the winner
+// directly; the public vote is a separate People's Choice pick. Winning
+// the winner gets R5,000 cash and R5,000 in studio equipment (split across
+// if applicable).
+
+import React from 'react';
+import { Helmet } from 'react-helmet-async';
+import { useNavigate, Link } from 'react-router-dom';
+import {
+  Loader, ArrowRight, Megaphone, Share2, Check,
+  Upload as UploadIcon, ThumbsUp, PlayCircle, BookOpen, Music, Trophy,
+  ChevronRight,
+} from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import SchoolVipPrize from '../components/SchoolVipPrize';
+import useSchoolSessions from '../hooks/useSchoolSessions';
+import DistrictNomination from '../components/DistrictNomination';
+import ShortlistSongs from '../components/ShortlistSongs';
+import SchoolCourseCard from '../components/SchoolCourseCard';
+import SchoolLessonList from '../components/SchoolLessonList';
+import { currentPhase, entryCta, phaseDate } from '../utils/schoolPhase';
+import { supabase } from '../supabaseClient';
+
+// Prominent hero countdown, ticks every second, shown as separate
+// day/hour/min/sec boxes.
+function BigCountdown({ to, label }) {
+  const [now, setNow] = React.useState(Date.now());
+  React.useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  if (!to) return null;
+  const diff = new Date(to).getTime() - now;
+  if (diff <= 0) return null;
+  const units = [
+    { label: 'Days', value: Math.floor(diff / 86400000) },
+    { label: 'Hrs', value: Math.floor((diff % 86400000) / 3600000) },
+    { label: 'Min', value: Math.floor((diff % 3600000) / 60000) },
+    { label: 'Sec', value: Math.floor((diff % 60000) / 1000) },
+  ];
+  return (
+    <div className="space-y-2">
+      {label && <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">{label}</p>}
+      <div className="flex space-x-2 lg:space-x-3">
+        {units.map(u => (
+          <div key={u.label} className="flex-1 rounded-xl bg-white/[0.04] border border-white/[0.08] py-2.5 lg:py-3.5 text-center">
+            <p className="text-2xl lg:text-4xl font-bold text-white tabular-nums">{String(u.value).padStart(2, '0')}</p>
+            <p className="text-[10px] lg:text-xs text-white/40 mt-0.5">{u.label}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// YOUR OWN ENTRY, WITH THE LINK TO SEND PEOPLE.
+//
+// Without this an entrant has no way to find their own share link: they would
+// have to open the gallery and hunt for themselves among everybody else. The
+// link is the whole point of entering early, so it belongs at the top of the
+// page the moment they have one, not buried in a list.
+//
+// Renders nothing at all for anybody who has not entered, which is most
+// people most of the time.
+function YourEntryCard({ compId, user }) {
+  const [entry, setEntry] = React.useState(null);
+  const [copied, setCopied] = React.useState(false);
+
+  React.useEffect(() => {
+    let dead = false;
+    if (!compId || !user) { setEntry(null); return undefined; }
+    (async () => {
+      // Via the artist row, because an entry is owned by the artist profile
+      // rather than by the login.
+      const { data: mine } = await supabase
+        .from('artists').select('id').eq('user_id', user.id).limit(1).maybeSingle();
+      if (!mine || dead) return;
+      const { data } = await supabase
+        .from('school_sessions_entries')
+        .select('id, entrant_full_name, song:school_sessions_shortlist_songs(title)')
+        .eq('competition_id', compId)
+        .eq('artist_id', mine.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!dead) setEntry(data || null);
+    })();
+    return () => { dead = true; };
+  }, [compId, user]);
+
+  if (!entry) return null;
+
+  const url = `https://www.feelzmachine.com/sessions/entry/${entry.id}`;
+
+  const share = async () => {
+    try {
+      if (navigator.share) { await navigator.share({ title: 'Vote for me on Feelz Machine Sessions', url }); return; }
+    } catch { /* dismissed, fall through to copying */ }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch { /* nothing to do, the link is shown below anyway */ }
+  };
+
+  return (
+    <div className="rounded-xl border border-lime-400/30 bg-lime-400/[0.05] p-4 space-y-2.5">
+      <p className="text-lime-400 text-xs font-bold tracking-widest uppercase">You are in</p>
+      <p className="text-sm text-white">
+        {entry.entrant_full_name}
+        {entry.song?.title ? <span className="text-white/50"> on {entry.song.title}</span> : null}
+      </p>
+      <p className="text-xs text-white/50">
+        This is your link. Put it in your TikTok bio and send it to anyone who will vote for you.
+      </p>
+      <p className="text-[11px] text-white/30 break-all font-mono">{url.replace('https://www.', '')}</p>
+      <div className="flex items-center gap-2">
+        <button onClick={share}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-lime-400 text-black text-xs font-bold">
+          {copied ? <Check className="w-3.5 h-3.5" /> : <Share2 className="w-3.5 h-3.5" />}
+          {copied ? 'Copied' : 'Share my entry'}
+        </button>
+        <Link to={`/sessions/entry/${entry.id}`}
+          className="px-3 py-2 rounded-lg border border-white/10 text-xs font-semibold text-white/60 hover:text-white">
+          See the page
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+// Public gallery of all entries, not just finalists. Paginated so a large
+// competition doesn't load everything at once.
+const PAGE_SIZE = 12;
+function EntryGallery({ compId }) {
+  const [entries, setEntries] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [hasMore, setHasMore] = React.useState(true);
+
+  const loadPage = React.useCallback((from) => {
+    return supabase.from('school_sessions_entries')
+      // is_winner was missing from this select, which is why a winner kept
+      // reading as "Finalist" on the public page after being marked in admin:
+      // a winner IS still a finalist, so the only badge this page could draw
+      // was the finalist one. The vote page has always read both.
+      .select('id, entrant_full_name, is_group, is_finalist, is_winner, created_at, school:school_sessions_schools(name), school_name_freetext, song:school_sessions_shortlist_songs(title), track:tracks(title, cover_artwork_url), members:school_sessions_entry_members(member_name)')
+      .eq('competition_id', compId)
+      // Winner first, then the other finalists, then everyone else newest
+      // first. Somebody opening this page after the announcement should not
+      // have to scroll to page three to find out who won.
+      .order('is_winner', { ascending: false })
+      .order('is_finalist', { ascending: false })
+      .order('created_at', { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+  }, [compId]);
+
+  React.useEffect(() => {
+    if (!compId) return;
+    setLoading(true);
+    loadPage(0).then(({ data }) => {
+      setEntries(data || []);
+      setHasMore((data || []).length === PAGE_SIZE);
+      setLoading(false);
+    });
+  }, [compId, loadPage]);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    const { data } = await loadPage(entries.length);
+    setEntries(prev => [...prev, ...(data || [])]);
+    setHasMore((data || []).length === PAGE_SIZE);
+    setLoadingMore(false);
+  };
+
+  // The strip loads the next page on its own once you are near the end of
+  // it, so the only reason to reach for the tile at the end is impatience.
+  const onScroll = (ev) => {
+    if (!hasMore || loadingMore) return;
+    const el = ev.currentTarget;
+    if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 240) loadMore();
+  };
+
+  if (loading) {
+    return <div className="flex justify-center py-8"><Loader className="w-4 h-4 text-white/30 animate-spin" /></div>;
+  }
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="space-y-3 lg:space-y-4">
+      {/* This gallery used to be a vertical grid. On a phone twelve entries
+          stacked six rows deep, which pushed the rest of the page, and the
+          entry call to action with it, a long way below the fold. Somebody
+          who came here to enter had to scroll past everybody else first.
+          Rolling it sideways gives the entries the same space while costing
+          the page one card's height. */}
+      <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Entries so far</p>
+
+      <div className="relative -mx-6 lg:-mx-10">
+        {/* The bar itself is hidden. Firefox and old Edge take it from the
+            inline style, Chrome and Safari need the pseudo element, and that
+            cannot be written inline, so it ships with the component rather
+            than depending on a global utility class being present. */}
+        <style>{`.ss-roll::-webkit-scrollbar{display:none;height:0}`}</style>
+        <div onScroll={onScroll}
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          className="ss-roll flex gap-2.5 lg:gap-3 overflow-x-auto snap-x snap-mandatory px-6 lg:px-10 pb-1">
+          {entries.map(e => (
+            <Link key={e.id} to={`/sessions/entry/${e.id}`}
+              className={`block w-36 lg:w-44 flex-shrink-0 snap-start rounded-xl overflow-hidden border transition hover:border-white/20 ${
+              e.is_winner   ? 'border-lime-400 bg-lime-400/[0.10]'
+              : e.is_finalist ? 'border-lime-400/40 bg-lime-400/[0.04]'
+              : 'border-white/[0.06] bg-white/[0.02]'}`}>
+              <div className="aspect-square bg-white/[0.04] flex items-center justify-center">
+                {e.track?.cover_artwork_url ? (
+                  <img src={e.track.cover_artwork_url} alt="" loading="lazy" className="w-full h-full object-cover" />
+                ) : (
+                  <Music className="w-6 h-6 text-white/20" />
+                )}
+              </div>
+              <div className="p-2.5">
+                <p className="text-xs font-semibold text-white truncate">
+                  {e.entrant_full_name}{e.is_group && e.members?.length > 0 ? ` +${e.members.length}` : ''}
+                </p>
+                {/* Only first season entries carry a school. Without the guard
+                    every new entry rendered an empty line in the card. */}
+                {(e.school?.name || e.school_name_freetext) && (
+                  <p className="text-[10px] text-white/40 truncate mt-0.5">
+                    {e.school?.name || e.school_name_freetext}
+                  </p>
+                )}
+                <p className="text-[10px] text-white/30 truncate">
+                  "{e.song?.title || e.track?.title}"
+                </p>
+                {(e.is_winner || e.is_finalist) && (
+                  <p className="text-[9px] font-bold text-lime-400 uppercase tracking-wide mt-1 flex items-center gap-1">
+                    {e.is_winner && <Trophy className="w-2.5 h-2.5" />}
+                    {e.is_winner ? 'Winner' : 'Finalist'}
+                  </p>
+                )}
+              </div>
+            </Link>
+          ))}
+
+          {hasMore && (
+            <button onClick={loadMore} disabled={loadingMore}
+              className="w-36 lg:w-44 flex-shrink-0 snap-start rounded-xl border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.04] transition disabled:opacity-40 flex flex-col items-center justify-center gap-2 text-white/50 hover:text-white">
+              {loadingMore
+                ? <Loader className="w-4 h-4 animate-spin" />
+                : <ChevronRight className="w-5 h-5" />}
+              <span className="text-[11px] font-semibold">{loadingMore ? 'Loading…' : 'More entries'}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Tells you there is more to the right without taking a row to say
+            so. Sits above the strip and ignores taps. */}
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 lg:w-14 bg-gradient-to-l from-black to-transparent" />
+      </div>
+    </div>
+  );
+}
+
+
+// currentPhase moved to src/utils/schoolPhase.js. It used to live here, which
+// meant it decided what this page SAID and nothing else: the entry toggle and
+// the insert never consulted it, so a student could file an entry a month
+// early. A rule about who may submit has to be readable from wherever
+// submitting happens.
+
+export default function SchoolSessionsPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const gate = useSchoolSessions();
+  // Lessons, if a course has been broken into them. Declared up here with the
+  // other hooks rather than beside the courses they belong to, because this
+  // component returns early while the gate is loading and a hook below that
+  // return would not run on every render.
+  //
+  // Its own state and its own effect: if this query fails or the table is not
+  // there yet, both courses fall back to the playlist card they have always
+  // been and nothing else on the page notices. The page is reachable logged
+  // out and the read policy allows anon, so a student sees the course before
+  // making an account.
+  const [lessons, setLessons] = React.useState([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    supabase.from('school_course_lessons')
+      .select('id, course_key, position, title, url, duration_s')
+      .eq('is_active', true)
+      .order('position')
+      .then(({ data, error }) => {
+        if (error) { console.warn('[school] lessons unavailable:', error.code, error.message); return; }
+        if (!cancelled) setLessons(data || []);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const [songs, setSongs] = React.useState([]);
+  const [entryCount, setEntryCount] = React.useState(null);
+
+  const compId = gate.config?.competition?.id;
+  React.useEffect(() => {
+    if (!compId) return;
+    supabase.from('school_sessions_shortlist_songs')
+      .select('id, title, reference_url, lyrics, beat_url, beat_filename, beat_size_bytes, reference_track:tracks(id, title, slug, file_url, cover_artwork_url, duration, artist_id, is_published, is_preorder, release_date, artists!tracks_artist_id_fkey(artist_name, slug))')
+      .eq('competition_id', compId)
+      .eq('is_active', true)
+      .order('display_order')
+      .then(({ data }) => setSongs(data || []));
+  }, [compId]);
+
+  React.useEffect(() => {
+    if (!compId) return;
+    supabase.from('school_sessions_entries')
+      .select('id', { count: 'exact', head: true })
+      .eq('competition_id', compId)
+      .then(({ count }) => setEntryCount(count ?? 0));
+  }, [compId]);
+
+  if (gate.loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <Loader className="w-5 h-5 text-white/30 animate-spin" />
+      </div>
+    );
+  }
+
+  // Eligible = the current season is switched on AND this visitor passes
+  // the region/school gate. Everything below this point renders regardless
+  // Eligibility only changes which call-to-action shows at the bottom.
+  const eligible = gate.enabled && gate.allowed;
+  const comp = gate.config?.competition;
+  const phase = currentPhase(comp);
+  const viralCourseUrl = gate.config?.viral_course_url;
+  const platformCourseUrl = gate.config?.platform_course_url;
+
+  const platformLessons = lessons.filter(l => l.course_key === 'platform');
+  const viralLessons    = lessons.filter(l => l.course_key === 'viral');
+  const hasCourses = !!(viralCourseUrl || platformCourseUrl);
+  const nextSeason = (gate.config?.season || 1) + 1;
+
+  const BASE_URL = 'https://www.feelzmachine.com';
+  // /sessions is the canonical URL now. /schoolsessions still serves this
+  // page and always will, so nothing anybody has shared or printed breaks,
+  // but the canonical tag has to name one of the two and it should name the
+  // one the competition is actually called.
+  const pageUrl = `${BASE_URL}/sessions`;
+  const pageTitle = 'Sessions, write your verse · Feelz Machine';
+  const pageDesc = comp?.prize_breakdown_text || comp?.prize_description
+    || 'The chorus is done. Write your own verses over the backing track. Cash prizes, judged by a panel, with a public People\u2019s Choice vote too.';
+
+  return (
+    <div className="min-h-screen bg-black text-white">
+      <Helmet>
+        <title>{pageTitle}</title>
+        <meta name="description" content={pageDesc} />
+        <link rel="canonical" href={pageUrl} />
+        <meta property="og:title" content={pageTitle} />
+        <meta property="og:description" content={pageDesc} />
+        <meta property="og:url" content={pageUrl} />
+        <meta property="og:image" content={`${BASE_URL}/og-default.png`} />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={pageTitle} />
+        <meta name="twitter:description" content={pageDesc} />
+        <meta name="twitter:image" content={`${BASE_URL}/og-default.png`} />
+      </Helmet>
+      <div className="max-w-lg lg:max-w-6xl mx-auto px-6 lg:px-10 pt-14 lg:pt-20 pb-24 space-y-10 lg:space-y-14">
+
+        {/* Brand */}
+        <div className="flex items-center space-x-2.5">
+          <div className="w-8 h-8 rounded-lg border border-lime-400 flex items-center justify-center text-lime-400 font-bold text-xs">FM</div>
+          <div>
+            <p className="font-bold text-sm leading-none">FEELZ MACHINE</p>
+            <p className="text-[10px] text-white/30 tracking-wider mt-0.5">MUSIC PLATFORM</p>
+          </div>
+        </div>
+
+        {gate.adminPreview && (
+          <div className="mb-4 lg:mb-6 rounded-xl border border-yellow-500/20 bg-yellow-500/10 px-4 py-2.5">
+            <p className="text-xs text-yellow-400">Admin preview: the public toggle is off, you're seeing this because you're an admin or judge. No one else can see this page right now.</p>
+          </div>
+        )}
+
+        {/* Hero */}
+        <div className="space-y-3 lg:space-y-4">
+          {/* THE NAME, AND WHO IT IS FOR.
+              This read "High School Competition" over a headline that said
+              "School Sessions", and the entry form underneath no longer asks
+              anybody what school they attend. A page that calls itself a high
+              school competition turns away the grown adults who are the ones
+              actually showing up, which is the whole reason the gate came
+              down. The school angle is not gone, it is just no longer the
+              price of entry. */}
+          <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-[0.2em] uppercase">
+            Cover Competition {gate.config?.season ? `· Season ${gate.config.season}` : ''}
+          </p>
+          <h1 className="text-4xl lg:text-6xl font-bold leading-[0.98] uppercase">
+            <span className="text-lime-400">Sessions</span>
+          </h1>
+          <p className="text-white/50 text-sm lg:text-lg lg:max-w-xl leading-relaxed">
+            Pick a song from the shortlist and sing it in your own voice. Open to anyone in South Africa, and there is cash for the winner.
+          </p>
+          {entryCount !== null && entryCount > 0 && (
+            <p className="text-xs lg:text-sm text-white/40 font-medium">
+              <span className="text-lime-400 font-bold">{entryCount}</span> {entryCount === 1 ? 'entry' : 'entries'} submitted so far
+            </p>
+          )}
+          {!eligible && (
+            <p className="text-xs text-white/30">
+              {!gate.enabled ? "Not currently running. See below to put your district forward for next time." : "Not running in your district right now, nominate it below."}
+            </p>
+          )}
+        </div>
+
+        {/* A clock AND a date.
+            "32 days" creates urgency and tells a student nothing they can put
+            in a calendar or weigh against an exam. The countdown stays because
+            urgency is the point; the date is what lets somebody plan. Both, or
+            the page is asking them to do arithmetic. */}
+        {eligible && phase === 'awareness' && comp?.entries_open_at && (
+          <div>
+            <BigCountdown to={comp.entries_open_at} label="Entries open in" />
+            <p className="text-xs text-white/40 mt-2">
+              That is {phaseDate(comp.entries_open_at)}
+              {comp.entries_close_at ? `. You have until ${phaseDate(comp.entries_close_at)} to submit.` : '.'}
+            </p>
+          </div>
+        )}
+        {eligible && phase === 'submissions' && comp?.entries_close_at && (
+          <div>
+            <BigCountdown to={comp.entries_close_at} label="Time left to submit" />
+            <p className="text-xs text-white/40 mt-2">Entries close {phaseDate(comp.entries_close_at)}.</p>
+          </div>
+        )}
+        {eligible && phase === 'voting' && comp?.voting_close_at && (
+          <div>
+            <BigCountdown to={comp.voting_close_at} label="Time left to vote" />
+            <p className="text-xs text-white/40 mt-2">Voting closes {phaseDate(comp.voting_close_at)}.</p>
+          </div>
+        )}
+
+        {/* Prize pot */}
+        <div className="rounded-xl border border-white/10 bg-lime-400/[0.04] p-5 lg:p-8">
+          <p className="text-3xl lg:text-5xl font-bold text-lime-400">{comp?.prize_description || 'R10,000 CASH'}</p>
+          <p className="text-xs lg:text-sm text-white/50 mt-2 lg:mt-3 leading-relaxed lg:max-w-md">
+            {comp?.prize_breakdown_text || 'R5,000 in cash and R5,000 in studio equipment. Split evenly if you enter as a group.'}
+          </p>
+        </div>
+
+        {/* The VIP card, directly under the cash.
+            Placed here on purpose. It is a second prize, not a rule, and a
+            student has to know it exists BEFORE they decide whether to enter,
+            which means it belongs beside the thing that made them read this
+            far rather than in the small print further down. */}
+        <div id="vip" className="scroll-mt-20">
+          <SchoolVipPrize signedIn={!!user} />
+        </div>
+
+        {/* How it works */}
+        {/* THE SENTENCE THAT DECIDES WHETHER AN ENTRY IS VALID.
+            Entrants were downloading the instrumental and writing a brand new
+            song over it, then entering that. Nothing here said in plain words
+            that the chorus is the song's and only the verses are theirs, so
+            the first line now says exactly that and the download is the
+            backing track with the chorus already on it. */}
+        <p className="text-xs text-white/50 leading-relaxed border-l-2 border-lime-400 pl-3">
+          <span className="text-white font-semibold">Download the backing track and write your own verses</span>. The chorus is already on the file and it stays as it is, that is the part that makes every entry the same song. The verses are yours: your words, your voice, your take. Solo or as a group; if your group wins, the prize splits evenly across everyone listed.
+          <span className="block mt-1.5 text-white/40">Writing a completely new song over the backing track is the one thing that does not count, however good it is.</span>
+        </p>
+
+        <YourEntryCard compId={compId} user={user} />
+
+        {/* Song shortlist. Tapping one plays the whole shortlist in the app
+            player, so nobody leaves this page half way through entering. */}
+        {songs.length > 0 && (
+          <div className="space-y-2.5 lg:space-y-3">
+            <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">{songs.length === 1 ? 'The song' : 'Songs up for grabs'}</p>
+            <ShortlistSongs songs={songs} />
+          </div>
+        )}
+
+        {gate.config?.youtube_playlist_url && (
+          <a href={gate.config.youtube_playlist_url} target="_blank" rel="noopener noreferrer"
+            className="flex items-center space-x-3 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 hover:bg-white/[0.05] transition">
+            <PlayCircle className="w-4 h-4 text-lime-400 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-white">Watch the playlist on YouTube</p>
+              <p className="text-xs text-white/40 mt-0.5">Hear the songs before you pick one</p>
+            </div>
+          </a>
+        )}
+
+        {/* Judges + public vote */}
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 flex items-start space-x-3">
+          <ThumbsUp className="w-4 h-4 text-lime-400 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-white/50 leading-relaxed">
+            <span className="text-white font-semibold">A judging panel picks the finalists and the winner</span> (announced closer to the time). The public vote runs alongside as a separate <span className="text-white font-semibold">People's Choice</span> pick, post your cover on TikTok and rally votes.
+          </p>
+        </div>
+
+        {compId && <EntryGallery compId={compId} />}
+
+        {/* Three-phase timeline */}
+        <div className="space-y-3 lg:space-y-4">
+          <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Three months, three phases</p>
+          <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-3 lg:gap-4">
+            {[
+              // The courses block below is conditional on the two urls being
+            // set in school_sessions_config, and this line was not. With the
+            // urls empty the page told a student to "take the courses below"
+            // and then showed no courses, which reads as something failing to
+            // load rather than as something not published yet.
+            { key: 'awareness', icon: Megaphone, title: 'Awareness',
+              when: comp?.entries_open_at ? `Until ${phaseDate(comp.entries_open_at)}` : null,
+              desc: hasCourses
+                ? 'Get ready, take the courses below, check the song shortlist, spread the word.'
+                : 'Get ready, learn the chorus, and start writing your verses.' },
+              { key: 'submissions', icon: UploadIcon, title: 'Submissions',
+                when: comp?.entries_open_at && comp?.entries_close_at
+                  ? `${phaseDate(comp.entries_open_at)} to ${phaseDate(comp.entries_close_at)}`
+                  : null,
+                desc: 'Download the backing track, record your verses over it, and toggle "Enter into Sessions" when you upload.' },
+              { key: 'voting', icon: ThumbsUp, title: 'Voting',
+                when: comp?.voting_close_at ? `Ends ${phaseDate(comp.voting_close_at)}` : null,
+                desc: 'Judges announce finalists and pick the winner. The public votes separately for the People\u2019s Choice pick.' },
+            ].map((p, i) => {
+              const active = eligible && p.key === phase;
+              return (
+                <div key={p.key} className={`flex items-start space-x-3 lg:flex-col lg:space-x-0 lg:space-y-3 rounded-xl p-3.5 lg:p-4 border h-full ${active ? 'border-lime-400/40 bg-lime-400/[0.06]' : 'border-white/[0.06] bg-white/[0.02]'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${active ? 'bg-lime-400 text-black' : 'bg-white/[0.06] text-white/40'}`}>
+                    <p.icon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className={`text-sm font-semibold ${active ? 'text-lime-400' : 'text-white'}`}>
+                      {i + 1}. {p.title} {active && <span className="text-[10px] font-bold uppercase tracking-wide ml-1">· Now</span>}
+                    </p>
+                    {/* The dates are the whole point of this strip. Three
+                        cards labelled Awareness, Submissions and Voting with
+                        no dates on them describe a shape, not a schedule. */}
+                    {p.when && (
+                      <p className={`text-[11px] font-semibold mt-0.5 ${active ? 'text-lime-400/80' : 'text-white/30'}`}>
+                        {p.when}
+                      </p>
+                    )}
+                    <p className="text-xs text-white/40 mt-0.5">{p.desc}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* WHAT YOU'LL NEED
+            Above the courses, because the courses are twenty minutes and this
+            is ten seconds, and the thing that lost entrants was discovering a
+            requirement at the end rather than the beginning.
+            The TikTok post is the one that matters. It is mandatory on the
+            entry form and was mentioned nowhere until the final screen, so a
+            student who does not use TikTok recorded a cover and then found out
+            they could not enter. */}
+        <div id="what-you-need" className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 lg:p-5 scroll-mt-20">
+          <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase mb-3">
+            What you will need
+          </p>
+          <ul className="space-y-2.5">
+            {[
+              ['An account here', user ? 'Done, you are signed in.' : 'Free, takes a minute.'],
+              // The school line is gone rather than softened. It was already
+              // marked optional and that was not enough: a checklist is where
+              // somebody decides whether a competition is meant for them, and
+              // naming a school at all answers that question wrongly. The form
+              // no longer asks either.
+              ['Your verses over the backing track', 'The chorus on the file stays; the verses are yours. Solo or as a group.'],
+              ['A TikTok post of it, tagging us', 'This one is required. You paste the link when you enter, so post it before you upload.'],
+            ].map(([what, why]) => (
+              <li key={what} className="flex items-start gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-lime-400 flex-shrink-0 mt-1.5" />
+                <span className="min-w-0">
+                  <span className="block text-sm text-white">{what}</span>
+                  <span className="block text-xs text-white/40 mt-0.5">{why}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[11px] text-white/30 mt-3.5 leading-relaxed">
+            There is no code to fetch from anyone. The system gives you one when you enter.
+          </p>
+        </div>
+
+        {/* Courses */}
+        {(viralCourseUrl || platformCourseUrl) && (
+          <div className="space-y-3 lg:space-y-4">
+            <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Free courses to get you ready</p>
+            <div className="grid lg:grid-cols-2 gap-2.5 lg:gap-3">
+              {/* Plays in place. A YouTube link becomes an inline player that
+                  loads nothing until it is tapped; anything else stays the
+                  link card it always was. See src/components/SchoolCourseCard.js */}
+              {/* Both marked vertical. The audience comes from TikTok on a
+                  phone, and the platform course is a screen recording of a
+                  phone, so 9:16 is the frame that does not waste half its
+                  width on black bars. Drop `vertical` from either one if that
+                  course ends up shot wide. */}
+              {/* A course broken into lessons shows the list; one that has
+                  not been shows the playlist card exactly as before. Both
+                  paths are live at once, so a course can be split up whenever
+                  somebody gets round to it rather than all of them having to
+                  move together. */}
+              {platformLessons.length > 0 ? (
+                <SchoolLessonList
+                  lessons={platformLessons}
+                  title="How to Use Feelz Machine"
+                  desc="Recording, uploading, splits, so nobody's at a disadvantage."
+                />
+              ) : (
+                <SchoolCourseCard
+                  url={platformCourseUrl}
+                  icon={PlayCircle}
+                  vertical
+                  title="How to Use Feelz Machine"
+                  desc="Recording, uploading, splits, so nobody's at a disadvantage."
+                />
+              )}
+              {viralLessons.length > 0 ? (
+                <SchoolLessonList
+                  lessons={viralLessons}
+                  title="How to Make Viral Content"
+                  desc="Get your song seen on TikTok and bring in votes."
+                />
+              ) : (
+                <SchoolCourseCard
+                  url={viralCourseUrl}
+                  icon={BookOpen}
+                  vertical
+                  title="How to Make Viral Content"
+                  desc="Get your song seen on TikTok and bring in votes."
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* CTA, gated by eligibility; the rest of the page never is */}
+        {eligible ? (
+          phase === 'voting' || phase === 'done' ? (
+            <button
+              onClick={() => navigate('/sessions/vote')}
+              className="w-full lg:w-auto lg:px-10 py-3.5 bg-lime-400 text-black font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-lime-300 transition">
+              <span>{phase === 'done' ? 'See the results' : "Vote, People's Choice"}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          ) : (
+            // The button stops promising something it will not do.
+            //
+            // With 32 days on the clock it read "Upload your entry" and took
+            // a student to the upload panel, where the toggle now refuses
+            // them. Sending somebody to a door you have just locked is worse
+            // than the old bug it replaced.
+            <button
+              onClick={() => {
+                // Matched on '/schoolsessions#' until now, which broke the
+                // moment the canonical path became /sessions: entryCta started
+                // returning /sessions#what-you-need, the test failed, and the
+                // button navigated to the page it was already on with a hash
+                // nothing handles, so the main CTA did nothing at all.
+                //
+                // Keyed on the anchor instead of the path, so it cannot drift
+                // again with a rename: if the target is an id on this page,
+                // scroll to it, otherwise go wherever it points.
+                const cta = entryCta(comp, { signedIn: !!user });
+                const hash = cta.to.includes('#') ? cta.to.slice(cta.to.indexOf('#') + 1) : '';
+                const target = hash ? document.getElementById(hash) : null;
+                if (target) {
+                  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } else {
+                  navigate(cta.to);
+                }
+              }}
+              className="w-full lg:w-auto lg:px-10 py-3.5 bg-lime-400 text-black font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-lime-300 transition">
+              <span>{entryCta(comp, { signedIn: !!user }).label}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          )
+        ) : null}
+
+        {/* Always visible, regardless of eligibility, this is the whole
+            point: schools outside the current run need a way in too. */}
+        <DistrictNomination nextSeason={nextSeason} />
+
+        {/* The line that used to sit here asked whoever was at a school to
+            have their teacher get in touch. It was the last thing on the page
+            and it re-framed the whole competition as a school thing on the way
+            out. Running a tutorial somewhere is still worth doing, it just
+            does not belong at the foot of the public entry page. */}
+      </div>
+    </div>
+  );
+}
