@@ -140,6 +140,14 @@ const INERT_TYPES = new Set(['streak', 'bug_report']);
 // hover lift rather than advertising a link that is not there.
 function isInert(n) {
   if (INERT_TYPES.has(n?.type)) return true;
+  // A MILESTONE HAS NOWHERE TO SEND YOU.
+  //
+  // "You just listened to 10 tracks" was opening a track page, and "your song
+  // passed 100 streams" was opening analytics. Neither is what the card is
+  // about. The card IS the news; it has already told you the whole thing by
+  // the time you have read it, so a tap that moves the page is a tap that
+  // took something away. It marks itself read and stays put now.
+  if (n?.type?.startsWith('milestone_')) return true;
   // An announcement carries its destination in metadata. Without one there is
   // nothing behind the tap.
   if (n?.type === 'announcement' || n?.type === 'admin_message') {
@@ -710,6 +718,10 @@ export default function NotificationsPage() {
   // Marking read is a local edit. The write still goes to the database
   // through markAsRead; this is what the reader sees, immediately, without
   // the row moving or the page below it vanishing.
+  const markAllReadLocal = useCallback(() => {
+    setAllNotifs(prev => prev.map(n => (n.read ? n : { ...n, read: true })));
+  }, []);
+
   const markReadLocal = useCallback((id) => {
     setAllNotifs(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
   }, []);
@@ -922,6 +934,9 @@ export default function NotificationsPage() {
     markReadLocal(notif.id);
     if (INLINE_ACTION_TYPES.has(notif.type)) return;
     if (READ_ONLY_TYPES.has(notif.type)) return;
+    // Same rule as isInert, enforced where the navigation actually happens.
+    // Two lists that have to agree is how one of them ends up out of date.
+    if (notif.type?.startsWith('milestone_')) return;
 
     const type = notif.type;
     const meta = notif.metadata || {};
@@ -1317,8 +1332,14 @@ export default function NotificationsPage() {
             title="Notification settings" aria-label="Notification settings">
             <Settings className="w-4 h-4 text-white/40" />
           </button>
+          {/* MARK ALL READ HAD NO EFFECT ON SCREEN. markAllRead writes to the
+              database and clears the badge in the context, and that was all.
+              allNotifs, the list this page is actually drawing, was never
+              told, so every card stayed unread-looking until a refetch
+              happened for some other reason. Pressing a button and watching
+              nothing change is what makes people press it four more times. */}
           {unreadCount > 0 && (
-            <button onClick={markAllRead}
+            <button onClick={async () => { await markAllRead(); markAllReadLocal(); }}
               className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] transition"
               title="Mark all read">
               <CheckCheck className="w-4 h-4 text-white/40" />
