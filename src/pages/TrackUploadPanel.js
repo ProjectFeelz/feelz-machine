@@ -1718,6 +1718,23 @@ export default function TrackUploadPanel() {
     if (!isAlbumRelease && !trackForm.cover_file) { showMessage('error', 'Cover artwork is required'); return; }
     if (!artist) { showMessage('error', 'No artist profile found'); return; }
 
+    // SESSIONS ONLY TAKES LIVE TRACKS.
+    //
+    // A draft is invisible to everybody but its owner. tracks only lets the
+    // public read published rows, so a drafted entry drew an empty card with
+    // no title on the Sessions page, and the judges panel could not play it
+    // at all. Two entries were sitting in exactly that state.
+    //
+    // This has to be caught BEFORE the upload rather than after it, because
+    // the entry is only ever written here. Refusing it afterwards would mean
+    // telling somebody to upload the whole song a second time.
+    if (schoolSessionsEnabled && (isAlbumRelease || !trackForm.is_published)) {
+      showMessage('error', isAlbumRelease
+        ? 'Sessions entries have to be a single, not an album track. Upload your cover on its own.'
+        : 'Sessions only takes live songs. Switch Published on before you enter, so the judges and the public can hear it.');
+      return;
+    }
+
     // Beat upload limit check for free beatmakers
     if (isBeat && isFinite(maxBeats)) {
       const { count } = await supabase.from('tracks').select('*', { count: 'exact', head: true })
@@ -1910,6 +1927,14 @@ export default function TrackUploadPanel() {
             // one next to the insert.
             if (!entriesAreOpen(ssConfig?.competition)) {
               throw new Error('Entries are not open yet. Your track is uploaded and saved, so you can enter it the moment they do.');
+            }
+
+            // The same live check again, against the row that was actually
+            // written rather than the form that was filled in. The database
+            // refuses a drafted entry too, so this is only here to say it in
+            // plain words instead of showing a constraint error.
+            if (!data[0]?.is_published) {
+              throw new Error('Sessions only takes live songs. Your track is uploaded and saved as a draft, so no entry was made.');
             }
 
             // A code is optional now. It was never a preference: codes come
