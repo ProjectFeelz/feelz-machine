@@ -20,6 +20,55 @@ import { downloadTrack } from '../utils/downloadTrack';
 import WrappedCard from '../components/WrappedCard';
 
 // ─── Type config ──────────────────────────────────────────────────────────────
+// A COLOUR PER KIND OF NEWS.
+//
+// Thirty six notification types all sat on the same flat panel, so a busy
+// inbox was a wall of identical cards and the only way to tell a sale from a
+// follow was to read every line. The icon was already coloured per type; the
+// card was not, which meant the colour was a 20px dot doing a job the whole
+// row should be doing.
+//
+// Grouped by FAMILY rather than by type, on purpose. Thirty six tints is a
+// swatch book, not a signal. Seven is something you learn without being
+// taught: money is green, people are pink, the platform is purple.
+//
+// WHY NO TEXT COLOURS CHANGE
+//
+// Every tone is laid over near black at 11% or less and fades out by 62%, so
+// the darkest point of any card is still far darker than the white text on
+// it. The contrast that was fine on a flat panel is fine here. Tints heavy
+// enough to need lighter type would also be heavy enough to turn the page
+// into a fruit salad, which is the other failure mode.
+const FAMILY_RGB = {
+  collab:    '56,132,255',    // blue, somebody wants to work with you
+  social:    '236,72,153',    // pink, somebody reacted to you
+  milestone: '246,207,87',    // gold, you passed something
+  money:     '34,197,94',     // green, you were paid
+  platform:  '139,92,246',    // purple, this is us talking
+  music:     '45,212,191',    // teal, there is something new to hear
+  report:    '120,120,135',   // chrome, numbers, read it when you like
+};
+
+function familyOf(type) {
+  if (!type) return 'report';
+  if (type.startsWith('collab_') || type === 'paid_collab' || type === 'remix') return 'collab';
+  if (type.startsWith('milestone_') || type === 'streak' || type === 'top_supporter') return 'milestone';
+  if (['purchase', 'sale', 'split_confirmed', 'split_settled', 'payout', 'tip', 'subscription'].includes(type)) return 'money';
+  if (['new_follower', 'track_liked', 'track_commented', 'new_comment', 'first_listener', 'artist_thought'].includes(type)) return 'social';
+  if (['new_track', 'new_album', 'new_stream', 'new_in_genre', 'playlist_add', 'download', 'presave'].includes(type)) return 'music';
+  if (['announcement', 'admin_message', 'admin_reminder', 'new_post', 'session_live', 'featured_placement', 'tier_granted', 'chat_message'].includes(type)) return 'platform';
+  return 'report';
+}
+
+// Read ones keep the colour at less than half strength. Losing it entirely
+// would mean a card changes category the moment you open it, which is the one
+// thing a colour code must never do.
+function cardTone(type, isRead) {
+  const rgb = FAMILY_RGB[familyOf(type)] || FAMILY_RGB.report;
+  const a = isRead ? 0.045 : 0.11;
+  return `linear-gradient(135deg, rgba(${rgb},${a}) 0%, rgba(0,0,0,0) 62%)`;
+}
+
 const TYPE_CONFIG = {
   collab_request:     { icon: Users,         color: 'text-blue-400',   bg: 'bg-blue-500/10',    label: 'Collab Request' },
   collab_accepted:    { icon: Check,         color: 'text-green-400',  bg: 'bg-green-500/10',   label: 'Collab Accepted' },
@@ -1411,12 +1460,13 @@ export default function NotificationsPage() {
                     <div
                       key={notif.id}
                       onClick={() => handleClick(notif)}
-                      className={`group relative w-full flex items-start space-x-3 px-4 py-3.5 rounded-xl transition-all text-left ${
+                      style={{ background: cardTone(notif.type, isRead) }}
+                      className={`group relative w-full flex items-start space-x-3 px-4 py-3.5 rounded-xl transition-all text-left border ${
                         isInert(notif) ? 'cursor-default' : 'cursor-pointer'
                       } ${
                         !isRead
-                          ? 'bg-white/[0.03] border border-white/[0.07] hover:bg-white/[0.05]'
-                          : 'hover:bg-white/[0.02]'
+                          ? 'border-white/[0.09] hover:border-white/[0.16]'
+                          : 'border-white/[0.04] hover:border-white/[0.09]'
                       }`}
                     >
                       {/* Avatar / Icon */}
