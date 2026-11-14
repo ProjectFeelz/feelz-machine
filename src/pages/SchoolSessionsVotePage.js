@@ -11,6 +11,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { GraduationCap, Loader, Play, Check, ThumbsUp, Trophy } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import TikTokEmbed from '../components/TikTokEmbed';
 import { useAuth } from '../contexts/AuthContext';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 
@@ -56,7 +57,7 @@ export default function SchoolSessionsVotePage() {
     // and that has not changed.
     const { data: entries } = await supabase
       .from('school_sessions_entries')
-      .select('id, entrant_full_name, is_winner, is_finalist, is_group, entrant_tiktok_handle, song:school_sessions_shortlist_songs(title), track:tracks(title, slug, cover_artwork_url), school:school_sessions_schools(name), school_name_freetext, members:school_sessions_entry_members(member_name)')
+      .select('id, entrant_full_name, is_winner, is_finalist, is_group, entrant_tiktok_handle, tiktok_video_url, song:school_sessions_shortlist_songs(title), track:tracks(title, slug, cover_artwork_url), school:school_sessions_schools(name), school_name_freetext, members:school_sessions_entry_members(member_name)')
       .eq('competition_id', comp.id);
     setFinalists(entries || []);
 
@@ -116,6 +117,10 @@ export default function SchoolSessionsVotePage() {
     );
   }
 
+  // How many the public vote puts through. Mirrors school_sessions_config
+  // .shortlist_size, which is what judge_set_finalist actually enforces; this
+  // copy only draws the line on screen.
+  const SHORTLIST_SIZE = 20;
   const sorted = [...finalists].sort((a, b) => (voteCounts[b.id] || 0) - (voteCounts[a.id] || 0));
   const totalVotes = Object.values(voteCounts).reduce((a, b) => a + b, 0);
 
@@ -133,7 +138,7 @@ export default function SchoolSessionsVotePage() {
         <div className="space-y-2">
           <h1 className="text-2xl font-bold">People's Choice vote</h1>
           <p className="text-sm text-white/50">
-            Every entry is here. Judges pick the finalists and the winner; this is the separate People's Choice pick, one vote per person.
+            Every entry is here and your vote decides the first cut. The top 20 go through, the judges cut those to 10 finalists live on the stream, and the winner is picked from the 10 on the day. One vote per person.
           </p>
           {totalVotes > 0 && <p className="text-xs text-white/30">{totalVotes} vote{totalVotes === 1 ? '' : 's'} so far</p>}
         </div>
@@ -156,9 +161,30 @@ export default function SchoolSessionsVotePage() {
           {sorted.map((f, i) => {
             const peoplesChoice = i === 0 && (voteCounts[f.id] || 0) > 0;
             const votedForThis = votedEntryId === f.id;
+            // THE CUT LINE, DRAWN WHERE IT FALLS.
+            //
+            // Twenty go through. A list that does not say where twenty ends
+            // is a list where everybody believes they are still in it, and
+            // the people in positions 21 and 22 are the ones who most need
+            // to know they have work to do.
+            const inShortlist = i < SHORTLIST_SIZE;
+            const cutHere = i === SHORTLIST_SIZE && sorted.length > SHORTLIST_SIZE;
             return (
-              <div key={f.id} className={`rounded-xl border p-4 ${f.is_winner ? 'border-lime-400 bg-lime-400/[0.06]' : 'border-white/[0.06] bg-white/[0.03]'}`}>
+              <React.Fragment key={f.id}>
+              {cutHere && (
+                <div className="flex items-center gap-3 py-1">
+                  <span className="h-px flex-1 bg-white/[0.12]" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-white/30">
+                    Top {SHORTLIST_SIZE} cut off
+                  </span>
+                  <span className="h-px flex-1 bg-white/[0.12]" />
+                </div>
+              )}
+              <div className={`rounded-xl border p-4 ${f.is_winner ? 'border-lime-400 bg-lime-400/[0.06]' : 'border-white/[0.06] bg-white/[0.03]'} ${!inShortlist ? 'opacity-60' : ''}`}>
                 <div className="flex items-start justify-between">
+                  <span className={`w-7 flex-shrink-0 text-sm font-bold tabular-nums mt-0.5 ${inShortlist ? 'text-lime-400' : 'text-white/25'}`}>
+                    {i + 1}
+                  </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
                       {f.is_winner && (
@@ -212,7 +238,17 @@ export default function SchoolSessionsVotePage() {
                     )
                   )}
                 </div>
+
+                {/* Their performance, playing here. The link was already on
+                    every entry because the form demands one; it just had
+                    nowhere to play. Nothing loads until it is tapped. */}
+                {f.tiktok_video_url && (
+                  <div className="mt-3">
+                    <TikTokEmbed url={f.tiktok_video_url} title={`${f.entrant_full_name} on TikTok`} />
+                  </div>
+                )}
               </div>
+              </React.Fragment>
             );
           })}
         </div>

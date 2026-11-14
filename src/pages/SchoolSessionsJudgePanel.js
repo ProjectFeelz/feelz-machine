@@ -26,6 +26,7 @@ import { useAuth } from '../contexts/AuthContext';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 import { supabase } from '../supabaseClient';
 import { coverUrl } from '../utils/coverUrl';
+import TikTokEmbed from '../components/TikTokEmbed';
 
 const fmt = (s) => {
   if (!Number.isFinite(s)) return '0:00';
@@ -75,7 +76,7 @@ export default function SchoolSessionsJudgePanel() {
       // school_sessions_entries is granted column by column because it holds
       // entrant emails and guardian details, so asking it for a column nobody
       // granted returns 403 for the whole request, not a null for that field.
-      .select('id, entrant_full_name, is_group, is_finalist, is_winner, is_rejected, created_at, school:school_sessions_schools(name), school_name_freetext, song:school_sessions_shortlist_songs(title), track:tracks(id, title, slug, file_url, cover_artwork_url, artists!tracks_artist_id_fkey(artist_name)), members:school_sessions_entry_members(member_name)')
+      .select('id, entrant_full_name, is_group, is_finalist, is_winner, is_rejected, created_at, school:school_sessions_schools(name), school_name_freetext, song:school_sessions_shortlist_songs(title), tiktok_video_url, track:tracks(id, title, slug, file_url, cover_artwork_url, artists!tracks_artist_id_fkey(artist_name)), members:school_sessions_entry_members(member_name)')
       .eq('competition_id', compId)
       .order('created_at', { ascending: false })
       .then(({ data }) => { setEntries(data || []); setLoadingEntries(false); });
@@ -134,6 +135,31 @@ export default function SchoolSessionsJudgePanel() {
   React.useEffect(() => {
     if (entries.length) signAll(entries);
   }, [entries, signAll]);
+
+  // ── What the public decided ─────────────────────────────────────────────────
+  //
+  // Phase one is theirs. The ranking is read, not computed here, because the
+  // same numbers decide what judge_set_finalist will accept and two places
+  // counting votes separately is two places that can disagree on camera.
+  const [ranking, setRanking] = React.useState({});
+  const shortlistSize = gate.config?.shortlist_size ?? 20;
+  const finalistCap   = gate.config?.finalist_cap ?? 10;
+
+  const loadRanking = React.useCallback(() => {
+    if (!compId) return;
+    supabase.rpc('sessions_vote_ranking', { p_competition_id: compId })
+      .then(({ data, error }) => {
+        if (error) { console.warn('[judge] ranking unavailable:', error.message); return; }
+        const m = {};
+        (data || []).forEach(r => { m[r.entry_id] = { votes: Number(r.votes), rank: Number(r.rank) }; });
+        setRanking(m);
+      });
+  }, [compId]);
+
+  React.useEffect(() => { if (isJudge) loadRanking(); }, [isJudge, loadRanking]);
+
+  const finalistCount = entries.filter(e => e.is_finalist).length;
+  const anyVotes = Object.values(ranking).some(r => r.votes > 0);
 
   // ── Playback ────────────────────────────────────────────────────────────────
   //
@@ -253,12 +279,28 @@ export default function SchoolSessionsJudgePanel() {
   const np = nowPlaying;
   const npCover = np?.track?.cover_artwork_url;
 
+  // Outside the public's cut, so the database will refuse it. Said on the
+  // button before it is pressed rather than as an error afterwards, because
+  // on a stream a refusal you did not expect looks like a broken page.
+  const outOfShortlist = (entry) => {
+    if (!anyVotes) return false;
+    const r = ranking[entry.id]?.rank;
+    return !r || r > shortlistSize;
+  };
+
   const VerdictButtons = ({ entry, size = 'sm' }) => {
     const pad = size === 'lg' ? 'px-4 py-2.5 text-xs' : 'px-2.5 py-1 text-[10px]';
+    const blocked = !entry.is_finalist
+      && (outOfShortlist(entry) || finalistCount >= finalistCap);
     return (
       <div className="flex items-center gap-2 flex-wrap">
-        <button onClick={() => setVerdict(entry, 'finalist')} disabled={busyId === entry.id}
-          className={`font-bold rounded-full transition disabled:opacity-40 ${pad} ${entry.is_finalist ? 'bg-lime-400/20 text-lime-400' : 'bg-white/[0.06] text-white/40 hover:bg-white/[0.1]'}`}>
+        <button onClick={() => setVerdict(entry, 'finalist')} disabled={busyId === entry.id || blocked}
+          title={blocked
+            ? (outOfShortlist(entry)
+                ? `Outside the public's top ${shortlistSize}`
+                : `All ${finalistCap} finalist places are taken`)
+            : undefined}
+          className={`font-bold rounded-full transition disabled:opacity-25 ${pad} ${entry.is_finalist ? 'bg-lime-400/20 text-lime-400' : 'bg-white/[0.06] text-white/40 hover:bg-white/[0.1]'}`}>
           {entry.is_finalist ? 'Finalist' : 'Mark finalist'}
         </button>
         <button onClick={() => setVerdict(entry, 'winner')} disabled={busyId === entry.id}
@@ -305,9 +347,26 @@ export default function SchoolSessionsJudgePanel() {
             <h1 className="text-2xl font-bold">Judge Panel</h1>
           </div>
         </div>
-        <p className="text-sm text-white/40 mb-6">
+        <p className="text-sm text-white/40 mb-4">
           Pick an entry to play it here. Space bar starts and stops it.
         </p>
+
+        {/* WHERE YOU ARE IN THE THREE PHASES, in one line.
+            Ten of twenty, with the winner still to come, is the only thing a
+            judge needs on screen while the stream is running. */}
+        <div className="mb-6 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+          <span className="px-2.5 py-1 rounded-full bg-white/[0.06] text-white/50">
+            {anyVotes
+              ? `Public vote picked the top ${shortlistSize}`
+              : 'No public votes yet, every entry is open'}
+          </span>
+          <span className={`px-2.5 py-1 rounded-full ${finalistCount >= finalistCap ? 'bg-lime-400/20 text-lime-400' : 'bg-white/[0.06] text-white/50'}`}>
+            {finalistCount} of {finalistCap} finalists
+          </span>
+          <span className={`px-2.5 py-1 rounded-full ${entries.some(e => e.is_winner) ? 'bg-lime-400 text-black' : 'bg-white/[0.06] text-white/50'}`}>
+            {entries.some(e => e.is_winner) ? 'Winner picked' : 'Winner not picked'}
+          </span>
+        </div>
 
         {gate.adminPreview && (
           <div className="mb-4 rounded-xl border border-yellow-500/20 bg-yellow-500/10 px-4 py-2.5">
@@ -370,6 +429,16 @@ export default function SchoolSessionsJudgePanel() {
                   </div>
                 </div>
               </div>
+
+              {/* THE PERFORMANCE, not just the audio.
+                  Every entry carries a TikTok link because the entry form
+                  demands one. Watching it meant leaving the page mid stream
+                  until now. Nothing loads until it is asked for. */}
+              {np.tiktok_video_url && (
+                <div className="mt-4 max-w-sm">
+                  <TikTokEmbed url={np.tiktok_video_url} title={`${np.entrant_full_name} on TikTok`} />
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -391,6 +460,15 @@ export default function SchoolSessionsJudgePanel() {
                   className={`px-4 py-3 rounded-xl text-sm border transition ${border} ${isNow ? 'ring-1 ring-lime-400/50' : ''} ${e.is_rejected ? 'opacity-60' : ''}`}>
                   <div className="flex items-center justify-between gap-3">
                     <button onClick={() => playEntry(e)} className="flex items-center gap-3 min-w-0 text-left flex-1">
+                      {/* Where the public put them. The number is the whole
+                          point of phase one, so it sits on the row rather
+                          than in a tooltip. */}
+                      {anyVotes && (
+                        <span className={`w-7 flex-shrink-0 text-center text-xs font-bold tabular-nums ${
+                          outOfShortlist(e) ? 'text-white/20' : 'text-lime-400'}`}>
+                          {ranking[e.id]?.rank ?? '–'}
+                        </span>
+                      )}
                       <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/[0.06] flex-shrink-0 flex items-center justify-center">
                         {e.track?.cover_artwork_url
                           ? <img src={coverUrl(e.track.cover_artwork_url, 120)} alt="" className="w-full h-full object-cover" />
@@ -407,6 +485,11 @@ export default function SchoolSessionsJudgePanel() {
                           {(e.school?.name || e.school_name_freetext)
                             ? `${e.school?.name || e.school_name_freetext} · `
                             : ''}covering "{e.song?.title || e.track?.title}"
+                          {anyVotes && ranking[e.id] != null && (
+                            <span className="text-white/30">
+                              {' '}· {ranking[e.id].votes} vote{ranking[e.id].votes === 1 ? '' : 's'}
+                            </span>
+                          )}
                         </p>
                       </div>
                     </button>
