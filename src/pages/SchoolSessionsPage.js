@@ -275,6 +275,24 @@ function EntryGallery({ compId }) {
 }
 
 
+// One numbered step. The number is a filled circle rather than "1." in the
+// text, because on a page this dense a bare digit at the start of a line is
+// read as part of the sentence.
+function Step({ n, title, children }) {
+  return (
+    <div className="flex gap-3.5 lg:gap-4">
+      <span className="w-7 h-7 lg:w-9 lg:h-9 rounded-full bg-lime-400 text-black font-bold text-sm lg:text-base flex items-center justify-center flex-shrink-0">
+        {n}
+      </span>
+      <div className="min-w-0 flex-1 space-y-2.5">
+        <p className="text-base lg:text-lg font-bold text-white leading-tight pt-0.5">{title}</p>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+
 // currentPhase moved to src/utils/schoolPhase.js. It used to live here, which
 // meant it decided what this page SAID and nothing else: the entry toggle and
 // the insert never consulted it, so a student could file an entry a month
@@ -540,18 +558,6 @@ export default function SchoolSessionsPage() {
           <SchoolVipPrize signedIn={!!user} />
         </div>
 
-        {/* How it works */}
-        {/* THE SENTENCE THAT DECIDES WHETHER AN ENTRY IS VALID.
-            Entrants were downloading the instrumental and writing a brand new
-            song over it, then entering that. Nothing here said in plain words
-            that the chorus is the song's and only the verses are theirs, so
-            the first line now says exactly that and the download is the
-            backing track with the chorus already on it. */}
-        <p className="text-xs lg:text-base text-white/50 leading-relaxed border-l-2 border-lime-400 pl-3">
-          <span className="text-white font-semibold">Download the backing track and write your own verses</span>. The chorus is already on the file and it stays as it is, that is the part that makes every entry the same song. The verses are yours: your words, your voice, your take. Solo or as a group; if your group wins, the prize splits evenly across everyone listed.
-          <span className="block mt-1.5 text-white/40">Writing a completely new song over the backing track is the one thing that does not count, however good it is.</span>
-        </p>
-
         {/* Desktop copy of the button. See ctaBlock above. */}
         {ctaBlock && <div className="hidden lg:block pt-1">{ctaBlock}</div>}
 
@@ -562,25 +568,94 @@ export default function SchoolSessionsPage() {
 
         <YourEntryCard compId={compId} user={user} />
 
-        {/* Song shortlist. Tapping one plays the whole shortlist in the app
-            player, so nobody leaves this page half way through entering. */}
-        {songs.length > 0 && (
-          <div className="space-y-2.5 lg:space-y-3">
-            <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">{songs.length === 1 ? 'The song' : 'Songs up for grabs'}</p>
-            <ShortlistSongs songs={songs} />
-          </div>
-        )}
+        {/* ── HOW TO ENTER, NUMBERED ───────────────────────────────────────
+            Stacked, the order of this page WAS the instructions: you met the
+            song, then the rule, then the checklist, then the button, in that
+            order, because there was only one column to meet them in. Side by
+            side that reading order is gone, and what is left is a wall of
+            boxes with no telling which one you are supposed to act on first.
+            So the sequence is said out loud instead of being implied by
+            position. It survives any future layout change for the same
+            reason. */}
+        <div className="space-y-6 lg:space-y-7">
+          <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">How to enter</p>
 
-        {gate.config?.youtube_playlist_url && (
-          <a href={gate.config.youtube_playlist_url} target="_blank" rel="noopener noreferrer"
-            className="flex items-center space-x-3 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 hover:bg-white/[0.05] transition">
-            <PlayCircle className="w-4 h-4 text-lime-400 flex-shrink-0" />
-            <div>
-              <p className="text-sm lg:text-base font-semibold text-white">Watch the playlist on YouTube</p>
-              <p className="text-xs lg:text-sm text-white/40 mt-0.5">Hear the songs before you pick one</p>
-            </div>
-          </a>
-        )}
+          <Step n={1} title="Get the song">
+            {songs.length > 0 && <ShortlistSongs songs={songs} />}
+            {gate.config?.youtube_playlist_url && (
+              <a href={gate.config.youtube_playlist_url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center space-x-3 rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 hover:bg-white/[0.05] transition">
+                <PlayCircle className="w-4 h-4 text-lime-400 flex-shrink-0" />
+                <div>
+                  <p className="text-sm lg:text-base font-semibold text-white">Watch the playlist on YouTube</p>
+                  <p className="text-xs lg:text-sm text-white/40 mt-0.5">Hear the songs before you pick one</p>
+                </div>
+              </a>
+            )}
+          </Step>
+
+          {/* THE SENTENCE THAT DECIDES WHETHER AN ENTRY IS VALID.
+              Entrants were downloading the instrumental and writing a brand
+              new song over it, then entering that. Nothing said in plain words
+              that the chorus is the song's and only the verses are theirs. */}
+          <Step n={2} title="Record your verses over it">
+            <p className="text-xs lg:text-base text-white/50 leading-relaxed">
+              The chorus is already on the file and it stays as it is, that is the part that makes every entry the same song. The verses are yours: your words, your voice, your take. Sing it or remix it. Solo or as a group, and if your group wins the prize splits evenly across everyone listed.
+            </p>
+            <p className="text-xs lg:text-sm text-white/40 leading-relaxed">
+              Writing a completely new song over the backing track is the one thing that does not count, however good it is.
+            </p>
+          </Step>
+
+          <Step n={3} title="Post it on TikTok and tag us">
+            <p className="text-xs lg:text-base text-white/50 leading-relaxed">
+              Do this before the next step. You paste the link to that post when you enter, so it has to exist first. This one is required.
+            </p>
+          </Step>
+
+          <Step n={4} title="Upload it here">
+            <p className="text-xs lg:text-base text-white/50 leading-relaxed">
+              Upload your track like any other, and switch <span className="text-white font-semibold">Enter into Sessions</span> on while you do. That toggle is your entry. There is no code to fetch from anyone.
+            </p>
+          </Step>
+        </div>
+
+        {/* WHAT YOU'LL NEED
+            Above the courses, because the courses are twenty minutes and this
+            is ten seconds, and the thing that lost entrants was discovering a
+            requirement at the end rather than the beginning.
+            The TikTok post is the one that matters. It is mandatory on the
+            entry form and was mentioned nowhere until the final screen, so a
+            student who does not use TikTok recorded a cover and then found out
+            they could not enter. */}
+        <div id="what-you-need" className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 lg:p-5 scroll-mt-20">
+          <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase mb-3">
+            What you will need
+          </p>
+          <ul className="space-y-2.5">
+            {[
+              ['An account here', user ? 'Done, you are signed in.' : 'Free, takes a minute.'],
+              // The school line is gone rather than softened. It was already
+              // marked optional and that was not enough: a checklist is where
+              // somebody decides whether a competition is meant for them, and
+              // naming a school at all answers that question wrongly. The form
+              // no longer asks either.
+              ['Your verses over the backing track', 'The chorus on the file stays; the verses are yours. Solo or as a group.'],
+              ['A TikTok post of it, tagging us', 'This one is required. You paste the link when you enter, so post it before you upload.'],
+            ].map(([what, why]) => (
+              <li key={what} className="flex items-start gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-lime-400 flex-shrink-0 mt-1.5" />
+                <span className="min-w-0">
+                  <span className="block text-sm lg:text-base text-white">{what}</span>
+                  <span className="block text-xs lg:text-sm text-white/40 mt-0.5">{why}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[11px] lg:text-sm text-white/30 mt-3.5 leading-relaxed">
+            There is no code to fetch from anyone. The system gives you one when you enter.
+          </p>
+        </div>
 
         {/* Judges + public vote */}
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 flex items-start space-x-3">
@@ -642,42 +717,6 @@ export default function SchoolSessionsPage() {
           </div>
         </div>
 
-        {/* WHAT YOU'LL NEED
-            Above the courses, because the courses are twenty minutes and this
-            is ten seconds, and the thing that lost entrants was discovering a
-            requirement at the end rather than the beginning.
-            The TikTok post is the one that matters. It is mandatory on the
-            entry form and was mentioned nowhere until the final screen, so a
-            student who does not use TikTok recorded a cover and then found out
-            they could not enter. */}
-        <div id="what-you-need" className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-4 lg:p-5 scroll-mt-20">
-          <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase mb-3">
-            What you will need
-          </p>
-          <ul className="space-y-2.5">
-            {[
-              ['An account here', user ? 'Done, you are signed in.' : 'Free, takes a minute.'],
-              // The school line is gone rather than softened. It was already
-              // marked optional and that was not enough: a checklist is where
-              // somebody decides whether a competition is meant for them, and
-              // naming a school at all answers that question wrongly. The form
-              // no longer asks either.
-              ['Your verses over the backing track', 'The chorus on the file stays; the verses are yours. Solo or as a group.'],
-              ['A TikTok post of it, tagging us', 'This one is required. You paste the link when you enter, so post it before you upload.'],
-            ].map(([what, why]) => (
-              <li key={what} className="flex items-start gap-2.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-lime-400 flex-shrink-0 mt-1.5" />
-                <span className="min-w-0">
-                  <span className="block text-sm lg:text-base text-white">{what}</span>
-                  <span className="block text-xs lg:text-sm text-white/40 mt-0.5">{why}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-          <p className="text-[11px] lg:text-sm text-white/30 mt-3.5 leading-relaxed">
-            There is no code to fetch from anyone. The system gives you one when you enter.
-          </p>
-        </div>
 
         {/* Courses */}
         {(viralCourseUrl || platformCourseUrl) && (
