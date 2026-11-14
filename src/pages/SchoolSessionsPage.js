@@ -427,11 +427,18 @@ export default function SchoolSessionsPage() {
           the order they were already in, which is why the button is rendered
           twice and each copy is hidden at the other breakpoint. */}
       <div className="max-w-lg lg:max-w-7xl mx-auto px-6 lg:px-10 pt-14 lg:pt-16 pb-24">
-      <style>{`.ss-sticky::-webkit-scrollbar{display:none;width:0}`}</style>
       <div className="space-y-10 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-12 lg:items-start">
 
-      <div className="space-y-10 lg:space-y-7 lg:col-span-5 lg:sticky lg:top-8 ss-sticky lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto"
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+      {/* NOT STICKY, AND NOT CAPPED.
+          Both were tried. A sticky column taller than the window pins its top
+          and puts its bottom somewhere you cannot reach; capping it with an
+          inner scroll was worse, because hiding the scrollbar is a house rule
+          and an invisible scroll region is a part of the page nobody knows is
+          there. Measured on the live site it was burying 1040 pixels, the
+          prize, the VIP card and the entry button among them.
+          A plain column cannot do that. The height saving comes from the two
+          columns, not from pinning one of them. */}
+      <div className="space-y-10 lg:space-y-7 lg:col-span-5">
 
         {/* Brand */}
         <div className="flex items-center space-x-2.5">
