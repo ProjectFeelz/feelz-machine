@@ -68,9 +68,14 @@ export default function SchoolSessionsJudgePanel() {
     if (!compId) return;
     setLoadingEntries(true);
     supabase.from('school_sessions_entries')
-      // file_url and cover_artwork_url are the two additions. Without them the
-      // stage has nothing to play and nothing to show.
-      .select('id, entrant_full_name, is_group, is_finalist, is_winner, is_rejected, created_at, school:school_sessions_schools(name), school_name_freetext, song:school_sessions_shortlist_songs(title), track:tracks(title, slug, file_url, cover_artwork_url, artists!tracks_artist_id_fkey(artist_name)), members:school_sessions_entry_members(member_name)')
+      // The track id, cover and file_url are the additions. Without them the
+      // stage has nothing to show and nothing to sign.
+      //
+      // The id comes from the EMBED, as tracks.id, not from entries.track_id.
+      // school_sessions_entries is granted column by column because it holds
+      // entrant emails and guardian details, so asking it for a column nobody
+      // granted returns 403 for the whole request, not a null for that field.
+      .select('id, entrant_full_name, is_group, is_finalist, is_winner, is_rejected, created_at, school:school_sessions_schools(name), school_name_freetext, song:school_sessions_shortlist_songs(title), track:tracks(id, title, slug, file_url, cover_artwork_url, artists!tracks_artist_id_fkey(artist_name)), members:school_sessions_entry_members(member_name)')
       .eq('competition_id', compId)
       .order('created_at', { ascending: false })
       .then(({ data }) => { setEntries(data || []); setLoadingEntries(false); });
@@ -80,21 +85,85 @@ export default function SchoolSessionsJudgePanel() {
     if (isJudge) loadEntries();
   }, [isJudge, loadEntries]);
 
+  // ── Signed audio ────────────────────────────────────────────────────────────
+  //
+  // THE BUCKET IS PRIVATE. tracks.file_url is a public object URL that stopped
+  // resolving the day feelz-samples was closed, so assigning it to an audio
+  // element gives a format error and silence. Every player in the app goes
+  // through stream-url, which signs the stored path with the service role and
+  // hands back a URL good for two hours. This page has to do the same.
+  //
+  // Signed up front, in one request, rather than on each play. A judge on a
+  // live stream should not be waiting on a round trip to Frankfurt between one
+  // entry and the next, and two hours covers a judging session comfortably.
+  const [signed, setSigned] = React.useState({});
+  const [signing, setSigning] = React.useState(false);
+
+  const signAll = React.useCallback(async (rows) => {
+    const ids = [...new Set(rows.map(e => e.track?.id).filter(Boolean))];
+    if (ids.length === 0) return;
+    setSigning(true);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+      const out = {};
+      // stream-url signs at most 25 ids per call, so a big season is chunked
+      // rather than silently truncated.
+      for (let i = 0; i < ids.length; i += 25) {
+        const res = await fetch('/.netlify/functions/stream-url', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ trackIds: ids.slice(i, i + 25) }),
+        });
+        if (!res.ok) continue;
+        const body = await res.json();
+        Object.entries(body.tracks || {}).forEach(([id, r]) => {
+          if (r?.url) out[id] = r.url;
+        });
+      }
+      setSigned(prev => ({ ...prev, ...out }));
+    } catch (e) {
+      setActionError('Could not load the audio. Reload the page and try again.');
+    }
+    setSigning(false);
+  }, []);
+
+  React.useEffect(() => {
+    if (entries.length) signAll(entries);
+  }, [entries, signAll]);
+
   // ── Playback ────────────────────────────────────────────────────────────────
   //
   // One audio element for the whole page, re-pointed as the judge moves down
   // the list. Making one per row would mean twenty buffered songs on a laptop
   // that is also running a stream.
   const playEntry = React.useCallback((entry) => {
-    const url = entry?.track?.file_url;
-    if (!url) { setActionError('That entry has no audio on it.'); return; }
+    const trackId = entry?.track?.id;
+    if (!trackId || !entry?.track?.file_url) {
+      setActionError('That entry has no audio on it.');
+      return;
+    }
+    const url = signed[trackId];
+    if (!url) {
+      // Either the signing round trip has not landed yet, or stream-url
+      // refused this one. Say which, rather than failing silently the way an
+      // unplayable src does.
+      setActionError(signing
+        ? 'Still loading the audio, give it a second.'
+        : 'That song would not load. Reload the page and try again.');
+      setNowPlaying(entry);
+      return;
+    }
     setActionError(null);
     setNowPlaying(entry);
     const a = audioRef.current;
     if (!a) return;
     if (a.src !== url) { a.src = url; setElapsed(0); setDuration(0); }
     a.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
-  }, []);
+  }, [signed, signing]);
 
   const togglePlay = React.useCallback(() => {
     const a = audioRef.current;
@@ -118,10 +187,12 @@ export default function SchoolSessionsJudgePanel() {
   const playNext = React.useCallback(() => {
     if (!nowPlaying) return;
     const i = entries.findIndex(e => e.id === nowPlaying.id);
-    const next = entries.slice(i + 1).find(e => e.track?.file_url);
+    // Skip over anything that will not play, so Next never lands the stream on
+    // a dead entry.
+    const next = entries.slice(i + 1).find(e => e.track?.id && signed[e.track.id]);
     if (next) playEntry(next);
     else { setPlaying(false); }
-  }, [entries, nowPlaying, playEntry]);
+  }, [entries, nowPlaying, playEntry, signed]);
 
   // ── Verdicts ────────────────────────────────────────────────────────────────
   //
@@ -339,9 +410,18 @@ export default function SchoolSessionsJudgePanel() {
                         </p>
                       </div>
                     </button>
-                    {!e.track?.file_url && (
+                    {/* Three states, not two. "Loading" while the signing
+                        round trip is in flight, "no audio" when the row has
+                        no file at all, and "won't load" when it has one that
+                        stream-url refused. Silence with no label is what sent
+                        me looking for a bug that was not there. */}
+                    {!e.track?.file_url ? (
                       <span className="text-[10px] text-white/25 flex-shrink-0">no audio</span>
-                    )}
+                    ) : !e.track?.id || !signed[e.track.id] ? (
+                      <span className="text-[10px] text-white/25 flex-shrink-0">
+                        {signing ? 'loading…' : "won't load"}
+                      </span>
+                    ) : null}
                   </div>
                   <div className="mt-2.5">
                     <VerdictButtons entry={e} />

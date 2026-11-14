@@ -6,7 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 
 const COMPANY      = 'Feelz Machine';
 const CONTACT      = 'legal@feelzmachine.com';
-const LAST_UPDATED = 'October 2026';
+const LAST_UPDATED = 'November 2026';
 const BASE_URL     = 'https://www.feelzmachine.com';
 
 function Section({ title, children }) {
@@ -67,6 +67,13 @@ export default function SchoolSessionsTermsPage() {
 
         <Section title="5. Prizes">
           <p>The winner receives R10,000 in total: R5,000 in cash and R5,000 in studio equipment. A group entry splits the prize evenly between the members listed at submission. {COMPANY} selects the equipment and may substitute items of equivalent value where something is unavailable. {COMPANY} may adjust the prize amount or structure for future seasons; the current season's terms are those in effect when you enter.</p>
+          {/* THE RECORDING PRIZE AND ITS SPLIT, STATED BEFORE ANYONE ENTERS.
+              Epsilon's 15% is for the season instrumental, not for playing on
+              the winner's record, and a share like that is only fair if it is
+              on the table before somebody submits. Revealed after a win, it is
+              the one thing they would tell people about. */}
+          <p>The winner also receives one song recorded professionally in Steve C-SA's studio, at no cost to them. The winner picks the song. Steve C-SA features on the hook and produces the recording, and it is released on {COMPANY}.</p>
+          <p>That recording is released as a collaboration, and the split is set now, before anyone enters, so nothing is sprung on the winner later: <strong className="text-white/70">65% to the winner</strong>, <strong className="text-white/70">20% to Steve C-SA</strong> for the feature, the production and the studio, and <strong className="text-white/70">15% to Epsilon</strong>, who made the Season 1 instrumental that Sessions is built on. The split covers money the recording earns and runs for three years from release, after which the full 100% returns to the winner. The winner keeps all of the songwriting, and {COMPANY} waives its usual platform fee on that recording. The winner signs a short agreement setting all of this out before the session.</p>
           <p>The VIP card, a seat in a judging round, is a separate prize open to anyone with a {COMPANY} account, awarded on how many people they bring to the platform. You do not have to enter a cover to earn one. The number of cards available each season and the thresholds are shown on the Sessions page and may change between seasons.</p>
           <p>Prizes are paid at {COMPANY}'s reasonable discretion regarding timing and method, and may require the winner (or a guardian, for minors) to provide payment details and identity confirmation before payout. Prizes have no cash-equivalent alternative unless {COMPANY} offers one.</p>
         </Section>
