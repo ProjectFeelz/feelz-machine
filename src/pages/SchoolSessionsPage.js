@@ -17,6 +17,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import {
   Loader, ArrowRight, Megaphone, Share2, Check,
   Upload as UploadIcon, ThumbsUp, PlayCircle, BookOpen, Music, Trophy,
+  ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import SchoolVipPrize from '../components/SchoolVipPrize';
@@ -180,6 +181,14 @@ function EntryGallery({ compId }) {
     setLoadingMore(false);
   };
 
+  // The strip loads the next page on its own once you are near the end of
+  // it, so the only reason to reach for the tile at the end is impatience.
+  const onScroll = (ev) => {
+    if (!hasMore || loadingMore) return;
+    const el = ev.currentTarget;
+    if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 240) loadMore();
+  };
+
   if (loading) {
     return <div className="flex justify-center py-8"><Loader className="w-4 h-4 text-white/30 animate-spin" /></div>;
   }
@@ -187,51 +196,75 @@ function EntryGallery({ compId }) {
 
   return (
     <div className="space-y-3 lg:space-y-4">
+      {/* This gallery used to be a vertical grid. On a phone twelve entries
+          stacked six rows deep, which pushed the rest of the page, and the
+          entry call to action with it, a long way below the fold. Somebody
+          who came here to enter had to scroll past everybody else first.
+          Rolling it sideways gives the entries the same space while costing
+          the page one card's height. */}
       <p className="text-lime-400 text-xs lg:text-sm font-bold tracking-widest uppercase">Entries so far</p>
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5 lg:gap-3">
-        {entries.map(e => (
-          <Link key={e.id} to={`/sessions/entry/${e.id}`}
-            className={`block rounded-xl overflow-hidden border transition hover:border-white/20 ${
-            e.is_winner   ? 'border-lime-400 bg-lime-400/[0.10]'
-            : e.is_finalist ? 'border-lime-400/40 bg-lime-400/[0.04]'
-            : 'border-white/[0.06] bg-white/[0.02]'}`}>
-            <div className="aspect-square bg-white/[0.04] flex items-center justify-center">
-              {e.track?.cover_artwork_url ? (
-                <img src={e.track.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <Music className="w-6 h-6 text-white/20" />
-              )}
-            </div>
-            <div className="p-2.5">
-              <p className="text-xs font-semibold text-white truncate">
-                {e.entrant_full_name}{e.is_group && e.members?.length > 0 ? ` +${e.members.length}` : ''}
-              </p>
-              {/* Only first season entries carry a school. Without the guard
-                  every new entry rendered an empty line in the card. */}
-              {(e.school?.name || e.school_name_freetext) && (
-                <p className="text-[10px] text-white/40 truncate mt-0.5">
-                  {e.school?.name || e.school_name_freetext}
+
+      <div className="relative -mx-6 lg:-mx-10">
+        {/* The bar itself is hidden. Firefox and old Edge take it from the
+            inline style, Chrome and Safari need the pseudo element, and that
+            cannot be written inline, so it ships with the component rather
+            than depending on a global utility class being present. */}
+        <style>{`.ss-roll::-webkit-scrollbar{display:none;height:0}`}</style>
+        <div onScroll={onScroll}
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          className="ss-roll flex gap-2.5 lg:gap-3 overflow-x-auto snap-x snap-mandatory px-6 lg:px-10 pb-1">
+          {entries.map(e => (
+            <Link key={e.id} to={`/sessions/entry/${e.id}`}
+              className={`block w-36 lg:w-44 flex-shrink-0 snap-start rounded-xl overflow-hidden border transition hover:border-white/20 ${
+              e.is_winner   ? 'border-lime-400 bg-lime-400/[0.10]'
+              : e.is_finalist ? 'border-lime-400/40 bg-lime-400/[0.04]'
+              : 'border-white/[0.06] bg-white/[0.02]'}`}>
+              <div className="aspect-square bg-white/[0.04] flex items-center justify-center">
+                {e.track?.cover_artwork_url ? (
+                  <img src={e.track.cover_artwork_url} alt="" loading="lazy" className="w-full h-full object-cover" />
+                ) : (
+                  <Music className="w-6 h-6 text-white/20" />
+                )}
+              </div>
+              <div className="p-2.5">
+                <p className="text-xs font-semibold text-white truncate">
+                  {e.entrant_full_name}{e.is_group && e.members?.length > 0 ? ` +${e.members.length}` : ''}
                 </p>
-              )}
-              <p className="text-[10px] text-white/30 truncate">
-                "{e.song?.title || e.track?.title}"
-              </p>
-              {(e.is_winner || e.is_finalist) && (
-                <p className="text-[9px] font-bold text-lime-400 uppercase tracking-wide mt-1 flex items-center gap-1">
-                  {e.is_winner && <Trophy className="w-2.5 h-2.5" />}
-                  {e.is_winner ? 'Winner' : 'Finalist'}
+                {/* Only first season entries carry a school. Without the guard
+                    every new entry rendered an empty line in the card. */}
+                {(e.school?.name || e.school_name_freetext) && (
+                  <p className="text-[10px] text-white/40 truncate mt-0.5">
+                    {e.school?.name || e.school_name_freetext}
+                  </p>
+                )}
+                <p className="text-[10px] text-white/30 truncate">
+                  "{e.song?.title || e.track?.title}"
                 </p>
-              )}
-            </div>
-          </Link>
-        ))}
+                {(e.is_winner || e.is_finalist) && (
+                  <p className="text-[9px] font-bold text-lime-400 uppercase tracking-wide mt-1 flex items-center gap-1">
+                    {e.is_winner && <Trophy className="w-2.5 h-2.5" />}
+                    {e.is_winner ? 'Winner' : 'Finalist'}
+                  </p>
+                )}
+              </div>
+            </Link>
+          ))}
+
+          {hasMore && (
+            <button onClick={loadMore} disabled={loadingMore}
+              className="w-36 lg:w-44 flex-shrink-0 snap-start rounded-xl border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.04] transition disabled:opacity-40 flex flex-col items-center justify-center gap-2 text-white/50 hover:text-white">
+              {loadingMore
+                ? <Loader className="w-4 h-4 animate-spin" />
+                : <ChevronRight className="w-5 h-5" />}
+              <span className="text-[11px] font-semibold">{loadingMore ? 'Loading…' : 'More entries'}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Tells you there is more to the right without taking a row to say
+            so. Sits above the strip and ignores taps. */}
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 lg:w-14 bg-gradient-to-l from-black to-transparent" />
       </div>
-      {hasMore && (
-        <button onClick={loadMore} disabled={loadingMore}
-          className="w-full py-2.5 rounded-xl border border-white/[0.08] text-xs font-semibold text-white/50 hover:text-white hover:bg-white/[0.03] transition disabled:opacity-40">
-          {loadingMore ? 'Loading…' : 'Load more entries'}
-        </button>
-      )}
     </div>
   );
 }
