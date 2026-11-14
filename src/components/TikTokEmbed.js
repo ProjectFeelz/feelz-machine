@@ -34,6 +34,12 @@ import { ExternalLink, Play } from 'lucide-react';
 // is how an embed quietly stops working in a year.
 const LONG = /tiktok\.com\/(?:@[^/]+\/)?(?:video|photo)\/(\d{6,})/i;
 
+// How much of TikTok's own furniture to push out of sight, top and bottom.
+// Measured against their embed as it stands. Tune these two if their player
+// changes; nothing else in this file needs to move.
+const CHROME_TOP = 66;
+const CHROME_BOTTOM = 124;
+
 export function tiktokVideoId(url) {
   if (!url) return null;
   const m = String(url).match(LONG);
@@ -90,9 +96,21 @@ export default function TikTokEmbed({ url, className = '', title = 'TikTok video
 
   return (
     <div className={`rounded-xl overflow-hidden border border-white/[0.08] bg-black ${className}`}>
-      {/* 9:16, which is every TikTok. A fixed height crops them on a phone and
-          leaves a black band on a desktop. */}
-      <div className="relative w-full" style={{ aspectRatio: '9 / 16', maxHeight: '70vh' }}>
+      {/* JUST THE VIDEO.
+          TikTok has no chrome free embed. Every official option returns
+          their player with a header (avatar, handle, caption, follow button)
+          and a footer (sound name, like and comment counts, an "open app"
+          bar). On a stream that is two thirds furniture.
+          So the frame is taller than the window it sits in and pulled up, and
+          the window is 9:16 with overflow hidden. What is left on screen is
+          the video.
+          The two numbers are TikTok's chrome as it is today. If they change
+          their player the worst case is a strip of their header showing again
+          or a few pixels of video clipped, which is a cosmetic drift, not a
+          broken embed. Both are in one place here for that reason.
+          Attribution does not disappear: the handle and the link out sit
+          underneath, in our own type. */}
+      <div className="relative w-full overflow-hidden" style={{ aspectRatio: '9 / 16', maxHeight: '70vh' }}>
         <iframe
           title={title}
           src={`https://www.tiktok.com/embed/v2/${id}`}
@@ -100,8 +118,12 @@ export default function TikTokEmbed({ url, className = '', title = 'TikTok video
           // Nothing here needs to reach back into the page, so it is not given
           // the chance to.
           sandbox="allow-scripts allow-same-origin allow-popups allow-presentation"
-          className="absolute inset-0 w-full h-full"
-          style={{ border: 0 }}
+          className="absolute left-0 w-full"
+          style={{
+            border: 0,
+            top: `-${CHROME_TOP}px`,
+            height: `calc(100% + ${CHROME_TOP + CHROME_BOTTOM}px)`,
+          }}
           loading="lazy"
         />
       </div>

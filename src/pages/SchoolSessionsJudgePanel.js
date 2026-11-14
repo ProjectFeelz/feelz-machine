@@ -290,18 +290,45 @@ export default function SchoolSessionsJudgePanel() {
 
   const VerdictButtons = ({ entry, size = 'sm' }) => {
     const pad = size === 'lg' ? 'px-4 py-2.5 text-xs' : 'px-2.5 py-1 text-[10px]';
-    const blocked = !entry.is_finalist
-      && (outOfShortlist(entry) || finalistCount >= finalistCap);
+    const full = finalistCount >= finalistCap;
+    const blocked = !entry.is_finalist && (outOfShortlist(entry) || full);
+
+    // NOT DISABLED, DIMMED.
+    //
+    // A disabled button on a touch screen says nothing: there is no hover, so
+    // the tooltip never appears and the button simply does not respond, which
+    // on a stream reads as the page having frozen. It stays pressable and
+    // answers in words instead.
+    const onFinalist = () => {
+      if (blocked) {
+        setActionError(outOfShortlist(entry)
+          ? `That entry is number ${ranking[entry.id]?.rank ?? '?'} in the public vote, and only the top ${shortlistSize} can be finalists.`
+          : `All ${finalistCap} finalist places are taken. Tap a green Finalist button to free one up, then come back.`);
+        return;
+      }
+      setVerdict(entry, 'finalist');
+    };
+
     return (
       <div className="flex items-center gap-2 flex-wrap">
-        <button onClick={() => setVerdict(entry, 'finalist')} disabled={busyId === entry.id || blocked}
-          title={blocked
-            ? (outOfShortlist(entry)
-                ? `Outside the public's top ${shortlistSize}`
-                : `All ${finalistCap} finalist places are taken`)
-            : undefined}
-          className={`font-bold rounded-full transition disabled:opacity-25 ${pad} ${entry.is_finalist ? 'bg-lime-400/20 text-lime-400' : 'bg-white/[0.06] text-white/40 hover:bg-white/[0.1]'}`}>
-          {entry.is_finalist ? 'Finalist' : 'Mark finalist'}
+        {/* Pressing it again takes it off. That is the whole swap: drop one,
+            add another, and the count frees up straight away. The label says
+            so, because "Finalist" on its own looks like a label rather than a
+            button you can press back. */}
+        <button onClick={onFinalist} disabled={busyId === entry.id}
+          title={entry.is_finalist
+            ? 'Tap to take this one off the finalists'
+            : blocked
+              ? (outOfShortlist(entry) ? `Outside the public's top ${shortlistSize}` : `All ${finalistCap} places are taken`)
+              : undefined}
+          className={`font-bold rounded-full transition disabled:opacity-40 inline-flex items-center gap-1 ${pad} ${
+            entry.is_finalist
+              ? 'bg-lime-400/20 text-lime-400 hover:bg-red-500/20 hover:text-red-300'
+              : blocked
+                ? 'bg-white/[0.04] text-white/20'
+                : 'bg-white/[0.06] text-white/40 hover:bg-white/[0.1]'}`}>
+          {entry.is_finalist && <X className={size === 'lg' ? 'w-3 h-3' : 'w-2.5 h-2.5'} />}
+          <span>{entry.is_finalist ? 'Finalist, tap to drop' : 'Mark finalist'}</span>
         </button>
         <button onClick={() => setVerdict(entry, 'winner')} disabled={busyId === entry.id}
           className={`flex items-center gap-1 font-bold rounded-full transition disabled:opacity-40 ${pad} ${entry.is_winner ? 'bg-lime-400 text-black' : 'bg-white/[0.06] text-white/40 hover:bg-white/[0.1]'}`}>
