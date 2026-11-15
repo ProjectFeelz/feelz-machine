@@ -14,6 +14,7 @@ import { StoryUpload } from './ArtistStories';
 import MerchConnectSheet from './MerchConnectSheet';
 import MerchParked from './MerchParked';
 import { MERCH_PARKED } from '../config/features';
+import { tap } from '../utils/track';
 import CreateMenuSection, { MENU_TINTS } from './CreateMenuSection';
 
 // Exact copy of the "+" create menu from ArtistProfilePage.js — same
@@ -478,6 +479,11 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   items={items.filter(Boolean).map(it => ({
                     ...it,
                     onClick: () => {
+                      // EVERY ROW, because the question this menu exists to
+                      // answer is which rows people actually use. Rows that
+                      // nobody taps for a month are rows to remove, and we
+                      // have just added five on a hunch.
+                      tap('menu_' + it.id);
                       const id = it.id;
                       if (id === 'live') { setCreateTab('live'); setLiveTitle(`${artist?.artist_name}'s Live Session`); }
                       else if (id === 'memo') { setCreateTab('memo'); }

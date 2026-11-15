@@ -121,7 +121,28 @@ export default function TrackPage() {
       // receipt in NotificationsPage above all. Without it, every one of those
       // links landed on "Track not found" on a black screen, which reads as a
       // blank page. AlbumDetailPage has always done both; this did not.
-      const SELECT = '*, artists!tracks_artist_id_fkey(*), albums(id, title, slug, cover_artwork_url, price, release_type, release_date)';
+      // THE ARTIST EMBED ASKED FOR EVERY COLUMN, AND BROKE EVERY SHARED
+      // LINK FOR ANYBODY NOT SIGNED IN.
+      //
+      // artists(*) means "give me all of it", and all of it includes
+      // paypal_email, paypal_merchant_id, paypal_subscription_id,
+      // printful_access_token, stripe_customer_id, date_of_birth and
+      // suspension_reason. A signed out visitor has no grant on any of those,
+      // correctly, so PostgREST refused the WHOLE request:
+      //
+      //   401  {"code":"42501","message":"permission denied for table artists"}
+      //
+      // trackData came back null, and this page draws "Track not found" when
+      // trackData is null, so a perfectly healthy published track looked
+      // deleted to everybody who was not logged in. Signed in it worked,
+      // which is why it survived this long: the only people who ever opened
+      // these links were us.
+      //
+      // Named columns instead of a star, and only the ones this page actually
+      // reads. A star on a table that later gains a private column breaks
+      // again, silently, in exactly the same way.
+      const ARTIST_FIELDS = 'id, artist_name, slug, profile_image_url, is_verified';
+      const SELECT = `*, artists!tracks_artist_id_fkey(${ARTIST_FIELDS}), albums(id, title, slug, cover_artwork_url, price, release_type, release_date)`;
       const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
       // TWO ARTISTS CAN HAVE THE SAME SLUG.

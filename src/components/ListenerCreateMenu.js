@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { useTier } from '../contexts/useTier';
 import useSchoolSessions from '../hooks/useSchoolSessions';
+import { tap } from '../utils/track';
 import CreateMenuSection, { MENU_TINTS } from './CreateMenuSection';
 
 // Listener equivalent of CreateMenuModal — same exact wrapper dimensions
@@ -23,28 +24,30 @@ export default function ListenerCreateMenu({ onClose }) {
   const sessionsGate = useSchoolSessions();
   const isPro = isListenerPro;
 
-  const go = (path) => () => { onClose(); navigate(path); };
+  // The id is passed so the two menus report in the same shape, which is the
+  // only way to compare what a listener uses against what an artist uses.
+  const go = (path, id) => () => { if (id) tap('menu_' + id); onClose(); navigate(path); };
 
   const groups = [
     {
       heading: 'Create',
       tint: MENU_TINTS.create,
       items: [
-        { id: 'playlist', icon: '🎵', label: 'Create Playlist', sub: 'Start a new playlist', onClick: go('/library/playlists?create=1') },
+        { id: 'playlist', icon: '🎵', label: 'Create Playlist', sub: 'Start a new playlist', onClick: go('/library/playlists?create=1', 'playlist') },
       ],
     },
     {
       heading: 'Your people',
       tint: MENU_TINTS.fans,
       items: [
-        { id: 'chats', icon: '💬', label: 'Chats', sub: 'Your rooms and artist chats', onClick: go('/community') },
+        { id: 'chats', icon: '💬', label: 'Chats', sub: 'Your rooms and artist chats', onClick: go('/community', 'chats') },
       ],
     },
     {
       heading: 'Your profile',
       tint: MENU_TINTS.profile,
       items: [
-        { id: 'edit', icon: '✏️', label: 'Edit Profile', sub: 'Update your photo and details', onClick: go('/profile/edit') },
+        { id: 'edit', icon: '✏️', label: 'Edit Profile', sub: 'Update your photo and details', onClick: go('/profile/edit', 'edit') },
       ],
     },
     {
@@ -60,10 +63,18 @@ export default function ListenerCreateMenu({ onClose }) {
       heading: 'Account',
       tint: MENU_TINTS.account,
       items: [
-        { id: 'settings', icon: '⚙️', label: 'Settings', sub: 'Theme, account and notifications', onClick: go('/profile') },
+        { id: 'settings', icon: '⚙️', label: 'Settings', sub: 'Theme, account and notifications', onClick: go('/profile', 'settings') },
+        // EMAIL PREFERENCES, for the same reason as the artist menu.
+        //
+        // Somebody who wants fewer emails and cannot find the switch marks
+        // the next one as spam instead, and that costs deliverability for
+        // everybody. The cheapest way to keep an inbox is a visible way out
+        // of it. Listeners are the bigger half of the mailing list, so this
+        // matters more here than on the artist side, not less.
+        { id: 'contactprefs', icon: '\u2709\uFE0F', label: 'Email preferences', sub: 'Choose what reaches your inbox', onClick: go('/contact-preferences', 'contactprefs') },
         isPro
-          ? { id: 'fanpro', icon: '✨', label: 'Fan Pro Themes', sub: 'Change your app theme', onClick: go('/profile') }
-          : { id: 'fanpro', icon: '✨', label: 'Get Fan Pro', sub: 'Unlock themes and a supporter badge', onClick: go('/listener/upgrade') },
+          ? { id: 'fanpro', icon: '✨', label: 'Fan Pro Themes', sub: 'Change your app theme', onClick: go('/profile', 'fanpro') }
+          : { id: 'fanpro', icon: '✨', label: 'Get Fan Pro', sub: 'Unlock themes and a supporter badge', onClick: go('/listener/upgrade', 'fanpro') },
       ],
     },
     {
@@ -82,7 +93,11 @@ export default function ListenerCreateMenu({ onClose }) {
       heading: 'More',
       tint: MENU_TINTS.more,
       items: [
-        { id: 'course', icon: '🎓', label: 'How to Use Feelz Machine', sub: 'A short course on how it all works', onClick: go('/learn') },
+        // YOUR LISTENING, which is the listener's version of the earnings
+        // page: the screen that gives somebody a reason to come back. It was
+        // only reachable by knowing the address.
+        { id: 'stats', icon: '\u{1F4CA}', label: 'Your listening', sub: 'Your top songs, artists and hours', onClick: go('/listener/stats', 'stats') },
+        { id: 'course', icon: '🎓', label: 'How to Use Feelz Machine', sub: 'A short course on how it all works', onClick: go('/learn', 'course') },
         ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
           ? [{
               id: 'sessions', icon: '\u{1F3C6}', label: 'Sessions',
@@ -90,7 +105,7 @@ export default function ListenerCreateMenu({ onClose }) {
               onClick: go('/sessions'),
             }]
           : []),
-        { id: 'affiliate', icon: '\u{1F517}', label: 'Affiliate Programme', sub: 'Share Feelz Machine and earn', onClick: go('/affiliates') },
+        { id: 'affiliate', icon: '\u{1F517}', label: 'Affiliate Programme', sub: 'Share Feelz Machine and earn', onClick: go('/affiliates', 'affiliate') },
         // Feelz Run is a static game in public/run, so it needs a full page
         // load rather than a router push. Same origin, so it opens inside the
         // app window.

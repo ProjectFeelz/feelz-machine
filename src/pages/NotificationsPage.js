@@ -1450,6 +1450,23 @@ export default function NotificationsPage() {
                   const isExpandable  = (notif.message?.length > 80);
                   const isExpanded    = expandedIds.includes(notif.id);
                   const hasTrackPill  = !!meta.track_title && !!meta.track_id;
+                  // ALBUMS HAD NO ARTWORK AND NOTHING TO TAP.
+                  //
+                  // The pill below only ever fired on track_title + track_id,
+                  // so "X released a new album" arrived as a line of text with
+                  // no cover and no way in, while a single got a cover and a
+                  // play button. An album release is the bigger event of the
+                  // two and it was the one that looked like nothing.
+                  //
+                  // The artwork key is read loosely on purpose: these rows are
+                  // written by several different senders and they do not all
+                  // agree on the name. A missing key falls through to the note
+                  // icon rather than an empty frame.
+                  const albumId       = meta.album_id || meta.albumId || null;
+                  const albumTitle    = meta.album_title || meta.albumTitle || null;
+                  const albumArt      = meta.album_artwork || meta.album_cover
+                                     || meta.album_cover_url || meta.cover_artwork_url || null;
+                  const hasAlbumPill  = !hasTrackPill && !!albumId && !!albumTitle;
                   const hasActionUrl  = !!meta.action_url || !!meta.cta_url || !!meta.url || !!meta.link_url;
                   // Orphaned stream notification, has no track data
                   const isOrphanStream = notif.type === 'new_stream' && !meta.track_title;
@@ -1561,6 +1578,32 @@ export default function NotificationsPage() {
                               allowFullScreen title="Video"
                               onClick={e => e.stopPropagation()}
                             />
+                          </div>
+                        )}
+
+                        {/* Album pill. Opens the album; it is a record, not
+                            one song, so tapping it should show you the record. */}
+                        {hasAlbumPill && (
+                          <div
+                            className="flex items-center space-x-2 mt-2 p-2.5 bg-white/[0.04] rounded-xl border border-white/[0.06] cursor-pointer hover:bg-white/[0.07] transition active:scale-[0.98]"
+                            onClick={e => {
+                              e.stopPropagation();
+                              markAsRead(notif.id); markReadLocal(notif.id);
+                              navigate(`/album/${meta.album_slug || albumId}`);
+                            }}
+                          >
+                            {albumArt
+                              ? <img src={coverUrl(albumArt, 120)} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
+                              : <div className="w-9 h-9 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0">
+                                  <Music className="w-4 h-4 text-white/30" />
+                                </div>}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-semibold text-white truncate">{albumTitle}</p>
+                              <p className="text-[10px] text-white/40 truncate">
+                                {meta.album_artist || meta.artist_name || 'Album'}
+                              </p>
+                            </div>
+                            <ChevronDown className="w-4 h-4 text-white/30 flex-shrink-0 -rotate-90" />
                           </div>
                         )}
 
