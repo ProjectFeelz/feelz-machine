@@ -358,6 +358,12 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   items: [
                     gated('fan_broadcast', { id: 'dm', icon: '📣', label: 'Message Fans', sub: 'Send a notification to all followers' }),
                     { id: 'chats', icon: '💬', label: 'Chats',        sub: 'Your rooms and artist chats' },
+                    // COLLAB RADAR. The thing that turns two artists into a
+                    // track, and it lived only on the Hub, which is the page
+                    // nobody opens. Here rather than under Account because
+                    // finding somebody to work with is reaching people, not
+                    // administration.
+                    { id: 'radar', icon: '🛰️', label: 'Collab Radar', sub: 'Find artists to work with' },
                     ...(canNewsletter
                       ? [{ id: 'newsletter', icon: '📨', label: 'Newsletter', sub: 'Write an update for the app or venues' }]
                       : []),
@@ -396,6 +402,20 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   tint: MENU_TINTS.account,
                   items: [
                     { id: 'settings', icon: '⚙️', label: 'Settings', sub: 'Payments, theme and account' },
+                    // EARNINGS, THE PAGE THAT JUSTIFIES THE WHOLE PLATFORM.
+                    //
+                    // This menu linked /dashboard?tab=upload and nothing else
+                    // on the dashboard, so the only way to the page showing
+                    // what you have been paid was to land on the dashboard and
+                    // find the right tab. An artist deciding whether this is
+                    // worth their time is deciding on that screen, and it was
+                    // three taps and a guess away.
+                    { id: 'earnings', icon: '📈', label: 'Earnings and stats', sub: 'What you have made and who is listening' },
+                    // FEELZ RETAIL, A SECOND INCOME NOBODY COULD FIND.
+                    //
+                    // Getting a song into venues pays separately from
+                    // streaming, and nothing in this menu pointed at it.
+                    { id: 'retail', icon: '🏬', label: 'Feelz Retail', sub: 'Put your music in venues and get paid for it' },
                     // SPLITS, FOR THE SAME REASON AS SETTINGS
                     //
                     // /splits is the ledger of collaborator shares: what you
@@ -410,6 +430,26 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                     // know the address of a page two levels inside another
                     // page they could not find either.
                     { id: 'splits', icon: '🤝', label: 'Splits', sub: 'Collab shares owed to you and by you' },
+                    // THE AFFILIATE PROGRAMME, FOR THE THIRD TIME FOR THE SAME
+                    // REASON.
+                    //
+                    // /affiliates is a page that pays artists for bringing
+                    // people to the platform, and the only way in was through
+                    // the hub menu, which almost nobody opens. Settings and
+                    // Splits were both buried the same way and both got moved
+                    // here; this is the last of the three.
+                    //
+                    // In Account rather than More on purpose. It is money
+                    // owed to you, which is what the rest of this group is.
+                    { id: 'affiliates', icon: '💸', label: 'Affiliate Programme', sub: 'Earn by bringing people to the platform' },
+                    // EMAIL PREFERENCES, WHICH MATTER MORE THAN THEY LOOK.
+                    //
+                    // Somebody who wants fewer emails and cannot find the
+                    // switch marks the next one as spam instead, and that
+                    // costs deliverability for every other artist on the
+                    // platform. The cheapest place to keep an inbox is a
+                    // visible way out of it.
+                    { id: 'contactprefs', icon: '✉️', label: 'Email preferences', sub: 'Choose what reaches your inbox' },
                   ],
                 },
                 {
@@ -446,6 +486,11 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                       // The account page, not the bio form. See the Account group above.
                       else if (id === 'settings') { close(); navigate('/profile'); }
                       else if (id === 'splits') { close(); navigate('/splits'); }
+                      else if (id === 'affiliates') { close(); navigate('/affiliates'); }
+                      else if (id === 'earnings') { close(); navigate('/dashboard?tab=analytics&section=earnings'); }
+                      else if (id === 'retail') { close(); navigate('/retail/start'); }
+                      else if (id === 'radar') { close(); navigate('/collab-radar'); }
+                      else if (id === 'contactprefs') { close(); navigate('/contact-preferences'); }
                       else if (id === 'toppick') { setCreateTab('toppick'); loadTopPick(); }
                       else if (id === 'merch_parked') { setShowMerchParked(true); }
                       else if (id === 'merch') { setShowMerchConnect(true); }
@@ -676,4 +721,4 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
     </div>,
     document.body
   );
-}
+}
