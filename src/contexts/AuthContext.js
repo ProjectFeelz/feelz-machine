@@ -1,8 +1,71 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { userRow, userRowResult, invalidateUserRow, clearUserRowCache } from '../utils/userRow';
+import { safeRedirectPath } from '../utils/safeRedirect';
 
 // Which user id an artist-profile creation is currently in flight for.
 let creatingArtistFor = null;
+
+// The creator role chosen at sign-up, from whichever of the two places still
+// has it.
+//
+// localStorage is first because it is the OAuth path: Google comes back to the
+// same browser, so the key is there, and it is also where a role change made
+// after sign-up is staged.
+//
+// user_metadata is the fallback that makes email sign-up work at all. See the
+// comment on signUpWithEmail: the confirmation link is frequently opened in a
+// different browser from the one that filled in the form, and localStorage does
+// not cross that gap. Exported so Welcome.js reads the same answer this does,
+// rather than keeping a second copy of the rule that can disagree with it.
+export function pendingCreatorRole(sessionUser) {
+  let r = null;
+  try { r = localStorage.getItem('pending_creator_role'); } catch {}
+  if (r !== 'artist' && r !== 'beatmaker') r = null;
+  if (!r) {
+    const m = sessionUser?.user_metadata?.creator_role;
+    if (m === 'artist' || m === 'beatmaker') r = m;
+  }
+  return r;
+}
+
+// ── The 13-or-older confirmation ────────────────────────────────────────────
+//
+// WHAT WAS WRONG. The checkbox on the sign-in page was a local useState and
+// nothing else. It blocked the submit button and was then thrown away: no
+// metadata, no column, no record. user_profiles.age_confirmed existed and
+// nothing in the codebase ever wrote to it, which is why 203 of 227 profiles
+// have it false. So the platform could not answer "did this account confirm an
+// age" for almost anybody, and the Plugin Gallery bridge did not even ask.
+//
+// WHAT THIS IS AND IS NOT. It is self-attestation, a person ticking a box, and
+// recording it is all a tick can ever be worth. It is not identity or age
+// VERIFICATION, and nothing here should be described as that. What it gives is
+// a per-account record, with a time, that the box was ticked, which is the
+// thing a 13+ gate is actually asked to produce.
+//
+// TWO MECHANISMS, BECAUSE NEITHER COVERS EVERY PATH.
+//
+//   user_metadata   set at sign-up for email and magic link. Server side, so it
+//                   survives the confirmation link being opened in the mail
+//                   client's browser, on another device, or after a wipe. This
+//                   is the half that actually works on a phone.
+//   localStorage    the only option for Google and the Plugin Gallery bridge,
+//                   because signInWithOAuth takes no user metadata and the
+//                   bridge leaves the origin entirely. Both come back to THIS
+//                   browser, so the key is still here when they land.
+//
+// Same split, and the same reasoning, as pendingCreatorRole above.
+const AGE_KEY = 'pending_age_confirmed';
+
+export function stashAgeConfirmed() {
+  try { localStorage.setItem(AGE_KEY, '1'); } catch {}
+}
+
+export function pendingAgeConfirmed(sessionUser) {
+  if (sessionUser?.user_metadata?.age_confirmed === true) return true;
+  try { return localStorage.getItem(AGE_KEY) === '1'; } catch { return false; }
+}
 
 const AuthContext = createContext({});
 
@@ -16,11 +79,13 @@ export function AuthProvider({ children }) {
   const [viewAs, setViewAs]   = useState(null);
 
   const fetchProfile = async (userId) => {
-    let { data } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+    // Through userRow for the same reason listeners and admins are: this ran
+    // twice on every cold load. See src/utils/userRow.js and loadUser below.
+    //
+    // The legacy `profiles` fallback stays a direct read, because it keys on
+    // `id` rather than `user_id` and userRow is deliberately only for the
+    // user_id shape.
+    let data = await userRow('user_profiles', userId);
     if (!data) {
       const res = await supabase
         .from('profiles')
@@ -32,19 +97,23 @@ export function AuthProvider({ children }) {
     if (data) setProfile(data);
   };
 
-  const fetchArtist = async (userId) => {
-    const { data, error } = await supabase
-      .from('artists')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+  const fetchArtist = async (userId, sessionUser = null) => {
+    // Same again. An artist row read twice at startup is two of the slowest
+    // calls in the boot group, for one answer.
+    //
+    // userRowResult rather than userRow, and this is not a style choice.
+    // The `else if (!error)` branch below CREATES an artist row when the read
+    // comes back empty. If a failed read collapsed into null the way plain
+    // userRow does, a network blip at startup would look like "this person has
+    // no artist profile" and it would make them a second one.
+    const { data, error } = await userRowResult('artists', userId);
     if (data) {
       // Apply a pending role selection from signup, if one exists. This
       // is what makes the Artist/Beat Maker choice on the login page
       // actually register — the artist row didn't exist yet when that
       // choice was made, so it was previously discarded entirely.
-      const pendingRole = localStorage.getItem('pending_creator_role');
-      if (pendingRole && (pendingRole === 'artist' || pendingRole === 'beatmaker') && data.role !== pendingRole) {
+      const pendingRole = pendingCreatorRole(sessionUser);
+      if (pendingRole && (pendingRole === 'artist' || pendingRole === 'beatmaker') && data.role !== pendingRole && !data.role_confirmed) {
         const { data: updated } = await supabase
           .from('artists')
           .update({ role: pendingRole, role_confirmed: true })
@@ -53,6 +122,10 @@ export function AuthProvider({ children }) {
           .maybeSingle();
         localStorage.removeItem('pending_creator_role');
         setArtist(updated || data);
+        // Every write to this row drops the cached copy. Without it the row
+        // just created or changed stays invisible to anything reading through
+        // userRow until the TTL expires.
+        invalidateUserRow('artists', userId);
         return;
       }
       if (pendingRole) localStorage.removeItem('pending_creator_role');
@@ -62,7 +135,7 @@ export function AuthProvider({ children }) {
       // signup, that choice was previously discarded here entirely —
       // nothing anywhere in the app creates a new artists row, so the
       // person silently stayed a listener regardless of what they picked.
-      const pendingRole = localStorage.getItem('pending_creator_role');
+      const pendingRole = pendingCreatorRole(sessionUser);
       if (pendingRole && (pendingRole === 'artist' || pendingRole === 'beatmaker')) {
         // Claim the key BEFORE doing any async work, and hold a module-level
         // in-flight guard.
@@ -138,6 +211,7 @@ export function AuthProvider({ children }) {
                 return;
               }
               setArtist(retried || null);
+              invalidateUserRow('artists', userId);
               return;
             }
 
@@ -147,6 +221,7 @@ export function AuthProvider({ children }) {
           }
 
           setArtist(created || null);
+          invalidateUserRow('artists', userId);
           return;
         } catch (err) {
           console.error('[auth] artist profile creation threw:', err.message);
@@ -163,11 +238,10 @@ export function AuthProvider({ children }) {
   };
 
   const fetchListener = async (userId) => {
-    const { data: existing } = await supabase
-      .from('listeners')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+    // Through userRow, because useAppThemeInit and useTier read this same row
+    // on the same tick and all three used to send their own request. See
+    // src/utils/userRow.js for the measurement.
+    const existing = await userRow('listeners', userId);
     if (existing) {
       setListener(existing);
       return;
@@ -185,7 +259,10 @@ export function AuthProvider({ children }) {
         .upsert({ user_id: userId, display_name: displayName, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
         .select()
         .maybeSingle();
-      if (created) setListener(created);
+      if (created) {
+        setListener(created);
+        invalidateUserRow('listeners', userId);
+      }
     } catch (err) {
       console.warn('Listener row creation failed (non-fatal):', err.message);
     }
@@ -193,18 +270,58 @@ export function AuthProvider({ children }) {
 
   const checkAdmin = async (userId) => {
     try {
-      const { data } = await supabase
-        .from('admins')
-        .select('id')
-        .eq('user_id', userId)
-        .maybeSingle();
+      // Also through userRow: CreateMenuModal asked this same question on
+      // mount, so `admins` was read twice before anybody had tapped anything.
+      const data = await userRow('admins', userId);
       setIsAdmin(!!data);
     } catch {
       setIsAdmin(false);
     }
   };
 
-  const loadUser = async (sessionUser) => {
+  // WHY loadUser RUNS TWICE, AND THE GUARD THAT WAS NOT CATCHING IT
+  //
+  // On a cold load with an existing session, two paths both call this: the
+  // getSession() promise below, and onAuthStateChange firing SIGNED_IN, which
+  // Supabase sends on session restore and not only on an actual login.
+  //
+  // There IS a guard, inside a setUser updater: `if (!prev || prev.id !== ...)`.
+  // It cannot work on a cold load, because both paths run while `user` is
+  // still null, so `!prev` is true for both and loadUser runs twice. Measured:
+  // user_profiles, artists, listeners and admins each requested twice before
+  // anybody had touched anything.
+  //
+  // A ref, because this has to be true the instant it is set rather than on
+  // the next render, which is exactly what state cannot promise and is why the
+  // original guard was written in the wrong place.
+  // Holds { id, promise }, NOT just the id, and the difference is a bug I
+  // shipped and then had to come back for.
+  //
+  // The first version returned early when the id matched. That stopped the
+  // duplicate queries, and it broke the thing underneath: on a cold load
+  // onAuthStateChange usually fires first and starts the real work, then
+  // getSession's handler calls loadUser, gets an instant return, and runs its
+  // `finally { setLoading(false) }` while the artist and listener reads are
+  // still in flight. Everything downstream then sees loading:false with no
+  // profile and concludes the person has no account.
+  //
+  // That is why a returning account with a full profile was landing on /setup.
+  // An await that does not wait is worse than no dedupe at all.
+  //
+  // Handing back the SAME promise means the second caller still sends no
+  // queries and still waits for the first one to finish, which is what it was
+  // always asking for.
+  const loading_ = useRef(null);
+
+  const loadUser = (sessionUser) => {
+    const id = sessionUser?.id || null;
+    if (loading_.current && loading_.current.id === id) return loading_.current.promise;
+    const promise = loadUserOnce(sessionUser);
+    loading_.current = { id, promise };
+    return promise;
+  };
+
+  const loadUserOnce = async (sessionUser) => {
     if (!sessionUser) return;
     setUser(sessionUser);
     // Check for affiliate ref in sessionStorage (set by landing page)
@@ -233,10 +350,48 @@ export function AuthProvider({ children }) {
         })();
       }
     } catch {}
+
+    // Record the 13-or-older tick, once, on whichever path brought them here.
+    //
+    // Fire and forget, like the affiliate block above: a person who confirmed
+    // their age does not get held at a spinner because a write is slow, and a
+    // failed write is retried the next time they load the app, because this
+    // runs on every session load and only writes when the column is not
+    // already true.
+    //
+    // The trigger in fm_age_confirmation.sql covers the email and magic-link
+    // paths server side. This covers Google and the Plugin Gallery bridge,
+    // which cannot carry metadata, and acts as the backstop for the other two.
+    (async () => {
+      try {
+        if (!pendingAgeConfirmed(sessionUser)) return;
+        // age_confirmations, not user_profiles.age_confirmed. Only 227 of the
+        // 332 people on this platform have a user_profiles row at all, and its
+        // `name` column is NOT NULL, so there is no safe row to create here.
+        // Every account can have a row in age_confirmations, which is the
+        // point of it being its own table.
+        //
+        // Insert, not upsert with a merge: the first confirmation stands, and a
+        // duplicate key is the normal outcome of loading the app twice.
+        const { error } = await supabase
+          .from('age_confirmations')
+          .insert({ user_id: sessionUser.id, method: 'client' });
+        // 23505 is unique_violation: already recorded, nothing to do.
+        if (error && error.code !== '23505') {
+          // The stash is deliberately left in place, so the next load retries.
+          console.warn('[auth] age confirmation not recorded yet:', error.code, error.message);
+          return;
+        }
+        try { localStorage.removeItem(AGE_KEY); } catch {}
+      } catch (e) {
+        console.warn('[auth] age confirmation write threw:', e.message);
+      }
+    })();
+
     try {
       await Promise.all([
         fetchProfile(sessionUser.id),
-        fetchArtist(sessionUser.id),
+        fetchArtist(sessionUser.id, sessionUser),
         fetchListener(sessionUser.id),
         checkAdmin(sessionUser.id),
       ]);
@@ -246,15 +401,62 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      try {
-        if (session?.user) await loadUser(session.user);
-      } catch (err) {
-        console.error('Session load error:', err);
-      } finally {
+    // ── BOOTING WITH NO NETWORK ────────────────────────────────────────────
+    //
+    // THE BLACK SCREEN, SECOND CAUSE.
+    //
+    // getSession() is documented as reading the stored session, and it does.
+    // But when the stored token has expired it also tries to REFRESH it over
+    // the network before it answers, and with no connection that does not fail
+    // fast. It fails late, or it sits there retrying.
+    //
+    // This promise had no catch and no timeout. Every path that sets loading
+    // to false lived inside the .then(). So offline, with an expired token,
+    // loading stayed true for as long as the app was open, the app sat on its
+    // loading gate, and the gate on a black background is a black screen.
+    //
+    // That is the app "not opening without internet". It was opening. It was
+    // waiting for a token refresh that was never going to arrive.
+    //
+    // Two changes. A catch, so a rejection cannot strand the gate. And a
+    // timeout on getSession ONLY, which is the call that hangs: loadUser is
+    // still awaited in full, because cutting that short is what causes the
+    // flicker the comment above this effect warns about. The timeout is short
+    // when the browser already knows it is offline and generous when it does
+    // not, so a slow connection is never mistaken for no connection.
+    //
+    // Losing that race is not an error. It means starting signed out, and
+    // onAuthStateChange below signs them back in the moment the network
+    // returns. Saved music does not need the session anyway: the right to play
+    // it offline is carried by the lease stored beside the audio, which is the
+    // whole point of utils/offlineStore.js.
+    const sessionDeadline = navigator.onLine === false ? 2500 : 12000;
+    const readSession = Promise.race([
+      supabase.auth.getSession(),
+      new Promise(resolve =>
+        setTimeout(() => resolve({ data: { session: null }, timedOut: true }), sessionDeadline)
+      ),
+    ]);
+
+    readSession
+      .then(async (res) => {
+        if (res?.timedOut) {
+          console.warn('[auth] no answer from getSession in time, starting signed out');
+          return;
+        }
+        const session = res?.data?.session;
+        try {
+          if (session?.user) await loadUser(session.user);
+        } catch (err) {
+          console.error('Session load error:', err);
+        }
+      })
+      .catch((err) => {
+        console.warn('[auth] session could not be read:', err?.message);
+      })
+      .finally(() => {
         setLoading(false);
-      }
-    });
+      });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
@@ -266,9 +468,15 @@ export function AuthProvider({ children }) {
           if (!prev || prev.id !== session.user.id) {
             // New user — load their profile data async, then handle redirect
             loadUser(session.user).then(() => {
-              const redirect = sessionStorage.getItem('post_login_redirect');
+              // Checked again here, not only where it was stored. Anything
+              // can write to sessionStorage, including script running on any
+              // page of this origin, so the value read back is not
+              // necessarily the value that was put there. The check belongs
+              // next to the navigation it guards.
+              const stored = sessionStorage.getItem('post_login_redirect');
+              sessionStorage.removeItem('post_login_redirect');
+              const redirect = safeRedirectPath(stored);
               if (redirect) {
-                sessionStorage.removeItem('post_login_redirect');
                 window.location.replace(redirect);
               }
             });
@@ -277,6 +485,7 @@ export function AuthProvider({ children }) {
         });
       }
       if (event === 'SIGNED_OUT') {
+        loading_.current = null;
         setUser(null);
         setProfile(null);
         setArtist(null);
@@ -295,12 +504,17 @@ export function AuthProvider({ children }) {
     if (error) throw error;
   };
 
-  const signInWithMagicLink = async (email) => {
+  // ageConfirmed rides in options.data, which signInWithOtp writes to
+  // user_metadata when it creates the account. A magic link is opened in the
+  // mail client as often as not, so this is the half that survives the trip;
+  // stashAgeConfirmed in the caller covers the same browser.
+  const signInWithMagicLink = async (email, ageConfirmed = false) => {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
         emailRedirectTo: `${window.location.origin}/setup`,
         shouldCreateUser: true,
+        ...(ageConfirmed ? { data: { age_confirmed: true } } : {}),
       },
     });
     if (error) throw error;
@@ -313,11 +527,39 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const signUpWithEmail = async (email, password, redirectPath = '/setup') => {
+  const signUpWithEmail = async (email, password, redirectPath = '/setup', creatorRole = null, ageConfirmed = false) => {
+    // creator_role goes into user_metadata, and that is the whole point.
+    //
+    // The Artist / Sell beats choice used to live ONLY in localStorage. With
+    // email confirmation on, the person signs up in one browser and then opens
+    // the confirmation link from their mail client, which on a phone is very
+    // often a different browser context: the Gmail in-app view, a different
+    // default browser, sometimes a different device. localStorage belongs to
+    // the origin IN THAT BROWSER, so the choice simply was not there when the
+    // session finally arrived. fetchArtist found no pending role, created no
+    // artists row, fetchListener created a listeners row the way it does for
+    // everybody, and the person who picked Artist landed as a listener with
+    // nothing anywhere recording that they had asked for anything else.
+    //
+    // user_metadata is stored on the auth user, server side. It is attached to
+    // the session wherever that session is opened, so the choice survives the
+    // round trip through the mail client, a new device, and a cleared browser.
+    //
+    // age_confirmed rides along for exactly the same reason, and it is the
+    // reason the trigger in fm_age_confirmation.sql can record the tick for a
+    // person who confirms their email from a different device entirely.
+    const meta = {
+      ...((creatorRole === 'artist' || creatorRole === 'beatmaker') ? { creator_role: creatorRole } : {}),
+      ...(ageConfirmed ? { age_confirmed: true } : {}),
+    };
+    const hasMeta = Object.keys(meta).length > 0;
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: `${window.location.origin}${redirectPath}` },
+      options: {
+        emailRedirectTo: `${window.location.origin}${redirectPath}`,
+        ...(hasMeta ? { data: meta } : {}),
+      },
     });
     if (error) throw error;
     // Do NOT call loadUser here, the user hasn't confirmed their email yet.
@@ -328,6 +570,11 @@ export function AuthProvider({ children }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    // Before the state is cleared, not after. Whatever is cached here belongs
+    // to the person who just left, and the next person on this device must not
+    // be handed it out of memory.
+    clearUserRowCache();
+    loading_.current = null;
     setUser(null);
     setProfile(null);
     setArtist(null);
@@ -337,8 +584,15 @@ export function AuthProvider({ children }) {
 
   const refreshProfile = async () => {
     if (user) {
+      // The whole point of this function is to go and look again, so the cache
+      // is dropped first. Without this, "refresh" would return what it already
+      // had, which is the opposite of what every caller wants.
+      invalidateUserRow('listeners', user.id);
+      invalidateUserRow('admins', user.id);
+      invalidateUserRow('user_profiles', user.id);
+      invalidateUserRow('artists', user.id);
       await fetchProfile(user.id);
-      await fetchArtist(user.id);
+      await fetchArtist(user.id, user);
       await fetchListener(user.id);
     }
   };
