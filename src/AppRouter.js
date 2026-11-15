@@ -105,6 +105,7 @@ const ListenerProfilePage = React.lazy(() => import('./pages/ListenerProfilePage
 const SchoolSessionsPage = React.lazy(() => import('./pages/SchoolSessionsPage'));
 const SchoolSessionsVotePage = React.lazy(() => import('./pages/SchoolSessionsVotePage'));
 const SchoolSessionsEntryPage = React.lazy(() => import('./pages/SchoolSessionsEntryPage'));
+const SessionsPrizeConsentPage = React.lazy(() => import('./pages/SessionsPrizeConsentPage'));
 const SchoolSessionsTermsPage = React.lazy(() => import('./pages/SchoolSessionsTermsPage'));
 const SchoolSessionsJudgePanel = React.lazy(() => import('./pages/SchoolSessionsJudgePanel'));
 const AdminSchoolSessions = React.lazy(() => import('./pages/AdminSchoolSessions'));
@@ -518,6 +519,9 @@ export default function AppRouter() {
                     a TikTok bio, so it has to work before voting opens, not
                     only once finalists exist. */}
                 <Route path="/sessions/entry/:id" element={<SchoolSessionsEntryPage />} />
+                <Route path="/sessions/prize-consent/:token" element={
+                  <PageTitle title="Sign for a prize"><SessionsPrizeConsentPage /></PageTitle>
+                } />
                 <Route path="/sessions/judge" element={<SchoolSessionsJudgePanel />} />
 
                 <Route path="/schoolsessions" element={

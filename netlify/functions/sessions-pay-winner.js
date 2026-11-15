@@ -99,14 +99,32 @@ async function readSituation(supabase, entryId) {
       .maybeSingle(),
   ]);
 
-  const clean = (s) => (typeof s === 'string' && s.trim()) ? s.trim() : null;
-  const payTo = clean(profile?.paypal_email) || clean(artist?.paypal_email);
+  // The guardian row only matters for a minor, but reading it always costs one
+  // query and removes a branch, and a branch is where this gets wrong.
+  const { data: guardian } = await supabase
+    .from('school_sessions_guardian_consents')
+    .select('guardian_name, guardian_contact, prize_paypal_email, prize_signed_name, prize_consented_at')
+    .eq('entry_id', entry.id)
+    .maybeSingle();
 
-  return { entry, comp, artist, existing, payTo };
+  const clean = (s) => (typeof s === 'string' && s.trim()) ? s.trim() : null;
+
+  // WHERE THE MONEY GOES IS DECIDED BY AGE, NOT BY WHAT IS ON FILE.
+  //
+  // A minor's prize goes to the guardian who signed for it, full stop. It does
+  // NOT fall back to an address on the child's own artist account, even when
+  // one exists, because that would route a child's prize past the adult who
+  // took responsibility for it. If the guardian has not signed, there is no
+  // address, and this refuses rather than finds another one.
+  const payTo = entry.entrant_is_minor
+    ? (guardian?.prize_consented_at ? clean(guardian.prize_paypal_email) : null)
+    : (clean(profile?.paypal_email) || clean(artist?.paypal_email));
+
+  return { entry, comp, artist, existing, guardian, payTo };
 }
 
 // ── The rules, in one place, so dry run and the real thing cannot disagree ────
-function blockerFor({ entry, comp, existing, payTo }, amount, guardianConfirmed) {
+function blockerFor({ entry, comp, existing, guardian, payTo }, amount) {
   if (!entry.is_winner) {
     return 'This entry is not marked as the winner. Mark the winner first.';
   }
@@ -116,11 +134,21 @@ function blockerFor({ entry, comp, existing, payTo }, amount, guardianConfirmed)
   if (existing?.status === 'processing') {
     return 'A payout for this entry is already on its way.';
   }
+  // The under-18 checks come first, because for a minor every other answer
+  // depends on them.
+  if (entry.entrant_is_minor) {
+    if (!guardian) {
+      return 'This entrant is under 18 and has no guardian on file. Add one before anything can be paid.';
+    }
+    if (!guardian.prize_consented_at) {
+      return `Waiting on ${guardian.guardian_name || 'the guardian'} to sign for the prize. Send them the consent link.`;
+    }
+    if (!payTo) {
+      return 'The guardian signed but left no PayPal address. Contact them, or pay by EFT and record it in the prize log.';
+    }
+  }
   if (!payTo) {
     return 'There is no PayPal address on this account. Ask them to add one at Profile, Payments, or pay by EFT and record it in the prize log.';
-  }
-  if (entry.entrant_is_minor && !guardianConfirmed) {
-    return 'This entrant is under 18. A guardian has to sign for the prize before it goes out.';
   }
   if (!(amount > 0)) {
     return 'Enter an amount greater than zero.';
@@ -161,7 +189,7 @@ exports.handler = async (event) => {
   }
   if (!situation.entry) return json(404, { error: 'No entry with that id.' });
 
-  const { entry, comp, artist, payTo } = situation;
+  const { entry, comp, artist, guardian, payTo } = situation;
 
   // The amount defaults to the advertised prize, so the common case is one
   // click and no typing, but an explicit amount always wins.
@@ -170,9 +198,7 @@ exports.handler = async (event) => {
     : Number(comp?.cash_prize_amount || 0);
 
   const currency = (comp?.cash_prize_currency || 'ZAR').toUpperCase();
-  const guardianConfirmed = body.guardian_confirmed === true;
-
-  const blocker = blockerFor(situation, amount, guardianConfirmed);
+  const blocker = blockerFor(situation, amount);
 
   if (dryRun) {
     return json(200, {
@@ -184,6 +210,9 @@ exports.handler = async (event) => {
       amount,
       currency,
       processor: payTo ? 'paypal' : 'none',
+      guardian: entry.entrant_is_minor
+        ? { name: guardian?.guardian_name || null, signed_at: guardian?.prize_consented_at || null }
+        : null,
       blocker,
       would_send: !blocker,
     });
@@ -239,9 +268,11 @@ exports.handler = async (event) => {
     await supabase.from('competition_payouts')
       .update({
         processor: 'paypal',
-        recipient_name: entry.entrant_full_name,
-        note: guardianConfirmed
-          ? 'Guardian signed for a winner under 18'
+        recipient_name: entry.entrant_is_minor
+          ? `${guardian?.prize_signed_name || guardian?.guardian_name} (guardian of ${entry.entrant_full_name})`
+          : entry.entrant_full_name,
+        note: entry.entrant_is_minor
+          ? `Winner is under 18. Signed for by ${guardian?.prize_signed_name} on ${new Date(guardian.prize_consented_at).toISOString().slice(0, 10)}.`
           : null,
       })
       .eq('entry_id', entry.id)
@@ -263,7 +294,9 @@ exports.handler = async (event) => {
         type: 'admin_message',
         title: 'Your Sessions prize is on its way',
         message:
-          `You won. We have sent ${currency} ${Number(amount).toLocaleString()} to your PayPal address, ${payTo}.\n\n` +
+          (entry.entrant_is_minor
+            ? `You won. Because you are under 18, we have sent ${currency} ${Number(amount).toLocaleString()} to ${guardian?.guardian_name || 'your guardian'}, who signed for it.\n\n`
+            : `You won. We have sent ${currency} ${Number(amount).toLocaleString()} to your PayPal address, ${payTo}.\n\n`) +
           `PayPal usually takes a few minutes, sometimes a day. If nothing shows up by this time tomorrow, reply here and we will chase it.\n\n` +
           `Congratulations. You earned this one.`,
         email_requested: true,

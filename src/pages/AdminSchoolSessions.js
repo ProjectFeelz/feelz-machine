@@ -67,7 +67,6 @@ function PayWinnerPanel({ showToast, onPaid }) {
   const [status, setStatus]         = useState(null);
   const [loading, setLoading]       = useState(true);
   const [amount, setAmount]         = useState('');
-  const [guardianOk, setGuardianOk] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending]       = useState(false);
 
@@ -92,16 +91,16 @@ function PayWinnerPanel({ showToast, onPaid }) {
 
   useEffect(() => { load(); }, [load]);
 
-  // The minor case is the only blocker an admin can clear from here, and
-  // clearing it is a statement about something that happened off the platform:
-  // a guardian actually signed. So it is a tick box with words on it, not a
-  // silent override.
-  const minorBlocked = !!status?.is_minor && !guardianOk;
-  const hardBlocked  = !!status?.blocker && !(status.is_minor && status.payout_route === 'paypal' && status.paid_status === 'unpaid');
-  const canSend      = !!status?.entry_id
+  // There is nothing for an admin to override here, and that is deliberate.
+  //
+  // This used to be a tick box saying "a guardian signed", which is an honour
+  // system sitting in front of ten thousand rand going to a child. Now the
+  // signature is a real record a real parent made on a real page, and the
+  // route simply is not open until it exists. The admin's job is to get them
+  // the link, not to vouch for them.
+  const canSend = !!status?.entry_id
     && status.payout_route === 'paypal'
     && status.paid_status === 'unpaid'
-    && !minorBlocked
     && parseFloat(amount) > 0;
 
   const send = async () => {
@@ -117,7 +116,6 @@ function PayWinnerPanel({ showToast, onPaid }) {
         body: JSON.stringify({
           entry_id: status.entry_id,
           amount: parseFloat(amount),
-          guardian_confirmed: guardianOk,
         }),
       });
       const out = await res.json();
@@ -168,11 +166,52 @@ function PayWinnerPanel({ showToast, onPaid }) {
               Prize on the competition: {money(status.prize_amount)}
             </p>
             {status.payout_route === 'paypal' ? (
-              <p className="text-[11px] text-white/40">Goes to {status.payout_target} by PayPal.</p>
+              <p className="text-[11px] text-white/40">
+                Goes to {status.payout_target} by PayPal
+                {status.is_minor && status.guardian_name ? `, held by ${status.guardian_name}` : ''}.
+              </p>
             ) : (
-              <p className="text-[11px] text-red-300/80">No PayPal address on this account.</p>
+              <p className="text-[11px] text-red-300/80">No PayPal address to send to yet.</p>
             )}
           </div>
+
+          {/* Under 18. The consent link is the whole of the admin's job here:
+              copy it, send it however you actually reach this parent, which in
+              practice is WhatsApp and not email. */}
+          {status.is_minor && status.consent_token && (
+            <div className="rounded-lg border border-indigo-400/20 bg-indigo-500/[0.06] p-3 space-y-2">
+              {status.guardian_signed_at ? (
+                <p className="text-[11px] text-indigo-200/80">
+                  {status.guardian_name} signed for this prize on{' '}
+                  {new Date(status.guardian_signed_at).toLocaleDateString('en-ZA')}.
+                </p>
+              ) : (
+                <>
+                  <p className="text-[11px] text-white/50">
+                    Under 18. {status.guardian_name || 'Their guardian'} has to sign before this can go out. Send them this link.
+                  </p>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      readOnly
+                      onFocus={e => e.target.select()}
+                      className={`${inputCls} text-[11px]`}
+                      value={`${window.location.origin}/sessions/prize-consent/${status.consent_token}`}
+                    />
+                    <button
+                      onClick={() => {
+                        navigator.clipboard
+                          ?.writeText(`${window.location.origin}/sessions/prize-consent/${status.consent_token}`)
+                          .then(() => showToast('Link copied'))
+                          .catch(() => showToast('Could not copy, select it and copy by hand'));
+                      }}
+                      className="px-3 py-2.5 rounded-lg bg-white/[0.08] text-white text-xs font-semibold flex-shrink-0">
+                      Copy
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {status.paid_status === 'success' && (
             <p className="text-[11px] text-lime-300/80">Already paid. Nothing more to do here.</p>
@@ -181,26 +220,12 @@ function PayWinnerPanel({ showToast, onPaid }) {
             <p className="text-[11px] text-lime-300/80">A payout is on its way. PayPal has it.</p>
           )}
 
-          {status.paid_status === 'unpaid' && hardBlocked && (
+          {status.paid_status === 'unpaid' && status.blocker && (
             <p className="text-[11px] text-red-300/80">{status.blocker}</p>
           )}
 
           {status.paid_status === 'unpaid' && status.payout_route === 'paypal' && (
             <>
-              {status.is_minor && (
-                <label className="flex items-start space-x-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={guardianOk}
-                    onChange={e => { setGuardianOk(e.target.checked); setConfirming(false); }}
-                    className="mt-0.5 accent-lime-400"
-                  />
-                  <span className="text-[11px] text-white/50">
-                    This entrant is under 18. Tick to confirm a parent or guardian has signed for the prize.
-                  </span>
-                </label>
-              )}
-
               <div className="grid grid-cols-2 gap-2">
                 <input
                   className={inputCls}

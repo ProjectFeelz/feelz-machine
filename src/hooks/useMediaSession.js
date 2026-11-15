@@ -55,6 +55,48 @@ import { coverUrl } from '../utils/coverUrl';
 // tick, so anything past two seconds was not the track playing forward.
 const SEEK_JUMP_SECONDS = 2;
 
+// Every action this file ever registers. Named once so that letting go of the
+// session cannot miss one that setting up registered, which is the kind of
+// mismatch that leaves a dead "next track" button on a dashboard.
+const ALL_ACTIONS = [
+  'play', 'pause', 'stop', 'nexttrack', 'previoustrack',
+  'seekto', 'seekforward', 'seekbackward',
+];
+
+// ── LETTING GO ───────────────────────────────────────────────────────────────
+//
+// THE BUG THIS FIXES
+//
+// A phone holds one active media session and the OS binds the lock screen, the
+// notification shade and the car head unit to it. This file was very careful
+// about TAKING that session and never once gave it back.
+//
+// playbackState only ever went to 'playing' or 'paused'. There is a third
+// value, 'none', and it is the only one that means "I am not a media app right
+// now". Without it Feelz Machine stays registered as the phone's media session
+// forever: after the last track ends, after the player is closed, after the app
+// is backgrounded. Metadata was cleared when the track went away, which is
+// worse rather than better, because a live session with no metadata shows up on
+// a dashboard as a blank Feelz Machine entry that owns the steering wheel.
+//
+// From the driver's seat that is exactly what Steve described. Start the radio,
+// or anything else, and the car still answers to Feelz Machine. Lock the screen
+// and the phone surfaces the session it still has, which is this one.
+//
+// So: when there is no track, the session is handed back. State to 'none',
+// metadata to null, and every handler unregistered, because a registered
+// handler on a session with no state is what some versions of Android keep the
+// notification alive for.
+function releaseSession() {
+  if (!('mediaSession' in navigator)) return;
+  try { navigator.mediaSession.playbackState = 'none'; } catch {}
+  try { navigator.mediaSession.metadata = null; } catch {}
+  ALL_ACTIONS.forEach(action => {
+    try { navigator.mediaSession.setActionHandler(action, null); } catch {}
+  });
+  try { navigator.mediaSession.setPositionState?.(); } catch {}
+}
+
 // WHY THIS DOES NOT HAND OVER cover_artwork_url
 //
 // Artwork on this platform is whatever size the artist exported, and measured
@@ -115,7 +157,9 @@ export function useMediaSession({ currentTrack, isPlaying, togglePlay, playNext,
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
     if (!currentTrack) {
-      navigator.mediaSession.metadata = null;
+      // Was: metadata = null, and nothing else. See releaseSession above for
+      // why that left the car still answering to this app.
+      releaseSession();
       return;
     }
     try {
@@ -138,10 +182,28 @@ export function useMediaSession({ currentTrack, isPlaying, togglePlay, playNext,
   }, [currentTrack?.id, currentTrack?.title, currentTrack?.artist_name, currentTrack?.cover_artwork_url]);
 
   // ── Play state ──
+  //
+  // Three values, not two. 'paused' means "still the media app, just stopped",
+  // which is right while a track is loaded and the driver may hit play on the
+  // wheel. 'none' means "not the media app", which is right the moment there is
+  // no track, and is what hands the dashboard back to the radio.
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
-    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-  }, [isPlaying]);
+    navigator.mediaSession.playbackState =
+      !currentTrack ? 'none' : (isPlaying ? 'playing' : 'paused');
+  }, [isPlaying, currentTrack]);
+
+  // ── Let go on the way out ──
+  //
+  // Closing the tab, or the OS killing a backgrounded PWA, does not always run
+  // React cleanup. pagehide does fire, and leaving a session behind is the one
+  // thing worth being sure about: a stale session outlives the app and keeps
+  // the car pointed at something that is not running any more.
+  useEffect(() => {
+    const go = () => releaseSession();
+    window.addEventListener('pagehide', go);
+    return () => window.removeEventListener('pagehide', go);
+  }, []);
 
   // ── Taking the head unit's display back ──
   //
@@ -208,6 +270,11 @@ export function useMediaSession({ currentTrack, isPlaying, togglePlay, playNext,
   // ── Action handlers, once per track ──
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
+    // Without this guard the hook fought itself. Effects run in the order they
+    // are declared, so on the track going away the metadata effect above let
+    // the session go and then this one immediately registered eight handlers
+    // back onto it, which is a live session again. No track, no handlers.
+    if (!currentTrack) return;
 
     const handlers = [
       ['play',          () => { if (!playingRef.current) cbRef.current.togglePlay?.(); }],
@@ -241,5 +308,6 @@ export function useMediaSession({ currentTrack, isPlaying, togglePlay, playNext,
         catch {}
       });
     };
-  }, [currentTrack?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrack?.id, !!currentTrack]);
 }

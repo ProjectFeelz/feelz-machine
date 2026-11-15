@@ -1,7 +1,7 @@
 // ── Feelz Machine Service Worker ─────────────────────────────────────────────
 // CACHE_VERSION is injected at build time by Netlify via an environment variable.
 // If REACT_APP_BUILD_ID isn't set, fall back to a timestamp so it's always unique.
-const CACHE_VERSION = 'feelz-v10';
+const CACHE_VERSION = 'feelz-v11';
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -212,6 +212,67 @@ self.addEventListener('install', e => {
     if (!(await cache.match('/index.html'))) {
       console.error('[SW] /index.html did NOT precache — offline navigation will not work.');
     }
+
+    // ── The build's own JavaScript, which is what "offline" actually needs ────
+    //
+    // THE BLACK SCREEN
+    //
+    // Everything above caches the SHELL. index.html is an 8KB file that loads
+    // React and does nothing on its own. Offline, the shell was served, the
+    // browser asked for the script tags inside it, and there was nothing to
+    // give it. A page with no app on it is a black screen, which is exactly
+    // what Steve gets opening the app in a dead spot.
+    //
+    // The hashed-asset rule in fetch does cache those files, but cache-FIRST
+    // on demand: a file is only there if it was fetched while online. The main
+    // bundle usually was. The route chunks very often were not, because this
+    // app lazy-loads routes, so a chunk only exists in the cache if that exact
+    // screen was opened online at some point since the last deploy. Open the
+    // app offline on a screen you have not visited and the dynamic import
+    // rejects, React unmounts the tree, and the screen goes black with no
+    // error anybody sees.
+    //
+    // asset-manifest.json is written by the build and lists every file it
+    // emitted, chunks included. Caching that list at install time is the
+    // difference between "offline works if you happened to visit this page
+    // before" and "offline works".
+    //
+    // Deliberately NOT inside the Promise.allSettled above, and deliberately
+    // not awaited in a way that can fail the install. A missing or changed
+    // manifest must cost offline completeness, never the install itself: an
+    // install that throws leaves the old worker in place and nothing improves.
+    try {
+      const mres = await fetch('/asset-manifest.json', { cache: 'reload' });
+      if (mres && mres.ok) {
+        const manifest = await mres.json();
+        // CRA writes { files: {...}, entrypoints: [...] }. Take the values of
+        // files, keep same-origin js and css, and drop the source maps, which
+        // are large and useless to a running app.
+        const urls = Object.values(manifest.files || {})
+          .filter(u => typeof u === 'string')
+          .filter(u => u.startsWith('/'))
+          .filter(u => /\.(js|css)$/.test(u));
+
+        // One at a time rather than addAll, for the same reason the shell is:
+        // one 404 must not throw away the other two hundred files.
+        const chunkResults = await Promise.allSettled(
+          urls.map(async (url) => {
+            if (await cache.match(url)) return url;   // already there, skip the bytes
+            const r = await fetch(url, { cache: 'reload' });
+            if (!r || !r.ok) throw new Error(url);
+            await cache.put(url, r);
+            return url;
+          })
+        );
+        const got = chunkResults.filter(r => r.status === 'fulfilled').length;
+        console.log(`[SW] cached ${got}/${urls.length} build files for offline`);
+      } else {
+        console.warn('[SW] no asset-manifest.json; offline will only work on screens already visited');
+      }
+    } catch (err) {
+      console.warn('[SW] build files not precached:', err && err.message);
+    }
+
     await self.skipWaiting();
   })());
 });
