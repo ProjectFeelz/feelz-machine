@@ -683,7 +683,14 @@ export default function ArtistProfilePage() {
           supabase
             .from('tracks')
             .select('artist_id, artists!tracks_artist_id_fkey(id, artist_name, slug, profile_image_url, is_verified, total_streams)')
-            .neq('artist_id', artistData.id).eq('is_published', true).or(orFilter).limit(50)
+            // 50 was a limit on TRACKS, not on artists, which is the wrong
+            // unit: one prolific artist with eleven matching songs ate eleven
+            // of the fifty slots and crowded out ten other people. On Steve
+            // C-SA's own page 85 published tracks match his tags across 48
+            // artists, but the first 50 tracks only contained 38 of them, so
+            // ten artists were never even candidates. 150 covers the whole
+            // matching set with room to grow.
+            .neq('artist_id', artistData.id).eq('is_published', true).or(orFilter).limit(150)
             .then(({ data: simTrackData }) => {
               if (!simTrackData) return;
               const artistMap = {};
@@ -692,9 +699,18 @@ export default function ArtistProfilePage() {
                 if (a && !artistMap[a.id]) artistMap[a.id] = { ...a, matchCount: 0 };
                 if (a) artistMap[a.id].matchCount++;
               });
+              // Was 6. The row is a horizontal scroller, so six cards is
+              // 656 pixels of content in whatever width the screen has: it
+              // fills a phone and leaves half a desktop page empty, which is
+              // what it looked like. 48 artists genuinely match this page and
+              // 42 of them were being thrown away to produce that gap.
+              //
+              // 20 fills a wide screen, still scrolls on a phone exactly as
+              // before, and is few enough that the twentieth is still a real
+              // match rather than filler.
               const sorted = Object.values(artistMap)
                 .sort((a, b) => b.matchCount - a.matchCount || b.total_streams - a.total_streams)
-                .slice(0, 6);
+                .slice(0, 20);
               setSimilarArtists(sorted);
               // These are all artists with published tracks by definition,
               // this list is built FROM their tracks, so every one of them has
