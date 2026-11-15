@@ -51,6 +51,195 @@ function Field({ label, children, hint }) {
 
 const inputCls = "w-full px-3 py-2.5 bg-white/[0.06] rounded-lg text-white text-sm outline-none focus:bg-white/[0.1] transition";
 
+// ── Paying the winner ────────────────────────────────────────────────────────
+//
+// The only box on this page that moves real money, so it is deliberately
+// boring. It reads sessions_payout_status() rather than working anything out
+// itself, it says in full what it is about to do and to whom, and it will not
+// show a send button at all while the database can name a reason not to.
+//
+// The rail is PayPal and only PayPal. The bank details artists add on their
+// payments page create a Paystack subaccount, which splits a SALE at the
+// moment a buyer pays. A prize has no sale to split, so it cannot go that way.
+// If the winner has no PayPal address this says so and points at the prize log
+// below, where an EFT gets recorded by hand.
+function PayWinnerPanel({ showToast, onPaid }) {
+  const [status, setStatus]         = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [amount, setAmount]         = useState('');
+  const [guardianOk, setGuardianOk] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [sending, setSending]       = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase.rpc('sessions_payout_status');
+    if (error) {
+      // 42883 is "function does not exist", which just means migration 230 has
+      // not been run yet. Not worth shouting about on a page that still works.
+      if (error.code !== '42883') {
+        console.error('[school sessions] payout status failed:', error.code, error.message);
+      }
+      setStatus(null);
+      setLoading(false);
+      return;
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    setStatus(row || null);
+    if (row?.prize_amount != null) setAmount(String(row.prize_amount));
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  // The minor case is the only blocker an admin can clear from here, and
+  // clearing it is a statement about something that happened off the platform:
+  // a guardian actually signed. So it is a tick box with words on it, not a
+  // silent override.
+  const minorBlocked = !!status?.is_minor && !guardianOk;
+  const hardBlocked  = !!status?.blocker && !(status.is_minor && status.payout_route === 'paypal' && status.paid_status === 'unpaid');
+  const canSend      = !!status?.entry_id
+    && status.payout_route === 'paypal'
+    && status.paid_status === 'unpaid'
+    && !minorBlocked
+    && parseFloat(amount) > 0;
+
+  const send = async () => {
+    setSending(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/.netlify/functions/sessions-pay-winner', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          entry_id: status.entry_id,
+          amount: parseFloat(amount),
+          guardian_confirmed: guardianOk,
+        }),
+      });
+      const out = await res.json();
+      if (!res.ok) { showToast(out.error || 'The payout was refused'); return; }
+      showToast(`Sent to ${out.to}`);
+      setConfirming(false);
+      await load();
+      onPaid?.();
+    } catch (e) {
+      // Deliberately not "failed". A thrown fetch leaves it unknown whether
+      // PayPal took the batch, and a second click on a maybe is how somebody
+      // gets paid twice.
+      showToast('The call did not come back. Check PayPal for a batch before sending again.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+        <Loader className="w-4 h-4 text-white/30 animate-spin" />
+      </div>
+    );
+  }
+  if (!status) return null;
+
+  const money = (v) =>
+    `${status.prize_currency || 'ZAR'} ${Number(v || 0).toLocaleString('en-ZA')}`;
+
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+      <div className="flex items-center space-x-2">
+        <Trophy className="w-4 h-4 text-lime-400" />
+        <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Pay the winner</p>
+      </div>
+
+      {!status.entry_id ? (
+        <p className="text-[11px] text-white/30">{status.blocker}</p>
+      ) : (
+        <>
+          <div className="space-y-1">
+            <p className="text-sm text-white">
+              {status.winner_name}
+              {status.is_group && <span className="text-white/40 text-xs"> (group entry)</span>}
+            </p>
+            <p className="text-[11px] text-white/30">
+              Prize on the competition: {money(status.prize_amount)}
+            </p>
+            {status.payout_route === 'paypal' ? (
+              <p className="text-[11px] text-white/40">Goes to {status.payout_target} by PayPal.</p>
+            ) : (
+              <p className="text-[11px] text-red-300/80">No PayPal address on this account.</p>
+            )}
+          </div>
+
+          {status.paid_status === 'success' && (
+            <p className="text-[11px] text-lime-300/80">Already paid. Nothing more to do here.</p>
+          )}
+          {status.paid_status === 'processing' && (
+            <p className="text-[11px] text-lime-300/80">A payout is on its way. PayPal has it.</p>
+          )}
+
+          {status.paid_status === 'unpaid' && hardBlocked && (
+            <p className="text-[11px] text-red-300/80">{status.blocker}</p>
+          )}
+
+          {status.paid_status === 'unpaid' && status.payout_route === 'paypal' && (
+            <>
+              {status.is_minor && (
+                <label className="flex items-start space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={guardianOk}
+                    onChange={e => { setGuardianOk(e.target.checked); setConfirming(false); }}
+                    className="mt-0.5 accent-lime-400"
+                  />
+                  <span className="text-[11px] text-white/50">
+                    This entrant is under 18. Tick to confirm a parent or guardian has signed for the prize.
+                  </span>
+                </label>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  className={inputCls}
+                  type="number"
+                  min="0"
+                  value={amount}
+                  onChange={e => { setAmount(e.target.value); setConfirming(false); }}
+                  placeholder="Amount"
+                />
+                {!confirming ? (
+                  <button
+                    disabled={!canSend}
+                    onClick={() => setConfirming(true)}
+                    className="px-3.5 py-2.5 rounded-lg bg-lime-400 text-black font-semibold text-sm disabled:opacity-30 disabled:cursor-not-allowed">
+                    Send the prize
+                  </button>
+                ) : (
+                  <button
+                    disabled={sending}
+                    onClick={send}
+                    className="px-3.5 py-2.5 rounded-lg bg-red-500 text-white font-semibold text-sm disabled:opacity-50">
+                    {sending ? 'Sending...' : 'Yes, send it'}
+                  </button>
+                )}
+              </div>
+
+              {confirming && (
+                <p className="text-[11px] text-white/50">
+                  Sending {money(amount)} to {status.payout_target}. This cannot be undone from here.
+                </p>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function AdminSchoolSessions({ embedded = false }) {
   // Back that works on a cold deep link. navigate(-1) does nothing when
   // this page IS the first history entry, which is every shared link and
@@ -963,6 +1152,8 @@ export default function AdminSchoolSessions({ embedded = false }) {
           </div>
         </div>
 
+        <PayWinnerPanel showToast={showToast} onPaid={loadPrizes} />
+
         {/* Prize money. Nothing here pays anybody: it is the record of what
             was owed and how it was actually sent. */}
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
@@ -971,7 +1162,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
             <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Prize money ({prizes.length})</p>
           </div>
           <p className="text-[11px] text-white/30">
-            Sessions prizes are not paid by the platform. The cash half is often going to a minor, who cannot take a PayPal payout, and the equipment half is not money at all. Pay the cash by EFT, arrange the equipment yourself, and record both here: who, how much, the proof of payment or delivery reference, and the guardian who received it for a minor.
+            This is the record of anything paid by hand: an EFT, cash, a voucher, or equipment handed over. The cash prize can go out from the box above instead, so what belongs here is everything that box cannot send. Put down who, how much, the proof of payment or delivery reference, and the guardian who received it for a minor.
           </p>
 
           {entries.filter(e => e.is_winner).length > 0 && (
