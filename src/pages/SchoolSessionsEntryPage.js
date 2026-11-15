@@ -34,6 +34,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { Loader, Play, Pause, Check, ThumbsUp, Trophy, Share2, Lock, ArrowLeft } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import TikTokEmbed from '../components/TikTokEmbed';
+import { screen } from '../utils/track';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import useSchoolSessions from '../hooks/useSchoolSessions';
@@ -54,6 +56,8 @@ const longDate = (iso) =>
   iso ? new Date(iso).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long' }) : 'soon';
 
 export default function SchoolSessionsEntryPage() {
+  React.useEffect(() => screen('sessions_entry'), []);
+
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -80,6 +84,7 @@ export default function SchoolSessionsEntryPage() {
       .from('school_sessions_entries')
       .select(`
         id, competition_id, entrant_full_name, is_group, entrant_tiktok_handle,
+        tiktok_video_url, tiktok_video_id,
         is_finalist, is_winner, created_at,
         song:school_sessions_shortlist_songs(title),
         track:tracks(id, title, slug, cover_artwork_url, file_url, duration, artist_id,
@@ -218,7 +223,16 @@ export default function SchoolSessionsEntryPage() {
         <link rel="canonical" href={shareUrl} />
       </Helmet>
 
-      <div className="px-6 pt-14 pb-28 max-w-xl mx-auto space-y-6">
+      {/* SIDE BY SIDE ON A DESKTOP, UNCHANGED ON A PHONE.
+          Same reasoning as the Sessions page: stacked, the vote and the share
+          button sit below the fold on the one page whose entire job is to get
+          somebody to vote and to share. On lg the performance is on the left
+          and everything you can DO is on the right, so nothing that matters
+          needs scrolling to. Below lg it is one column in the order it
+          already had. */}
+      <div className="px-6 pt-14 pb-28 max-w-xl lg:max-w-5xl mx-auto">
+      <div className="space-y-6 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-8 lg:items-start">
+      <div className="space-y-6 lg:col-span-7">
         <Link to="/sessions" className="inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70">
           <ArrowLeft className="w-3.5 h-3.5" /> Sessions
         </Link>
@@ -275,6 +289,18 @@ export default function SchoolSessionsEntryPage() {
               </button>
             )}
 
+            {/* THEIR PERFORMANCE, ON THE PAGE.
+                The link was already on every entry because the form demands
+                one, and this is the page people share, so this is where it is
+                worth watching. Nothing loads until it is tapped. */}
+            {entry.tiktok_video_url && (
+              <TikTokEmbed
+                url={entry.tiktok_video_url}
+                videoId={entry.tiktok_video_id}
+                title={`${entry.entrant_full_name} on TikTok`}
+              />
+            )}
+
             {entry.entrant_tiktok_handle && (
               <a href={`https://tiktok.com/@${entry.entrant_tiktok_handle}`}
                 target="_blank" rel="noopener noreferrer"
@@ -284,6 +310,11 @@ export default function SchoolSessionsEntryPage() {
             )}
           </div>
         </div>
+
+      </div>
+
+      {/* ── Right column: the things you can do ─────────────────────────── */}
+      <div className="space-y-6 lg:col-span-5">
 
         {/* The vote */}
         <div className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-5 space-y-3">
@@ -347,6 +378,9 @@ export default function SchoolSessionsEntryPage() {
         <p className="text-center text-xs text-white/25">
           <Link to="/sessions/vote" className="hover:text-white/50">See every entry</Link>
         </p>
+      </div>
+
+      </div>
       </div>
     </div>
   );
