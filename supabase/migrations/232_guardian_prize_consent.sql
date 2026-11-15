@@ -147,6 +147,15 @@ grant execute on function public.sessions_prize_consent_sign(uuid, text, text) t
 -- route is not open until that guardian has actually signed. The tick box on
 -- the admin screen used to be an honour system. Now it reports a signature
 -- that exists or it blocks.
+-- Dropped first, not replaced. 230 creates this function returning 13 columns
+-- and this version returns 16. Postgres refuses that: CREATE OR REPLACE can
+-- change a function's body but never its return type. It raises 42P13 and
+-- takes the whole migration down with it.
+--
+-- Nothing reads the old signature except the admin screen, which deploys
+-- alongside this, so dropping and recreating costs nothing.
+drop function if exists public.sessions_payout_status();
+
 create or replace function public.sessions_payout_status()
 returns table (
   entry_id        uuid,
