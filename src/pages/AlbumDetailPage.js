@@ -5,6 +5,7 @@ import { downloadTrack, downloadErrorMessage } from '../utils/downloadTrack';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
+import { screen } from '../utils/track';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { usePaidPlayLimit } from '../hooks/usePaidPlayLimit';
@@ -38,6 +39,9 @@ function formatNumber(n) {
 }
 
 export default function AlbumDetailPage() {
+  // One line, and the reports on /admin/app-usage have something to say.
+  React.useEffect(() => screen('album'), []);
+
   // Two routes land here: /album/<id-or-slug> and the share link,
   // /album/<artistSlug>/<albumSlug>. artistSlug is undefined on the first.
   const { id, artistSlug } = useParams();
@@ -825,4 +829,4 @@ export default function AlbumDetailPage() {
       )}
     </div>
   );
-}
+}

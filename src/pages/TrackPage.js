@@ -4,6 +4,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import { lyricsToPlainText } from '../utils/lyrics';
 import { supabase } from '../supabaseClient';
+import { screen } from '../utils/track';
 import TrackVersions from '../components/TrackVersions';
 import PreSaveButton from '../components/PreSaveButton';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,6 +34,9 @@ function formatDuration(s) {
 }
 
 export default function TrackPage() {
+  // One line, and the reports on /admin/app-usage have something to say.
+  React.useEffect(() => screen('track'), []);
+
   const { slug } = useParams();
   const navigate = useNavigate();
   // Back that works on a cold deep link. navigate(-1) does nothing when

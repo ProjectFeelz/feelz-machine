@@ -25,6 +25,7 @@ import { Loader, Trophy, ArrowLeft, Play, Pause, SkipForward, Music, X } from 'l
 import { useAuth } from '../contexts/AuthContext';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 import { supabase } from '../supabaseClient';
+import { screen } from '../utils/track';
 import { coverUrl } from '../utils/coverUrl';
 import TikTokEmbed from '../components/TikTokEmbed';
 
@@ -35,6 +36,9 @@ const fmt = (s) => {
 };
 
 export default function SchoolSessionsJudgePanel() {
+  // One line, and the reports on /admin/app-usage have something to say.
+  React.useEffect(() => screen('sessions_judge'), []);
+
   const navigate = useNavigate();
   const { user, isAdmin } = useAuth();
   const gate = useSchoolSessions();
@@ -97,6 +101,17 @@ export default function SchoolSessionsJudgePanel() {
   // Signed up front, in one request, rather than on each play. A judge on a
   // live stream should not be waiting on a round trip to Frankfurt between one
   // entry and the next, and two hours covers a judging session comfortably.
+  // WHY THE STAGE STOPS BEING STICKY.
+  //
+  // The stage is pinned to the top so a judge can scroll the list while a
+  // song plays. Open a TikTok inside it and the stage becomes taller than the
+  // window, and a sticky element taller than the window pins its top and
+  // leaves no room for anything else: the list underneath becomes
+  // unreachable and the page looks frozen.
+  //
+  // So while a video is open the stage is an ordinary block and scrolls away
+  // like everything else. Close the video and it pins again.
+  const [videoOpen, setVideoOpen] = React.useState(false);
   const [signed, setSigned] = React.useState({});
   const [signing, setSigning] = React.useState(false);
 
@@ -436,7 +451,7 @@ export default function SchoolSessionsJudgePanel() {
             On a stream the artwork is the shot, so it is given real size
             rather than being a thumbnail beside a row. */}
         {np && (
-          <div className="sticky top-0 z-20 -mx-5 px-5 pb-5 pt-3 mb-6"
+          <div className={`${videoOpen ? 'relative' : 'sticky top-0 z-20'} -mx-5 px-5 pb-5 pt-3 mb-6`}
             style={{ background: 'linear-gradient(180deg, #000 70%, rgba(0,0,0,0.92) 100%)' }}>
             <div className="rounded-2xl border border-white/[0.08] p-4 sm:p-5"
               style={{ background: 'linear-gradient(135deg, rgba(140,171,46,0.10), rgba(10,10,10,0.95))' }}>
@@ -491,7 +506,20 @@ export default function SchoolSessionsJudgePanel() {
                   until now. Nothing loads until it is asked for. */}
               {np.tiktok_video_url && (
                 <div className="mt-4 max-w-sm">
-                  <TikTokEmbed url={np.tiktok_video_url} videoId={np.tiktok_video_id} title={`${np.entrant_full_name} on TikTok`} />
+                  <TikTokEmbed url={np.tiktok_video_url} videoId={np.tiktok_video_id} onOpenChange={setVideoOpen} title={`${np.entrant_full_name} on TikTok`} />
+                  {/* On a phone the video fills the screen, so the list is a
+                      scroll away and not obviously still there. */}
+                  {videoOpen && (
+                    <button
+                      onClick={() => {
+                        const list = document.getElementById('judge-entry-list');
+                        if (list) list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }}
+                      className="mt-2 w-full py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-xs font-semibold text-white/60 hover:text-white transition"
+                    >
+                      Back to the entries
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -503,7 +531,7 @@ export default function SchoolSessionsJudgePanel() {
         ) : entries.length === 0 ? (
           <p className="text-sm text-white/30 text-center py-12">No entries yet.</p>
         ) : (
-          <div className="space-y-2">
+          <div id="judge-entry-list" className="space-y-2 scroll-mt-4">
             {entries.map(e => {
               const isNow = np?.id === e.id;
               const border = e.is_rejected ? 'bg-red-500/[0.04] border-red-500/20'

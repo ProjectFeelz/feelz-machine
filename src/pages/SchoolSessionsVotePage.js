@@ -11,6 +11,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { GraduationCap, Loader, Play, Check, ThumbsUp, Trophy } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { screen } from '../utils/track';
 import TikTokEmbed from '../components/TikTokEmbed';
 import { useAuth } from '../contexts/AuthContext';
 import useSchoolSessions from '../hooks/useSchoolSessions';
@@ -26,6 +27,9 @@ function phaseFromDates(comp) {
 }
 
 export default function SchoolSessionsVotePage() {
+  // One line, and the reports on /admin/app-usage have something to say.
+  React.useEffect(() => screen('sessions_vote'), []);
+
   const navigate = useNavigate();
   const { user } = useAuth();
   const gate = useSchoolSessions();

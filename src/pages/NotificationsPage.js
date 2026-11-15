@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
+import { tap, screen } from '../utils/track';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import {
@@ -581,6 +582,9 @@ function FollowBackButton({ artistId }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function NotificationsPage() {
+  // One line, and the reports on /admin/app-usage have something to say.
+  React.useEffect(() => screen('notifications'), []);
+
   const navigate = useNavigate();
   // Back that works on a cold deep link. navigate(-1) does nothing when
   // this page IS the first history entry, which is every shared link and
@@ -788,7 +792,38 @@ export default function NotificationsPage() {
   };
 
   const filtered = useMemo(
-    () => allNotifs.filter(n => filterMatch(n.type, filter) && !HIDDEN_TYPES.has(n.type)),
+    () => {
+      const list = allNotifs.filter(n => filterMatch(n.type, filter) && !HIDDEN_TYPES.has(n.type));
+      if (filter !== 'all') return list;
+
+      // ALL IS A SUMMARY, NOT A FIRE HOSE.
+      //
+      // Every other tab is a list of one kind of thing. All was a list of
+      // everything, which on a busy week is forty rows of four different
+      // subjects interleaved, and the only way to find the one that mattered
+      // was to read all forty.
+      //
+      // So All now shows the MOST RECENT of each kind and says how many more
+      // there are behind it. Tapping the counter switches to that tab, where
+      // the full list already lives. Nothing is hidden, it is one tap further
+      // away, and the tap lands somewhere that was built for it.
+      //
+      // Newest first is preserved: the groups come out in the order their
+      // newest member arrived, so the most recent thing that happened is
+      // still the first thing you see.
+      const seen = new Set();
+      const out = [];
+      for (const n of list) {
+        const group = FILTERS.slice(1).find(f => filterMatch(n.type, f.key))?.key || 'social';
+        if (seen.has(group)) continue;
+        seen.add(group);
+        const moreInGroup = list.filter(
+          x => x.id !== n.id && (FILTERS.slice(1).find(f => filterMatch(x.type, f.key))?.key || 'social') === group
+        ).length;
+        out.push({ ...n, _group: group, _moreInGroup: moreInGroup });
+      }
+      return out;
+    },
     [allNotifs, filter]
   );
 
@@ -1579,6 +1614,27 @@ export default function NotificationsPage() {
                               onClick={e => e.stopPropagation()}
                             />
                           </div>
+                        )}
+
+                        {/* THE REST OF THIS GROUP, one tap away.
+                            Only on the All tab, where the row stands in for
+                            several. The tab it points at was built to show
+                            them, so this does not need its own list. */}
+                        {notif._moreInGroup > 0 && (
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              tap('notif_group_open', notif._group);
+                              setFilter(notif._group);
+                            }}
+                            className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/[0.07] hover:bg-white/[0.12] text-[11px] font-semibold text-white/60 hover:text-white transition"
+                          >
+                            <span>
+                              {notif._moreInGroup} more in{' '}
+                              {(FILTERS.find(f => f.key === notif._group)?.label || notif._group)}
+                            </span>
+                            <ChevronDown className="w-3 h-3 -rotate-90" />
+                          </button>
                         )}
 
                         {/* Album pill. Opens the album; it is a record, not

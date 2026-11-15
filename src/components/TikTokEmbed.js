@@ -46,8 +46,16 @@ export function tiktokVideoId(url) {
   return m ? m[1] : null;
 }
 
-export default function TikTokEmbed({ url, videoId, className = '', title = 'TikTok video' }) {
+export default function TikTokEmbed({ url, videoId, className = '', title = 'TikTok video', onOpenChange }) {
   const [open, setOpen] = React.useState(false);
+
+  // The parent needs to know, because a page that pins something above this
+  // has to stop pinning it once a 9:16 video appears inside. Reported rather
+  // than assumed, so the embed stays usable anywhere.
+  const setOpenAndTell = React.useCallback((v) => {
+    setOpen(v);
+    if (onOpenChange) onOpenChange(v);
+  }, [onOpenChange]);
   // A resolved id beats whatever is in the URL. Almost every entrant pastes a
   // vm.tiktok.com short link, which hides the id behind a redirect; the
   // tiktok-resolve function follows it once and stores the answer.
@@ -83,7 +91,7 @@ export default function TikTokEmbed({ url, videoId, className = '', title = 'Tik
   if (!open) {
     return (
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => setOpenAndTell(true)}
         className={`w-full flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-3 hover:bg-white/[0.06] transition text-left ${className}`}
       >
         <span className="w-8 h-8 rounded-full bg-lime-400 text-black flex items-center justify-center flex-shrink-0">
@@ -113,7 +121,7 @@ export default function TikTokEmbed({ url, videoId, className = '', title = 'Tik
           broken embed. Both are in one place here for that reason.
           Attribution does not disappear: the handle and the link out sit
           underneath, in our own type. */}
-      <div className="relative w-full overflow-hidden" style={{ aspectRatio: '9 / 16', maxHeight: '70vh' }}>
+      <div className="relative w-full overflow-hidden" style={{ aspectRatio: '9 / 16', maxHeight: '56vh' }}>
         <iframe
           title={title}
           src={`https://www.tiktok.com/embed/v2/${id}`}
@@ -132,7 +140,7 @@ export default function TikTokEmbed({ url, videoId, className = '', title = 'Tik
       </div>
       <div className="flex items-center justify-between px-3 py-2">
         <button
-          onClick={() => setOpen(false)}
+          onClick={() => setOpenAndTell(false)}
           className="text-[11px] font-semibold text-white/40 hover:text-white transition"
         >
           Close

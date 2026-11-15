@@ -10,6 +10,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import PriceBreakdown, { useQuote } from '../components/PriceBreakdown';
 import { supabase } from '../supabaseClient';
+import { screen } from '../utils/track';
 import { visibleNow } from '../utils/stories';
 import { showReceipt } from '../components/PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
@@ -97,6 +98,9 @@ function timeAgo(date) {
 // Voice Memo carry the same intent and both reach followers.
 
 export default function ArtistProfilePage() {
+  // One line, and the reports on /admin/app-usage have something to say.
+  React.useEffect(() => screen('artist_profile'), []);
+
   const { slug } = useParams();
   const navigate = useNavigate();
   // Back that works on a cold deep link. navigate(-1) does nothing when
@@ -2998,4 +3002,4 @@ export default function ArtistProfilePage() {
       )}
     </div>
   );
-}
+}

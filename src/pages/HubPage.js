@@ -6,6 +6,7 @@ import { useStreakContext } from '../contexts/StreakContext';
 import { useTier } from '../contexts/useTier';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 import { supabase } from '../supabaseClient';
+import { screen } from '../utils/track';
 import FollowUs from '../components/FollowUs';
 import CollabThread from '../components/CollabThread';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
@@ -65,6 +66,9 @@ const ARTIST_TABS = [
 ];
 
 export default function HubPage() {
+  // One line, and the reports on /admin/app-usage have something to say.
+  React.useEffect(() => screen('hub'), []);
+
   const navigate = useNavigate();
 
   // Resolved by name rather than a hardcoded id, so recreating the room
