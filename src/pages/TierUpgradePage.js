@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
+import { step, screen } from '../utils/track';
 import { showReceipt } from '../components/PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import { useTier } from '../contexts/useTier';
@@ -111,6 +112,8 @@ function PriceDisplay({ tier, billingCycle, geoRate, geoInfo }) {
 }
 
 export default function TierUpgradePage() {
+  React.useEffect(() => { screen('upgrade'); step('upgrade_viewed'); }, []);
+
   const navigate = useNavigate();
   // Back that works on a cold deep link. navigate(-1) does nothing when
   // this page IS the first history entry, which is every shared link and
@@ -210,6 +213,9 @@ export default function TierUpgradePage() {
   };
 
   const handleSubscriptionSuccess = async ({ subscriptionId, tierSlug, billingCycle: cycle }) => {
+    // PayPal has approved it. This is the only step on this page that costs
+    // somebody money, so it is the only one worth being certain about.
+    step('upgrade_paid', tierSlug);
     setProcessing(true);
     setError('');
     try {
@@ -548,7 +554,7 @@ export default function TierUpgradePage() {
                   </div>
                 ) : (
                   <button
-                    onClick={() => { setSelectedTier(slug); setError(''); }}
+                    onClick={() => { step('upgrade_plan_chosen', slug); setSelectedTier(slug); setError(''); }}
                     className="w-full py-2.5 rounded-lg text-sm font-semibold transition active:scale-[0.98]"
                     style={{ backgroundColor: tier.color, color: '#000' }}>
                     Upgrade to {tier.name}

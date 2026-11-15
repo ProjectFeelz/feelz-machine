@@ -2,6 +2,7 @@ import { Helmet } from 'react-helmet-async';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { step } from '../utils/track';
 // Shared with ProfilePage, which was missing this behaviour entirely.
 import { generateSlug, getUniqueSlug } from '../utils/artistSlug';
 import { useAuth } from '../contexts/AuthContext';
@@ -222,6 +223,13 @@ export default function ProfilePage() {
 
   const save = async () => {
     if (!artist) return;
+    // LAST STEP OF SIGNING UP, and it is deliberately not "they pressed save".
+    // An account with a name and a picture is one somebody will come back to;
+    // an empty one is not. So this counts a profile that has both, which is
+    // what the funnel is really asking about.
+    if (form.artist_name?.trim() && (form.bio?.trim() || artist?.profile_image_url)) {
+      step('signup_profile_done');
+    }
     setSaving(true); setMsg('');
     try {
       const sl = {};
@@ -723,6 +731,10 @@ export default function ProfilePage() {
                       <button key={role} type="button"
                         onClick={async () => {
                           await supabase.from('artists').update({ role, role_confirmed: true }).eq('id', artist.id);
+                          // Third step of signing up. Confirming which kind of
+                          // creator you are is the moment the account stops
+                          // being empty, so it is the step worth counting.
+                          step('signup_role_chosen', role);
                           await refreshProfile();
                         }}
                         className={`py-2.5 rounded-xl text-xs font-semibold transition border ${
@@ -1006,4 +1018,4 @@ function NavRow({ icon: Icon, label, iconColor = 'text-white/30', onClick, borde
       <ChevronRight className="w-4 h-4 text-white/15" />
     </button>
   );
-}
+}

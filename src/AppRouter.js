@@ -81,6 +81,8 @@ const AdminContent = React.lazy(() => import('./pages/AdminContent'));
 const AdminGrowth = React.lazy(() => import('./pages/AdminGrowth'));
 const BeatDetailPage = React.lazy(() => import('./pages/BeatDetailPage'));
 const AdminUserBehaviorPage = React.lazy(() => import('./pages/AdminUserBehaviorPage'));
+// Where people go, what they press, where they give up. Reads app_events.
+const AdminAppUsage = React.lazy(() => import('./pages/AdminAppUsage'));
 const TrackPage = React.lazy(() => import('./pages/TrackPage'));
 const CollabRadarPage = React.lazy(() => import('./pages/CollabRadarPage'));
 const AdminDuplicates = React.lazy(() => import('./pages/AdminDuplicates'));
@@ -629,6 +631,7 @@ export default function AppRouter() {
                 <Route path="/admin/boost" element={<AdminBoost />} />
                 <Route path="/admin/broadcast" element={<AdminBroadcast />} />
                 <Route path="/admin/behavior" element={<AdminUserBehaviorPage />} />
+                <Route path="/admin/app-usage" element={<AdminAppUsage />} />
                 <Route path="/admin/duplicates" element={<AdminDuplicates />} />
                 <Route path="/admin/competitions" element={<AdminCompetitions />} />
                 <Route path="/admin/school-sessions" element={<AdminSchoolSessions />} />

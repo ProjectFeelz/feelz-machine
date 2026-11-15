@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { localInputToInstant, instantToLocalInput, describeLocalRelease } from '../utils/releaseTime';
 import { entriesAreOpen } from '../utils/schoolPhase';
 import { supabase } from '../supabaseClient';
+import { step } from '../utils/track';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Upload, Trash2, Loader, Plus, Save, Music,
@@ -1713,9 +1714,15 @@ export default function TrackUploadPanel() {
   };
 
   const uploadTrack = async () => {
+    // The three steps of an upload, recorded as each one PASSES. The place
+    // everybody stops then shows up as the gap between two numbers, with
+    // nobody having to guess which rule is the annoying one.
+    step('upload_opened');
     if (!trackForm.audio_file) { showMessage('error', 'Audio file is required'); return; }
+    step('upload_file_chosen');
     if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
     if (!isAlbumRelease && !trackForm.cover_file) { showMessage('error', 'Cover artwork is required'); return; }
+    step('upload_artwork_added');
     if (!artist) { showMessage('error', 'No artist profile found'); return; }
 
     // SESSIONS ONLY TAKES LIVE TRACKS.
@@ -1888,6 +1895,7 @@ export default function TrackUploadPanel() {
       }]).select();
       if (error) throw error;
       const trackId = data[0].id;
+      step('upload_published', trackId);
       let ssEntryError = null;
 
       if (trackForm.has_versions && versionFiles.length > 0) {
@@ -1909,6 +1917,8 @@ export default function TrackUploadPanel() {
       }
 
       if (schoolSessionsEnabled) {
+        step('sessions_entry_started', trackId);
+        if (schoolSessionsForm.tiktokVideoUrl?.trim()) step('sessions_tiktok_added');
         showMessage('info', 'Registering Sessions entry…');
         try {
           const { data: ssConfig } = await supabase
@@ -1987,6 +1997,8 @@ export default function TrackUploadPanel() {
               }
               throw entryErr;
             }
+
+            step('sessions_entered', entryRow?.id || null);
 
             if (schoolSessionsForm.isMinor && entryRow?.id) {
               await supabase.from('school_sessions_guardian_consents').insert({

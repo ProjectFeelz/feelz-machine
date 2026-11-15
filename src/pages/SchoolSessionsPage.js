@@ -28,7 +28,7 @@ import SchoolCourseCard from '../components/SchoolCourseCard';
 import SchoolLessonList from '../components/SchoolLessonList';
 import { currentPhase, entryCta, phaseDate } from '../utils/schoolPhase';
 import { supabase } from '../supabaseClient';
-import { screen } from '../utils/track';
+import { screen, step } from '../utils/track';
 
 // Prominent hero countdown, ticks every second, shown as separate
 // day/hour/min/sec boxes.
@@ -353,7 +353,7 @@ function Step({ n, title, children }) {
 
 export default function SchoolSessionsPage() {
   // One line, and the reports on /admin/app-usage have something to say.
-  React.useEffect(() => screen('sessions'), []);
+  React.useEffect(() => { step('sessions_viewed'); return screen('sessions'); }, []);
 
   const navigate = useNavigate();
   const { user } = useAuth();

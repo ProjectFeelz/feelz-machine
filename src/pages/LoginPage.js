@@ -24,6 +24,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { Mail, Lock, Eye, EyeOff, Loader, ArrowLeft } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { step, screen } from '../utils/track';
 import { useAuth, stashAgeConfirmed } from '../contexts/AuthContext';
 import VinylRecord from '../components/VinylRecord';
 import RetailTonearm from '../components/retail/RetailTonearm';
@@ -211,6 +212,10 @@ export default function LoginPage() {
         if (redirectTo) sessionStorage.setItem('post_login_redirect', redirectTo);
         await signInWithEmail(addr, password);
       } else if (mode === 'signup') {
+        // Recorded where the person COMMITS, not where the form opens, so
+        // the gap between this and the next step is people who tried and
+        // could not finish rather than people who were only looking.
+        step('signup_started', role || null);
         if (password.length < 8) { setError('Use at least 8 characters for your password.'); setLoading(false); return; }
         stashRole();
         stashAgeConfirmed();
@@ -223,9 +228,12 @@ export default function LoginPage() {
         const data = await signUpWithEmail(addr, password, '/setup', role, ageConfirmed);
         // With email confirmation on, Supabase returns no session and an empty
         // identities list if the address is already registered.
+        if (data?.session) step('signup_account_created', role || null);
         if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
           setError('That email already has an account. Sign in, or use Forgot password to set one.');
         } else if (!data?.session) {
+          // The account exists; they still have to open the email.
+          step('signup_account_created', role || null);
           setNotice(`Check ${addr} and tap the link to confirm your account.`);
         }
       } else if (mode === 'link') {
@@ -471,4 +479,4 @@ export default function LoginPage() {
       )}
     </div>
   );
-}
+}
