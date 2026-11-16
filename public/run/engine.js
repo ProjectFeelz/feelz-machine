@@ -1334,7 +1334,7 @@ function respawn(p, reason) {
   if (!twoPlayer && p.shrine && p.shrine.x > cp.x) spot = spot || p.shrine;
   // Co-op: back in beside your partner when they're further on.
   let besidePartner = false;
-  if (coopOn() && !twoPlayer) { const rs = Coop.reviveSpot(Math.max(cp.x, spot ? spot.x : 0)); if (rs) { spot = rs; besidePartner = true; } }
+  if (coopOn() && !twoPlayer) { const rs = Coop.reviveSpot(Math.max(cp.x, spot ? spot.x : 0)); if (rs) { spot = { x: rs.x, y: rs.y }; besidePartner = rs.name; } }
   spot = spot || cp;
   p.wipeouts += 1;
   p.x = spot.x; p.y = spot.y; p.vx = 0; p.vy = 0;
@@ -1345,7 +1345,7 @@ function respawn(p, reason) {
   setState(p, "normal");
   sfx.fall();
   const who = twoPlayer ? playerName(p) + " " : "";
-  const beside = besidePartner ? "BACK IN BESIDE " + Coop.partnerName() : twoPlayer && lead2 !== p ? "BACK IN BESIDE " + playerName(lead2) + " · -2 RECORDS" : twoPlayer ? "BACK IN AT THE CHECKPOINT · -2 RECORDS" : "BACK TO THE CHECKPOINT";
+  const beside = besidePartner ? "BACK IN BESIDE " + besidePartner : twoPlayer && lead2 !== p ? "BACK IN BESIDE " + playerName(lead2) + " · -2 RECORDS" : twoPlayer ? "BACK IN AT THE CHECKPOINT · -2 RECORDS" : "BACK TO THE CHECKPOINT";
   showBanner(who + reason, beside, 1.6);
   // Back at a checkpoint the storm is pushed back behind you (a race respawn beside the leader leaves it be).
   if (!twoPlayer || players.every(o => o === p || o.finished)) {

@@ -1,46 +1,55 @@
 /*
   FEELZ RUN - ONLINE CO-OP
-  Two players, two phones (or any two screens), one mission.
+  Up to six players, each on their own phone or computer, one mission.
 
   How it works:
-  - One player hosts and gets a five letter code. The other types the code in.
-    Both are signed in with their Feelz Machine accounts.
-  - The two games talk over a Supabase Realtime channel (broadcast and presence,
+  - One player hosts and gets a five letter code. Up to five others type the
+    code in. Everyone is signed in with their Feelz Machine account.
+  - The games talk over a Supabase Realtime channel (broadcast and presence,
     no database tables). Nothing here can change a score: each player's run is
     posted by their own game and checked on the server as usual.
-  - Each phone runs its own Koda. The partner is drawn from their position,
-    which arrives about 15 times a second, smoothed so they glide.
+  - Each screen runs its own Koda. Everyone else is drawn from their position,
+    which arrives 8 to 15 times a second, smoothed so they glide. Each player
+    has their own colour.
   - Shared: the song (the host's clock leads), the checkpoints (whoever reaches
-    one first moves the deadline on for both, and a wiped-out player comes back
-    beside their partner), rewinds, missed checkpoints, knockouts and pause.
+    one first moves the deadline on for everyone, and a wiped-out player comes
+    back beside whoever is furthest on), rewinds, missed checkpoints, knockouts
+    and pause. Slide into someone to trip them up.
   - Each player collects their own records, notes, journal pages and coin, so
-    nobody takes the other's credits.
+    nobody takes anyone else's credits.
 */
 
 "use strict";
 
 const Coop = (() => {
   const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const SEND_EVERY = 1 / 15;
+  const MAX_PLAYERS = 6;
   const SONG_EVERY = 1;
-  const DRIFT = 0.35;            // seconds of song drift before the guest is nudged back in line
+  const DRIFT = 0.35;            // seconds of song drift before a guest is nudged back in line
+  // Everyone's colour, in the order they joined (the host first).
+  const COLOURS = [
+    { tint: "rgba(255, 150, 30, 0.4)", text: "#ffc46a" },
+    { tint: "rgba(40, 190, 255, 0.4)", text: "#7fe3ff" },
+    { tint: "rgba(70, 225, 120, 0.4)", text: "#8ff0a8" },
+    { tint: "rgba(255, 90, 200, 0.4)", text: "#ff9ade" },
+    { tint: "rgba(150, 100, 255, 0.42)", text: "#c3a6ff" },
+    { tint: "rgba(255, 70, 70, 0.4)", text: "#ff9a9a" }
+  ];
 
   const st = {
     on: false,                  // in a co-op run right now
     lobby: false,               // in the lobby (hosting or joined, not running yet)
     host: false,
+    hostId: "",
     code: "",
     ch: null,
     myName: "",
-    partner: null,              // { name, id } once they're here
-    offset: 0,                  // host clock minus this clock, in ms (guest only)
+    roster: [],                 // [{ id, name }] everyone in the game, host first
+    peers: new Map(),           // id -> { id, name, colour, ghost, target, cp }
+    offset: 0,                  // host clock minus this clock, in ms (guests only)
     bestRtt: Infinity,
-    sendT: 0, songT: 0,
-    ghost: null,
-    target: null,               // the latest snapshot from the partner
-    partnerCp: 0,
-    partnerFinished: false,
-    quiet: false,               // applying the partner's event: don't send it back
+    sendT: 0, songT: 0, tripT: 0,
+    quiet: false,               // applying someone else's event: don't send it back
     startTimer: null, countTimer: null,
     cpHoldUntil: 0, cpHoldMax: 0,
     onLobby: null               // the menu's callback when the lobby changes
@@ -48,6 +57,7 @@ const Coop = (() => {
 
   const now = () => Date.now();
   const hostNow = () => now() + (st.host ? 0 : st.offset);
+  function myId() { const u = Backend.user(); return u ? u.id : ""; }
 
   function makeCode() {
     let s = "";
@@ -57,49 +67,90 @@ const Coop = (() => {
     return s;
   }
   function cleanCode(s) { return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5); }
+  function cleanName(s) { return String(s || "PLAYER").slice(0, 16).toUpperCase(); }
 
   function lobbyChanged(msg) { if (st.onLobby) st.onLobby(msg || ""); }
 
   function send(type, data) {
     if (!st.ch) return;
-    st.ch.send({ type: "broadcast", event: "m", payload: Object.assign({ k: type }, data || {}) }).catch(() => {});
+    st.ch.send({ type: "broadcast", event: "m", payload: Object.assign({ k: type, from: myId() }, data || {}) }).catch(() => {});
   }
 
-  function partnerName() { return st.partner && st.partner.name ? st.partner.name : "PARTNER"; }
+  function nameOf(id) { const p = st.peers.get(id); return p ? p.name : "A PLAYER"; }
+  function colourFor(index) { return COLOURS[Math.max(0, index) % COLOURS.length]; }
 
-  function freshGhost() {
+  function freshGhost(colour) {
     const g = newPlayer(2);
-    g.invuln = 0; g.coopGhost = true; g.pose = ["idle", 0];
+    g.invuln = 0; g.coopGhost = true; g.pose = ["idle", 0]; g.coopTint = colour.tint; g.coopText = colour.text;
     return g;
   }
 
-  // Everything that comes in from the partner.
+  // Everyone in the game, from the host's list. Keeps ghosts and positions of people still here.
+  function applyRoster(list) {
+    st.roster = list.slice(0, MAX_PLAYERS);
+    const me = myId();
+    const keep = new Map();
+    st.roster.forEach((r, i) => {
+      if (r.id === me) return;
+      const old = st.peers.get(r.id);
+      const colour = colourFor(i);
+      const p = old || { id: r.id, target: null, cp: 0, ghost: null };
+      p.name = cleanName(r.name); p.colour = colour;
+      if (p.ghost) { p.ghost.coopTint = colour.tint; p.ghost.coopText = colour.text; }
+      keep.set(r.id, p);
+    });
+    st.peers = keep;
+  }
+  function hostRoster() { send("roster", { list: st.roster }); }
+
+  function removePlayer(id, why) {
+    if (!st.peers.has(id) && !st.roster.some(r => r.id === id)) return;
+    const was = nameOf(id);
+    st.roster = st.roster.filter(r => r.id !== id);
+    st.peers.delete(id);
+    if (st.host) { applyRoster(st.roster); hostRoster(); }
+    if (st.on && gameState !== "finished") showToast("CO-OP", was + (why || " LEFT THE GAME."), "", 3);
+    if (st.lobby) lobbyChanged(was + " left.");
+  }
+
+  // Everything that comes in from the other players.
   function onMessage(msg) {
     const d = msg && msg.payload;
     if (!d || !d.k) return;
+    const from = d.from || "";
     switch (d.k) {
       case "hello":            // guest -> host
         if (!st.host) return;
-        if (st.partner && st.partner.id !== d.id) { send("full", { id: d.id }); return; }
-        st.partner = { name: String(d.name || "PARTNER").slice(0, 16).toUpperCase(), id: d.id };
-        send("welcome", { name: st.myName, mission: selectedMission, to: d.id });
+        if (!st.roster.some(r => r.id === from)) {
+          if (st.roster.length >= MAX_PLAYERS || st.on) { send("full", { to: from, running: st.on ? 1 : 0 }); return; }
+          st.roster.push({ id: from, name: cleanName(d.name) });
+        }
+        applyRoster(st.roster);
+        hostRoster();
+        send("welcome", { to: from, mission: selectedMission });
         lobbyChanged();
         break;
-      case "welcome":          // host -> guest
+      case "welcome":          // host -> one guest
         if (st.host || d.to !== myId()) return;
-        st.partner = { name: String(d.name || "HOST").slice(0, 16).toUpperCase(), id: "host" };
+        st.hostId = from;
         if (d.mission) chooseMission(d.mission);
-        for (let i = 0; i < 6; i++) setTimeout(() => send("ping", { t0: now(), id: myId() }), 150 * i);
+        for (let i = 0; i < 6; i++) setTimeout(() => send("ping", { t0: now() }), 150 * i);
+        lobbyChanged();
+        break;
+      case "roster":           // host -> everyone: who's in
+        if (st.host) return;
+        st.hostId = from;
+        applyRoster(d.list || []);
         lobbyChanged();
         break;
       case "full":
-        if (!st.host && d.id === myId()) { leave(); lobbyChanged("That game already has two players."); }
+        if (!st.host && d.to === myId()) { leave(); lobbyChanged(d.running ? "That game has already started." : "That game is full."); }
         break;
       case "ping":
-        if (st.host) send("pong", { t0: d.t0, th: now(), id: d.id });
+        if (st.host) send("pong", { t0: d.t0, th: now(), to: from });
         break;
       case "pong": {
-        if (st.host || d.id !== myId()) return;
+        if (st.host || d.to !== myId()) return;
         const t1 = now(), rtt = t1 - d.t0;
         if (rtt < st.bestRtt) { st.bestRtt = rtt; st.offset = d.th - (d.t0 + t1) / 2; }
         break;
@@ -112,12 +163,15 @@ const Coop = (() => {
         if (d.mission) chooseMission(d.mission);
         scheduleStart(d.at - st.offset);
         break;
-      case "s":                // the partner's snapshot
-        st.target = d;
-        // Just after a missed checkpoint, a snapshot sent before the partner rewound can't move the deadline on.
-        st.partnerCp = Math.max(0, now() < st.cpHoldUntil ? Math.min(d.cp | 0, st.cpHoldMax) : d.cp | 0);
+      case "s": {              // someone's snapshot
+        const p = st.peers.get(from);
+        if (!p) return;
+        p.target = d;
+        // Just after a missed checkpoint, a snapshot sent before they rewound can't move the deadline on.
+        p.cp = Math.max(0, now() < st.cpHoldUntil ? Math.min(d.cp | 0, st.cpHoldMax) : d.cp | 0);
         break;
-      case "song":             // host -> guest: where the song is
+      }
+      case "song":             // host -> guests: where the song is
         if (st.host || !st.on || gameState !== "playing" || taunt || reading) return;
         if (typeof drive !== "undefined" && drive.active) return;
         {
@@ -127,7 +181,7 @@ const Coop = (() => {
         break;
       case "rewind":
         if (!st.on) return;
-        st.quiet = true; try { coopRewind(partnerName()); } finally { st.quiet = false; }
+        st.quiet = true; try { coopRewind(nameOf(from)); } finally { st.quiet = false; }
         break;
       case "miss":
         if (!st.on || taunt) return;
@@ -145,46 +199,46 @@ const Coop = (() => {
         if (dr && dr.alive) { dr.alive = false; burst(dr.x, dr.y, "#7fe3ff", 14, 220); }
         break;
       }
-      case "trip":             // the partner slid into you
-        if (!st.on || gameState !== "playing") return;
-        coopTripped(partnerName());
+      case "trip":             // someone slid into you
+        if (!st.on || gameState !== "playing" || d.to !== myId()) return;
+        coopTripped(nameOf(from));
         break;
       case "finish":
-        st.partnerFinished = true;
-        if (st.on && gameState === "playing") showBanner(partnerName() + " MADE IT HOME", "", 2.2);
+        if (st.on && gameState === "playing") showBanner(nameOf(from) + " MADE IT HOME", "", 2.2);
         break;
       case "pause":
-        if (st.on && gameState === "playing") { st.quiet = true; try { pauseGame(); } finally { st.quiet = false; } setText("pauseTrack", partnerName() + " PAUSED THE GAME"); }
+        if (st.on && gameState === "playing") { st.quiet = true; try { pauseGame(); } finally { st.quiet = false; } setText("pauseTrack", nameOf(from) + " PAUSED THE GAME"); }
         break;
       case "resume":
         if (st.on && gameState === "paused") { st.quiet = true; try { resumeGame(); } finally { st.quiet = false; } }
         break;
+      case "regroup":          // host -> everyone: back to the lobby for the next one
+        if (st.host || !(st.on || st.lobby)) return;
+        toLobby(d.mission);
+        break;
       case "bye":
-        partnerLeft();
+        if (!st.host && from === st.hostId && st.lobby) { leave(); lobbyChanged("The host closed the game."); return; }
+        removePlayer(from);
         break;
     }
-  }
-
-  function myId() { const u = Backend.user(); return u ? u.id : ""; }
-
-  function partnerLeft() {
-    const was = partnerName();
-    st.partner = null; st.target = null; st.ghost = null;
-    if (st.on && gameState !== "finished") showToast("CO-OP", was + " LEFT THE GAME. CARRY ON SOLO.", "", 3);
-    if (st.lobby) lobbyChanged(was + " left.");
   }
 
   async function open(code, asHost) {
     leave();
     const ch = Backend.channel("feelzrun-coop-" + code, { config: { broadcast: { self: false, ack: false }, presence: { key: myId() } } });
     if (!ch) throw new Error("Online co-op works at feelzmachine.com/run.");
-    st.ch = ch; st.code = code; st.host = asHost; st.lobby = true; st.partner = null;
+    st.ch = ch; st.code = code; st.host = asHost; st.lobby = true; st.hostId = asHost ? myId() : "";
     st.offset = 0; st.bestRtt = Infinity;
-    st.myName = (Progress.data.name || "PLAYER").toUpperCase().slice(0, 16);
+    st.myName = cleanName(Progress.data.name || "PLAYER");
+    st.roster = asHost ? [{ id: myId(), name: st.myName }] : [];
+    st.peers = new Map();
     ch.on("broadcast", { event: "m" }, onMessage);
     ch.on("presence", { event: "leave" }, ({ leftPresences }) => {
-      if (!st.partner) return;
-      if ((leftPresences || []).some(p => (p.role === "host" && !st.host) || (st.partner && p.id === st.partner.id))) partnerLeft();
+      for (const p of leftPresences || []) {
+        if (!p || !p.id) continue;
+        if (!st.host && p.id === st.hostId && st.lobby) { leave(); lobbyChanged("The host closed the game."); return; }
+        removePlayer(p.id);
+      }
     });
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("Couldn't reach the co-op server. Check your connection and try again.")), 10000);
@@ -204,8 +258,7 @@ const Coop = (() => {
       try { ch.untrack(); } catch (e) {}
       try { Backend.removeChannel(ch); } catch (e) {}
     }
-    st.on = false; st.lobby = false; st.partner = null; st.target = null; st.ghost = null;
-    st.partnerCp = 0; st.partnerFinished = false; st.code = "";
+    st.on = false; st.lobby = false; st.roster = []; st.peers = new Map(); st.code = ""; st.hostId = "";
   }
 
   function scheduleStart(localAt) {
@@ -220,10 +273,20 @@ const Coop = (() => {
       clearInterval(st.countTimer);
       if (!st.lobby) return;
       st.lobby = false; st.on = true;
-      st.ghost = freshGhost(); st.target = null; st.partnerCp = 0; st.partnerFinished = false;
-      st.sendT = 0; st.songT = 0;
+      for (const p of st.peers.values()) { p.ghost = freshGhost(p.colour); p.target = null; p.cp = 0; }
+      st.sendT = 0; st.songT = 0; st.tripT = 0;
       if (typeof coopBegin === "function") coopBegin();
     }, Math.max(0, localAt - now()));
+  }
+
+  // Everyone back in the lobby, together, with the next mission picked. The crew stays connected.
+  function toLobby(missionId) {
+    clearTimeout(st.startTimer); clearInterval(st.countTimer);
+    st.on = false; st.lobby = true;
+    for (const p of st.peers.values()) { p.ghost = null; p.target = null; p.cp = 0; }
+    if (missionId) chooseMission(missionId);
+    if (typeof coopToLobby === "function") coopToLobby();
+    lobbyChanged();
   }
 
   // Called every frame from the game's update.
@@ -233,7 +296,8 @@ const Coop = (() => {
     if (!me) return;
     st.sendT -= realDt;
     if (st.sendT <= 0 && st.ch) {
-      st.sendT = SEND_EVERY;
+      // Fewer updates a second with more players, so the channel stays well inside its limits.
+      st.sendT = st.peers.size >= 4 ? 1 / 8 : st.peers.size >= 2 ? 1 / 10 : 1 / 15;
       const pose = kodaPose(me);
       send("s", {
         x: Math.round(me.x), y: Math.round(me.y), h: me.h,
@@ -247,36 +311,42 @@ const Coop = (() => {
       st.songT -= realDt;
       if (st.songT <= 0 && st.ch && gameState === "playing" && !taunt) { st.songT = SONG_EVERY; send("song", { c: songClock, t: now(), r: songRate() }); }
     }
-    // The partner glides towards their latest position.
-    const g = st.ghost, t = st.target;
-    if (g && t) {
+    st.tripT = Math.max(0, st.tripT - realDt);
+    let bestCp = 0;
+    for (const p of st.peers.values()) {
+      const g = p.ghost, t = p.target;
+      if (!g || !t) continue;
+      // Everyone else glides towards their latest position.
       const far = Math.abs(t.x - g.x) > 600 || Math.abs(t.y - g.y) > 600;
-      const k = far ? 1 : Math.min(1, realDt * 14);
+      const k = far ? 1 : Math.min(1, realDt * 12);
       g.x += (t.x - g.x) * k; g.y += (t.y - g.y) * k;
       g.h = t.h || STAND_H; g.facing = t.f || 1; g.pose = [t.a || "idle", t.n | 0];
       g.boostTime = t.b ? 1 : 0; g.shield = !!t.sh; g.ground = t.g ? { y: g.y } : null;
       g.cp = t.cp | 0; g.finished = !!t.fin; g.hidden = !!t.iw || !!t.fin;
+      bestCp = Math.max(bestCp, p.cp);
+      // Slide into someone to trip them up (once every couple of seconds).
+      if (!g.hidden && me.state === "slide" && st.tripT <= 0 && t.g && t.a !== "slide"
+          && Math.abs(g.x - me.x) < BODY_W * 1.1 && Math.abs(g.y - me.y) < 24) {
+        st.tripT = 2.5;
+        send("trip", { to: p.id });
+        showToast("TRIPPED", p.name + " GOES DOWN", "ko", 1.4);
+        sfx.stun && sfx.stun();
+      }
     }
-    // Slide into your partner to trip them up (once every couple of seconds).
-    st.tripT = Math.max(0, (st.tripT || 0) - realDt);
-    if (g && t && !g.hidden && me.state === "slide" && st.tripT <= 0 && t.g && t.a !== "slide"
-        && Math.abs(g.x - me.x) < BODY_W * 1.1 && Math.abs(g.y - me.y) < 24) {
-      st.tripT = 2.5;
-      send("trip", {});
-      showToast("TRIPPED", partnerName() + " GOES DOWN", "ko", 1.4);
-      sfx.stun && sfx.stun();
-    }
-
-    // Shared checkpoints: once the partner is past one, it counts for you too.
-    if (st.partnerCp > me.cp && !me.finished) me.cp = Math.min(st.partnerCp, level.checkpoints.length - 2);
+    // Shared checkpoints: once anyone is past one, it counts for everyone.
+    if (bestCp > me.cp && !me.finished) me.cp = Math.min(bestCp, level.checkpoints.length - 2);
   }
 
-  // Back in after a wipeout: beside the partner if they're further on and standing somewhere safe.
+  // Back in after a wipeout: beside whoever is furthest on and standing somewhere safe.
   function reviveSpot(fromX) {
-    if (!st.on || !st.ghost || !st.target || st.ghost.hidden) return null;
-    const g = st.ghost;
-    if (!st.target.g || g.x <= fromX) return null;
-    return { x: g.x - 30, y: g.y };
+    if (!st.on) return null;
+    let best = null;
+    for (const p of st.peers.values()) {
+      const g = p.ghost, t = p.target;
+      if (!g || !t || g.hidden || !t.g || g.x <= fromX) continue;
+      if (!best || g.x > best.x) best = { x: g.x - 30, y: g.y, name: p.name };
+    }
+    return best;
   }
 
   return {
@@ -284,32 +354,53 @@ const Coop = (() => {
     get lobby() { return st.lobby; },
     get host() { return st.host; },
     get code() { return st.code; },
-    get partner() { return st.partner; },
-    get ghost() { return st.on && st.ghost && st.target && !st.ghost.hidden ? st.ghost : null; },
+    get maxPlayers() { return MAX_PLAYERS; },
     get quiet() { return st.quiet; },
-    partnerCp: () => (st.on ? st.partnerCp : 0),
-    partnerName,
+    // Everyone in the game for the lobby, host first: { id, name, me, colour }.
+    get roster() {
+      const me = myId();
+      return st.roster.map((r, i) => ({ id: r.id, name: cleanName(r.name), me: r.id === me, host: i === 0, colour: colourFor(i) }));
+    },
+    get partner() { return st.peers.size ? [...st.peers.values()][0] : null; },
+    get partners() { return [...st.peers.values()]; },
+    // The other runners to draw during a run.
+    get ghosts() {
+      if (!st.on) return [];
+      const out = [];
+      for (const p of st.peers.values()) if (p.ghost && p.target && !p.ghost.hidden) { p.ghost.coopName = p.name; out.push(p.ghost); }
+      return out;
+    },
+    partnerName() { const names = [...st.peers.values()].map(p => p.name); return names.length ? names.join(", ") : "YOUR CREW"; },
     set onLobby(fn) { st.onLobby = fn; },
     async hostGame() { const code = makeCode(); await open(code, true); return code; },
     async join(code) {
       code = cleanCode(code);
       if (code.length !== 5) throw new Error("Codes are five letters and numbers.");
       await open(code, false);
-      send("hello", { name: st.myName, id: myId() });
+      send("hello", { name: st.myName });
       // No answer: nobody is hosting that code.
-      setTimeout(() => { if (st.lobby && !st.host && !st.partner) { leave(); lobbyChanged("No game found with that code. Check it with your partner."); } }, 6000);
+      setTimeout(() => { if (st.lobby && !st.host && !st.hostId) { leave(); lobbyChanged("No game found with that code. Check it with the host."); } }, 6000);
     },
     missionChanged(id) { if (st.lobby && st.host) send("mission", { mission: id }); },
     start() {
-      if (!st.host || !st.partner) return;
+      if (!st.host || !st.peers.size) return;
       const at = now() + 3500;
       send("start", { mission: selectedMission, at });
       scheduleStart(at);
     },
+    // Host: take the whole crew back to the lobby with this mission ready.
+    regroup(missionId) {
+      if (!st.host || !(st.on || st.lobby)) return;
+      send("regroup", { mission: missionId });
+      toLobby(missionId);
+    },
     leave,
     tick,
     reviveSpot,
-    noteMiss(idx) { st.partnerCp = Math.min(st.partnerCp, idx); st.cpHoldUntil = now() + 3000; st.cpHoldMax = idx; },
+    noteMiss(idx) {
+      for (const p of st.peers.values()) p.cp = Math.min(p.cp, idx);
+      st.cpHoldUntil = now() + 3000; st.cpHoldMax = idx;
+    },
     send(type, data) { if (st.on && !st.quiet) send(type, data); }
   };
 })();

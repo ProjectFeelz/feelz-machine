@@ -162,7 +162,6 @@ end;
 $$;
 
 -- The Hub: the artist's levels, and how many slots they have.
-drop function if exists public.game_artist_levels_mine();
 create or replace function public.game_artist_levels_mine()
 returns json
 language sql
@@ -245,11 +244,11 @@ begin
 end;
 $$;
 
--- The add-on's settings, off until a price is confirmed and it is switched on.
+-- The add-on: $2.99 a month, switched on.
 insert into public.platform_settings (key, value) values
   ('addon_feelzrun_monthly_usd', '2.99'),
-  ('addon_feelzrun_live', 'false')
-on conflict (key) do nothing;
+  ('addon_feelzrun_live', 'true')
+on conflict (key) do update set value = excluded.value, updated_at = now();
 
 revoke all on function public.game_artist_level_slots(uuid) from public, anon, authenticated;
 revoke all on function public.game_artist_level_in_slot(uuid) from public, anon, authenticated;

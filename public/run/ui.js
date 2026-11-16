@@ -482,13 +482,18 @@ function nextMissionEntry() {
   return next && next.ready && MISSION_DATA[next.id] ? next : null;
 }
 function setupNextButton() {
-  const next = coopOn() ? null : nextMissionEntry(), btn = document.getElementById("nextMissionButton");
-  btn.classList.toggle("hidden", !next);
-  if (next) btn.textContent = "NEXT: " + next.title + " →";
+  const next = nextMissionEntry(), btn = document.getElementById("nextMissionButton");
+  // Co-op: the host picks what's next for everyone; the rest wait for them.
+  const guest = coopOn() && !Coop.host;
+  btn.classList.toggle("hidden", !next || guest);
+  if (next) btn.textContent = (coopOn() ? "NEXT TOGETHER: " : "NEXT: ") + next.title + " →";
+  document.getElementById("restartButton").classList.toggle("hidden", guest);
+  if (guest) setText("finishLine", "Waiting for the host to pick what's next.");
 }
 function playNextMission() {
   const next = nextMissionEntry();
   if (!next) return;
+  if (coopOn()) { Coop.regroup(next.id); return; }
   selectedMission = next.id;
   buildMissionStrip();
   pauseOverlay.classList.add("hidden");
@@ -530,8 +535,8 @@ window.addEventListener("resize", () => setTimeout(checkOrientation, 120));
 window.addEventListener("orientationchange", () => setTimeout(checkOrientation, 250));
 
 function restartRun() {
-  // Co-op runs can't restart on one phone alone: back to the menu to host again.
-  if (coopOn()) { goToMenu(); return; }
+  // Co-op: the host runs it back for everyone, from the lobby.
+  if (coopOn()) { if (Coop.host) Coop.regroup(mission.id); return; }
   pauseOverlay.classList.add("hidden");
   finishOverlay.classList.add("hidden");
   gameState = "ready";
@@ -1485,23 +1490,21 @@ function coopRender(msg) {
   if (msg !== undefined) setText("coopError", inRoom ? "" : msg);
   if (!inRoom) return;
   startCoopStage();
-  const me = (Progress.data.name || "YOU").toUpperCase();
-  const partner = Coop.partner;
-  setText("coopCodeLabel", Coop.host ? "GIVE YOUR PARTNER THIS CODE" : "JOINED GAME");
+  const roster = Coop.roster, others = roster.filter(r => !r.me).length;
+  setText("coopCodeLabel", Coop.host ? "GIVE YOUR CREW THIS CODE" : "JOINED GAME");
   setText("coopCode", Coop.code);
   const entry = MISSIONS.find(mi => mi.id === selectedMission);
   setText("coopMission", entryLabel(entry));
   document.getElementById("coopPrev").classList.toggle("hidden", !Coop.host);
   document.getElementById("coopNext").classList.toggle("hidden", !Coop.host);
-  setText("coopMeTag", Coop.host ? "HOST" : "PARTNER");
-  setText("coopMeName", me);
-  setText("coopThemTag", Coop.host ? "PARTNER" : "HOST");
-  setText("coopThemName", partner ? partner.name : "WAITING...");
-  document.getElementById("coopThem").classList.toggle("ready", !!partner);
   const start = document.getElementById("coopStart");
   start.classList.toggle("hidden", !Coop.host);
-  start.disabled = !partner;
-  setText("coopStatus", msg || (partner ? (Coop.host ? "READY WHEN YOU ARE" : "WAITING FOR " + partner.name + " TO START") : Coop.host ? "WAITING FOR YOUR PARTNER TO JOIN" : "CONNECTING..."));
+  start.disabled = others < 1;
+  const count = roster.length + " OF " + Coop.maxPlayers + " PLAYERS";
+  const host = roster.find(r => r.host);
+  setText("coopStatus", msg || (Coop.host
+    ? (others ? count + " · READY WHEN YOU ARE" : "WAITING FOR PLAYERS TO JOIN · UP TO " + Coop.maxPlayers)
+    : (host ? count + " · WAITING FOR " + host.name + " TO START" : "CONNECTING...")));
 }
 
 function openCoop() {
@@ -1611,8 +1614,8 @@ window.addEventListener("popstate", () => {
   armBack();
 });
 
-// The lobby stage: you and your partner standing ready, idling, under a spotlight each.
-// Your Koda wears your outfit; your partner is the blue runner they'll see in the game.
+// The lobby stage: everyone in the game standing ready, idling, each under their own light.
+// Your Koda wears your outfit; everyone else is in the colour you'll see them in during the run.
 let coopStageRaf = 0;
 function drawCoopStage(now) {
   coopStageRaf = 0;
@@ -1622,27 +1625,51 @@ function drawCoopStage(now) {
   const W2 = c.width, H2 = c.height;
   g.clearRect(0, 0, W2, H2);
   const def = SPRITES.koda, a = def.animations.idle, cell = def.cell;
-  const size = H2 * 1.02;
-  const spots = [
-    { x: W2 * 0.3, img: kodaSheet(playerOutfit), here: true, glow: "rgba(241, 202, 120, 0.32)", off: 0 },
-    { x: W2 * 0.7, img: kodaSheetFor({ id: 2 }), here: !!Coop.partner, glow: "rgba(127, 227, 255, 0.28)", off: 3 }
-  ];
-  for (const s of spots) {
-    const floor = H2 * 0.93;
-    const light = g.createRadialGradient(s.x, floor, 4, s.x, floor, W2 * 0.2);
-    light.addColorStop(0, s.glow); light.addColorStop(1, "rgba(0,0,0,0)");
-    g.fillStyle = light; g.fillRect(s.x - W2 * 0.22, 0, W2 * 0.44, H2);
+  const roster = Coop.roster;
+  const slots = [];
+  for (let i = 0; i < Coop.maxPlayers; i++) slots.push(roster[i] || null);
+  const step = W2 / slots.length, floor = H2 * 0.8, size = Math.min(H2 * 0.84, step * 1.7);
+  slots.forEach((r, i) => {
+    const x = step * (i + 0.5);
+    const colour = r ? r.colour.text : "#555";
+    const light = g.createRadialGradient(x, floor, 4, x, floor, step * 0.55);
+    light.addColorStop(0, r ? colour + "55" : "rgba(255,255,255,0.05)"); light.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = light; g.fillRect(x - step / 2, 0, step, H2);
     g.fillStyle = "rgba(0, 0, 0, 0.45)";
-    g.beginPath(); g.ellipse(s.x, floor, 52, 9, 0, 0, Math.PI * 2); g.fill();
-    if (!s.img || s.img.ready === false) continue;
-    const f = (Math.floor(now / 1000 * a.fps) + s.off) % a.frames;
-    g.save();
-    if (!s.here) { g.globalAlpha = 0.28 + 0.1 * Math.sin(now / 400); g.filter = "brightness(0)"; }
-    g.translate(s.x, floor);
-    if (s.x > W2 / 2) g.scale(-1, 1);   // facing each other
-    g.drawImage(s.img, f * cell, a.row * cell, cell, cell, -size / 2, -size * def.footY, size, size);
-    g.restore();
-  }
+    g.beginPath(); g.ellipse(x, floor, Math.min(44, step * 0.3), 8, 0, 0, Math.PI * 2); g.fill();
+    const img = !r ? art.koda : r.me ? kodaSheet(playerOutfit) : kodaSheetFor({ id: 2, coopTint: r.colour.tint });
+    if (img && img.ready !== false) {
+      const f = (Math.floor(now / 1000 * a.fps) + i * 3) % a.frames;
+      g.save();
+      if (!r) { g.globalAlpha = 0.22 + 0.08 * Math.sin(now / 400 + i); g.filter = "brightness(0)"; }
+      g.translate(x, floor);
+      if (i >= slots.length / 2) g.scale(-1, 1);   // two lines facing each other
+      g.drawImage(img, f * cell, a.row * cell, cell, cell, -size / 2, -size * def.footY, size, size);
+      g.restore();
+    }
+    g.font = "700 " + (slots.length > 4 ? 18 : 22) + "px 'Barlow Condensed', sans-serif";
+    g.textAlign = "center"; g.textBaseline = "top";
+    g.fillStyle = r ? colour : "rgba(255,255,255,0.3)";
+    g.fillText(r ? r.name + (r.me ? " (YOU)" : "") : "OPEN", x, floor + 14);
+    if (r && r.host) { g.font = "700 14px 'Barlow Condensed', sans-serif"; g.fillStyle = "rgba(255,255,255,0.45)"; g.fillText("HOST", x, floor + 40); }
+  });
   coopStageRaf = requestAnimationFrame(drawCoopStage);
 }
 function startCoopStage() { if (!coopStageRaf) coopStageRaf = requestAnimationFrame(drawCoopStage); }
+
+// Co-op: the crew comes back to the lobby between missions (the host chose the next one).
+function coopToLobby() {
+  if (gameState === "playing" || gameState === "paused") fadeOutMusic(0.8);
+  sfx.quiet();
+  gameState = "ready";
+  for (const k in keys) keys[k] = false;
+  pauseOverlay.classList.add("hidden");
+  finishOverlay.classList.add("hidden");
+  startOverlay.classList.remove("hidden");
+  gameFrame.classList.add("menu-mode");
+  updatePlayerCard();
+  requestAnimationFrame(attractLoop);
+  Coop.onLobby = msg => coopRender(msg);
+  coopOverlay.classList.remove("hidden");
+  coopRender("");
+}

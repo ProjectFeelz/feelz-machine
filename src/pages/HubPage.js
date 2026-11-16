@@ -18,7 +18,7 @@ import {
   User, LogOut, DollarSign, Radio, Mic2,
   Loader, X, Youtube, Info, Search,
   Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff, Bug, Newspaper, MailCheck,
-  SlidersHorizontal, Gamepad2} from 'lucide-react';
+  SlidersHorizontal} from 'lucide-react';
 import { sendNotification } from '../utils/notify';
 
 function LinkCard({ icon: Icon, label, description, path, color, onClick }) {
@@ -436,7 +436,6 @@ export default function HubPage() {
               <LinkCard icon={Radio}          label="Collab Radar"   description="Find artists who vibe with your sound"  onClick={() => navigate('/collab-radar')} color="bg-purple-500/20" />
               <LinkCard icon={HeartHandshake} label="Collaborations" description="Manage collab requests and credits"     onClick={() => setActiveTab('collabs')}   color="bg-cyan-500/20" />
               <LinkCard icon={BarChart3}      label="Analytics"      description="Track performance and stream data"      path="/dashboard?tab=analytics" color="bg-indigo-500/20" />
-              <LinkCard icon={Gamepad2}       label="Feelz Run Levels" description="Put your songs in the game"          path="/feelz-run-levels"        color="bg-amber-500/20" />
               {/* Artists had NO route to chat rooms at all.
                   The Chat Rooms card lives in the Discover section, which is
                   wrapped in {!isArtist}. The Chat button on an artist profile

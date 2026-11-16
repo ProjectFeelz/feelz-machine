@@ -20,6 +20,7 @@ import DragList from '../components/DragList';
 import { notifyCollabRequest } from '../components/notificationTriggers';
 import RetailSubmitGate from '../components/legal/RetailSubmitGate';
 import InstagramRequestSheet from '../components/InstagramRequestSheet';
+import FeelzRunLevelSection from '../components/FeelzRunLevelSection';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -3485,6 +3486,9 @@ export default function TrackUploadPanel() {
                                   </div>
                                 </div>
 
+                                {/* Feelz Run: this song as a level in the game. Folded until opened. */}
+                                <FeelzRunLevelSection track={track} />
+
                                 <div className="flex space-x-2 pt-1">
                                   <button type="button" onClick={async () => {
                                     await saveEdit(track.id);
@@ -3766,6 +3770,9 @@ export default function TrackUploadPanel() {
                             <CollaboratorSearch collaborators={editCollaborators}
                               setCollaborators={setEditCollaborators} currentArtistId={artist.id} />
                           </div>
+
+                          {/* Feelz Run: this song as a level in the game. Folded until opened. */}
+                          <FeelzRunLevelSection track={track} />
 
                           <div className="flex space-x-2 pt-1">
                             <button type="button" onClick={() => saveEdit(track.id)} disabled={isWorking}

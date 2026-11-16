@@ -1185,7 +1185,28 @@ function tintSheet(img) {
   return c;
 }
 const ZORA_SCALE = 1.15, ZORA_WIDEN = 1.1, NPC_WIDEN = 1.12;
+// Co-op: each other runner in their own colour, each sheet made once.
+const coopSheets = {};
+function coopTinted(img, tint) {
+  const key = (img === art.zora ? "z:" : "k:") + tint;
+  if (!coopSheets[key] && img && img.ready !== false && img.width) {
+    const c = document.createElement("canvas");
+    c.width = img.width; c.height = img.height;
+    const k = c.getContext("2d");
+    k.drawImage(img, 0, 0);
+    k.globalCompositeOperation = "source-atop";
+    k.fillStyle = tint;
+    k.fillRect(0, 0, c.width, c.height);
+    if (img === art.zora) c._zora = true;
+    coopSheets[key] = c;
+  }
+  return coopSheets[key] || img;
+}
 function kodaSheetFor(p) {
+  if (p.coopTint) {
+    if (mission && mission.player === "zora" && art.zora.ready) return coopTinted(art.zora, p.coopTint);
+    return art.koda.ready ? coopTinted(art.koda, p.coopTint) : art.koda;
+  }
   if (mission && mission.player === "zora" && art.zora.ready) {
     if (p.id === 1) return art.zora;
     if (!tintedZora) tintedZora = tintSheet(art.zora);
@@ -1216,7 +1237,7 @@ function drawSheetFrame(img, def, anim, frame, footX, footY, facing, opts) {
   if (facing < 0) ctx.scale(-1, 1);
   if (opts && opts.mirror) ctx.scale(1, -1);
   // Zora's renders were framed wider than Koda's: bring her up to her real size, and not so narrow.
-  if (img === art.zora || img === tintedZora || (opts && opts.zora)) ctx.scale(ZORA_SCALE * ZORA_WIDEN, ZORA_SCALE);
+  if (img === art.zora || img === tintedZora || (img && img._zora) || (opts && opts.zora)) ctx.scale(ZORA_SCALE * ZORA_WIDEN, ZORA_SCALE);
   if (opts && opts.alpha !== undefined) ctx.globalAlpha = opts.alpha;
   if (opts && opts.glow) { ctx.shadowColor = opts.glow; ctx.shadowBlur = opts.blur || 7; }
   ctx.drawImage(img, f * cell, a.row * cell, cell, cell, -size / 2, -size * def.footY, size, size);
@@ -1326,40 +1347,44 @@ function drawSpeedWind(p) {
   ctx.restore();
 }
 
-// Co-op: the partner's name over their head, and an arrow at the screen edge when they're out of view.
+// Co-op: everyone's name over their head in their colour, and an arrow at the screen edge for anyone out of view.
 function drawCoopPartner() {
-  const g = typeof Coop !== "undefined" ? Coop.ghost : null;
-  if (!g) return;
-  const name = Coop.partnerName();
+  const list = typeof Coop !== "undefined" ? Coop.ghosts : [];
+  if (!list.length) return;
   ctx.save();
-  ctx.font = "700 15px 'Barlow Condensed', sans-serif";
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  const x = sx(g.x), y = sy(g.y - g.h) - 16;
-  if (x > 20 && x < W - 20 && y > 10 && y < H - 10) {
-    const w = ctx.measureText(name).width + 16;
-    ctx.fillStyle = "rgba(10, 20, 30, 0.7)"; ctx.fillRect(x - w / 2, y - 10, w, 20);
-    ctx.fillStyle = "#7fe3ff"; ctx.fillText(name, x, y);
-  } else {
-    const left = x <= 20;
-    const ax = left ? 26 : W - 26, ay = Math.max(40, Math.min(H - 40, y));
-    const dist = Math.round(Math.abs(g.x - players[0].x) / PX);
-    ctx.fillStyle = "rgba(10, 20, 30, 0.75)";
-    ctx.beginPath(); ctx.arc(ax, ay, 20, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#7fe3ff";
-    ctx.beginPath();
-    if (left) { ctx.moveTo(ax - 9, ay); ctx.lineTo(ax + 5, ay - 9); ctx.lineTo(ax + 5, ay + 9); }
-    else { ctx.moveTo(ax + 9, ay); ctx.lineTo(ax - 5, ay - 9); ctx.lineTo(ax - 5, ay + 9); }
-    ctx.fill();
-    ctx.font = "700 12px 'Barlow Condensed', sans-serif";
-    ctx.fillText(name + " " + dist + "M", left ? ax + 40 : ax - 40, ay + 28);
+  const edges = { left: 0, right: 0 };
+  for (const g of list) {
+    const name = g.coopName || "PLAYER", colour = g.coopText || "#7fe3ff";
+    const x = sx(g.x), y = sy(g.y - g.h) - 16;
+    if (x > 20 && x < W - 20 && y > 10 && y < H - 10) {
+      ctx.font = "700 15px 'Barlow Condensed', sans-serif";
+      const w = ctx.measureText(name).width + 16;
+      ctx.fillStyle = "rgba(10, 20, 30, 0.7)"; ctx.fillRect(x - w / 2, y - 10, w, 20);
+      ctx.fillStyle = colour; ctx.fillText(name, x, y);
+    } else {
+      const left = x <= 20, side = left ? "left" : "right";
+      const ax = left ? 26 : W - 26, ay = Math.max(40, Math.min(H - 40, y)) + edges[side] * 56;
+      edges[side] += 1;
+      const dist = Math.round(Math.abs(g.x - players[0].x) / PX);
+      ctx.fillStyle = "rgba(10, 20, 30, 0.75)";
+      ctx.beginPath(); ctx.arc(ax, ay, 20, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = colour;
+      ctx.beginPath();
+      if (left) { ctx.moveTo(ax - 9, ay); ctx.lineTo(ax + 5, ay - 9); ctx.lineTo(ax + 5, ay + 9); }
+      else { ctx.moveTo(ax + 9, ay); ctx.lineTo(ax - 5, ay - 9); ctx.lineTo(ax - 5, ay + 9); }
+      ctx.fill();
+      ctx.font = "700 12px 'Barlow Condensed', sans-serif";
+      ctx.fillText(name + " " + dist + "M", left ? ax + 40 : ax - 40, ay + 28);
+    }
   }
   ctx.restore();
 }
 
 function drawPlayers() {
   // Co-op: the partner is drawn like a second runner (tinted), from their latest position.
-  const ghost = typeof Coop !== "undefined" ? Coop.ghost : null;
-  for (const p of (ghost ? [ghost].concat(players) : players)) {
+  const ghosts = typeof Coop !== "undefined" ? Coop.ghosts : [];
+  for (const p of (ghosts.length ? ghosts.concat(players) : players)) {
     if (p.invuln > 0 && !p.finished && Math.floor(frameTime * 14) % 2 === 0) continue;
     const [anim, frame] = kodaPose(p);
     const img = kodaSheetFor(p);
