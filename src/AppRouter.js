@@ -39,6 +39,7 @@ const GuidesIndexPage = React.lazy(() => import('./pages/GuidesIndexPage'));
 const GuidePage = React.lazy(() => import('./pages/GuidePage'));
 const FaqPage = React.lazy(() => import('./pages/FaqPage'));
 const SplitsPage = React.lazy(() => import('./pages/SplitsPage'));
+const GamesPage = React.lazy(() => import('./pages/GamesPage'));
 const LoginPage = React.lazy(() => import('./pages/LoginPage'));
 const ResetPasswordPage = React.lazy(() => import('./pages/ResetPasswordPage'));
 const LibraryPage = React.lazy(() => import('./pages/LibraryPage'));
@@ -639,6 +640,7 @@ export default function AppRouter() {
                 <Route path="/newsletter/:slug" element={<NewsletterPostPage />} />
                 <Route path="/legal/:slug" element={<LegalDocumentPage />} />
                 <Route path="/splits" element={<SplitsPage />} />
+                <Route path="/games" element={<GamesPage />} />
                 <Route path="/admin/home-hero" element={<AdminHomeHero />} />
                 <Route path="/admin/news" element={<AdminNews />} />
                 <Route path="/admin/cold-start" element={<AdminColdStart />} />

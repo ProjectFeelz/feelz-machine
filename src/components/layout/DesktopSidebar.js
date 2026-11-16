@@ -60,16 +60,10 @@ export default function DesktopSidebar() {
       ? [{ path: '/hub', icon: LayoutDashboard, label: isBeatmaker ? 'Studio' : 'Hub' }]
       : []),
     { path: '/profile',      icon: User,            label: 'Profile' },
-    { path: '/run/',         icon: Gamepad2,        label: 'Feelz Run' },
+    { path: '/games',        icon: Gamepad2,        label: 'Games' },
   ];
 
   const handleNav = (path) => {
-    // The game is a static page in public/run, so it needs a full page load
-    // rather than a router push. Same origin, so it stays in the app window.
-    if (path === '/run/') {
-      window.location.href = '/run/';
-      return;
-    }
     if ((path === '/library' || path === '/profile') && !user) {
       navigate('/login');
       return;

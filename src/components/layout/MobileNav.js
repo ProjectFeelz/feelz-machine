@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Library, LayoutDashboard, Sparkles, Plus, DollarSign } from 'lucide-react';
+import { Home, Search, Library, Sparkles, Plus, Gamepad2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHaptics } from '../../hooks/useHaptics';
 import { useKeyboardOpen } from '../../hooks/useKeyboardInset';
@@ -8,7 +8,7 @@ import { useKeyboardOpen } from '../../hooks/useKeyboardInset';
 export default function MobileNav({ onOpenCreateMenu }) {
   const navigate        = useNavigate();
   const location        = useLocation();
-  const { user, isBeatmaker, isArtist } = useAuth();
+  const { user } = useAuth();
 
   // The detection that was inline here compared the visual viewport against
   // window.innerHeight:
@@ -45,11 +45,10 @@ export default function MobileNav({ onOpenCreateMenu }) {
     // listeners see different menus (handled at render time below)
     { special: 'plus', tourKey: 'nav-create' },
     { path: '/library',      icon: Library,         label: 'Library',   tourKey: 'nav-library'  },
-    // Hub for artists/beatmakers, Affiliate Program for listeners — either
-    // way everyone ends up with 5 items so the plus sits at a true center
-    ...(isArtist || isBeatmaker
-      ? [{ path: '/hub', icon: LayoutDashboard, label: isBeatmaker ? 'Studio' : 'Hub', tourKey: 'nav-hub' }]
-      : [{ path: '/affiliates', icon: DollarSign, label: 'Earn', tourKey: 'nav-affiliate' }]),
+    // Games for everyone, so there are 5 items and the plus sits at a true
+    // centre. The Hub (or Studio) and the Affiliate Programme are in the
+    // create menu behind the plus.
+    { path: '/games', icon: Gamepad2, label: 'Games', tourKey: 'nav-games' },
   ];
 
   return (

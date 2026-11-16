@@ -25,7 +25,7 @@ import CreateMenuSection, { MENU_TINTS } from './CreateMenuSection';
 export default function CreateMenuModal({ artist, user, onClose, primaryColor = '#90AF2F', bgColor = '#000000' }) {
   const navigate = useNavigate();
   const sessionsGate = useSchoolSessions();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isBeatmaker } = useAuth();
   // Newsletter shortcut, shown only to admins and newsletter editors so
   // Jane can reach it in one tap instead of Monetize > Affiliates > Newsletter.
   const [canNewsletter, setCanNewsletter] = useState(false);
@@ -402,6 +402,8 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   heading: 'Account',
                   tint: MENU_TINTS.account,
                   items: [
+                    // The Hub moved here from the bottom bar on phones, where Games now sits.
+                    { id: 'hub', icon: '🏠', label: isBeatmaker ? 'Studio' : 'Hub', sub: 'All your tools in one place' },
                     { id: 'settings', icon: '⚙️', label: 'Settings', sub: 'Payments, theme and account' },
                     // EARNINGS, THE PAGE THAT JUSTIFIES THE WHOLE PLATFORM.
                     //
@@ -471,7 +473,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                     ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
                       ? [{ id: 'sessions', icon: '🏆', label: 'Enter Sessions', sub: 'The cover competition, open to everyone' }]
                       : []),
-                    { id: 'game', icon: '\u{1F3AE}', label: 'Feelz Run', sub: 'Play the game, earn credits' },
+                    { id: 'game', icon: '\u{1F3AE}', label: 'Feelz Games', sub: 'Feelz Run and more' },
                   ],
                 },
               ].map(({ heading, tint, items }) => (
@@ -490,6 +492,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                       else if (id === 'upload') { close(); navigate('/dashboard?tab=upload'); }
                       else if (id === 'edit') { close(); navigate('/profile/edit'); }
                       // The account page, not the bio form. See the Account group above.
+                      else if (id === 'hub') { close(); navigate('/hub'); }
                       else if (id === 'settings') { close(); navigate('/profile'); }
                       else if (id === 'splits') { close(); navigate('/splits'); }
                       else if (id === 'affiliates') { close(); navigate('/affiliates'); }
@@ -507,9 +510,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                       else if (id === 'chats') { close(); navigate('/community'); }
                       else if (id === 'course') { close(); navigate('/learn'); }
                       else if (id === 'sessions') { close(); navigate('/sessions'); }
-                      // Feelz Run is a static game in public/run: a full page
-                      // load, same origin, so it opens inside the app window.
-                      else if (id === 'game') { close(); window.location.href = '/run/'; }
+                      else if (id === 'game') { close(); navigate('/games'); }
                       else setCreateTab(id);
                     },
                   }))} />
