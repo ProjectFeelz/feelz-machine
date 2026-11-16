@@ -23,6 +23,17 @@ const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+// Feelz Retail is switched on by platform_settings.retail_open = 'true'.
+// Until then nobody can sign up or start paying. Missing or unreadable reads
+// as closed, because charging a venue before Retail opens is the thing this
+// must never do.
+async function retailOpen() {
+  const { data, error } = await supabase.from('platform_settings')
+    .select('value').eq('key', 'retail_open').maybeSingle();
+  if (error) { console.error('[retail] retail_open read failed:', error.message); return false; }
+  return String(data?.value || '').trim().toLowerCase() === 'true';
+}
+
 async function settings() {
   const { data } = await supabase.from('platform_settings')
     .select('key, value')
@@ -40,9 +51,10 @@ async function settings() {
   if (countErr) console.error('[retail-signup] playable count failed:', countErr.message);
   const needed = Number.isFinite(minTracks) && minTracks > 0 ? minTracks : 30;
   const enoughMusic = !countErr && Number(playable) >= needed;
+  const open = await retailOpen();
 
   return {
-    priceUsd:  enoughMusic && Number.isFinite(price) && price > 0 ? Math.round(price * 100) / 100 : null,
+    priceUsd:  open && enoughMusic && Number.isFinite(price) && price > 0 ? Math.round(price * 100) / 100 : null,
     trialDays: Number.isFinite(trial) && trial > 0 && trial <= 90 ? trial : 0,
   };
 }

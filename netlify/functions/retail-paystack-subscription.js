@@ -147,6 +147,17 @@ async function latestSub(venueId) {
   return data || null;
 }
 
+// Feelz Retail is switched on by platform_settings.retail_open = 'true'.
+// Until then nobody can sign up or start paying. Missing or unreadable reads
+// as closed, because charging a venue before Retail opens is the thing this
+// must never do.
+async function retailOpen() {
+  const { data, error } = await supabase.from('platform_settings')
+    .select('value').eq('key', 'retail_open').maybeSingle();
+  if (error) { console.error('[retail] retail_open read failed:', error.message); return false; }
+  return String(data?.value || '').trim().toLowerCase() === 'true';
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'method_not_allowed' });
 
@@ -184,6 +195,15 @@ exports.handler = async (event) => {
   ]);
   if (!venueRow) return json(404, { error: 'venue_not_found' });
   if (venueRow.user_id !== caller.id && !adminRow) return json(403, { error: 'not_your_venue' });
+
+  // Nobody starts paying before Feelz Retail opens. Reading the state and
+  // cancelling stay allowed; starting a trial or a subscription does not.
+  if (!adminRow && (action === 'start-trial' || action === 'start') && !(await retailOpen())) {
+    return json(403, {
+      error: 'retail_not_open', closed: true,
+      message: 'Feelz Retail is not open yet. We will email you the day it opens. You have not been charged.',
+    });
+  }
 
   try {
     const sub = await latestSub(venueId);

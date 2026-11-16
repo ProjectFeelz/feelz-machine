@@ -81,6 +81,17 @@ async function paypalRequest(method, path, body, accessToken) {
   });
 }
 
+// Feelz Retail is switched on by platform_settings.retail_open = 'true'.
+// Until then nobody can sign up or start paying. Missing or unreadable reads
+// as closed, because charging a venue before Retail opens is the thing this
+// must never do.
+async function retailOpen() {
+  const { data, error } = await supabase.from('platform_settings')
+    .select('value').eq('key', 'retail_open').maybeSingle();
+  if (error) { console.error('[retail] retail_open read failed:', error.message); return false; }
+  return String(data?.value || '').trim().toLowerCase() === 'true';
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -124,6 +135,27 @@ exports.handler = async (event) => {
   }
 
   try {
+    // ========== RETAIL NOT OPEN YET ==========
+    // Nobody starts paying before Feelz Retail opens. Anything already set up
+    // at PayPal for this venue is switched off on the way out, so a billing
+    // page left open in a tab cannot start a subscription either. Admins can
+    // still set a venue up by hand.
+    if (!adminRow && !(await retailOpen())) {
+      try {
+        const accessToken = await getPayPalAccessToken();
+        if (action === 'link' && subscriptionId) {
+          await paypalRequest('POST', `/v1/billing/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`,
+            { reason: 'Feelz Retail is not open yet. Nothing has been charged.' }, accessToken);
+        }
+        const { data: open } = await supabase.from('retail_subscriptions')
+          .select('paypal_plan_id').eq('venue_id', venueId).not('paypal_plan_id', 'is', null);
+        for (const r of open || []) {
+          await paypalRequest('POST', `/v1/billing/plans/${encodeURIComponent(r.paypal_plan_id)}/deactivate`, null, accessToken);
+        }
+      } catch (e) { console.error('[retail-paypal] closing billing failed:', e.message); }
+      return { statusCode: 403, body: JSON.stringify({ error: 'Feelz Retail is not open yet. We will email you the day it opens. You have not been charged.', closed: true }) };
+    }
+
     // ========== GET OR CREATE PLAN ==========
     if (action === 'get-plan') {
       const { data: sub, error: subErr } = await supabase
