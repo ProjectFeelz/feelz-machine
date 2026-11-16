@@ -1256,6 +1256,7 @@ function frameFor(def, anim, clock, loopOverride) {
 }
 
 function kodaPose(p) {
+  if (p.pose) return p.pose;   // the co-op partner: their pose arrives with their position
   const def = SPRITES.koda, A = def.animations;
   if (p.zip) return ["climb", 2];
   if (p.state === "dance") return ["idle", frameFor(def, "idle", frameTime)];
@@ -1325,8 +1326,40 @@ function drawSpeedWind(p) {
   ctx.restore();
 }
 
+// Co-op: the partner's name over their head, and an arrow at the screen edge when they're out of view.
+function drawCoopPartner() {
+  const g = typeof Coop !== "undefined" ? Coop.ghost : null;
+  if (!g) return;
+  const name = Coop.partnerName();
+  ctx.save();
+  ctx.font = "700 15px 'Barlow Condensed', sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const x = sx(g.x), y = sy(g.y - g.h) - 16;
+  if (x > 20 && x < W - 20 && y > 10 && y < H - 10) {
+    const w = ctx.measureText(name).width + 16;
+    ctx.fillStyle = "rgba(10, 20, 30, 0.7)"; ctx.fillRect(x - w / 2, y - 10, w, 20);
+    ctx.fillStyle = "#7fe3ff"; ctx.fillText(name, x, y);
+  } else {
+    const left = x <= 20;
+    const ax = left ? 26 : W - 26, ay = Math.max(40, Math.min(H - 40, y));
+    const dist = Math.round(Math.abs(g.x - players[0].x) / PX);
+    ctx.fillStyle = "rgba(10, 20, 30, 0.75)";
+    ctx.beginPath(); ctx.arc(ax, ay, 20, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#7fe3ff";
+    ctx.beginPath();
+    if (left) { ctx.moveTo(ax - 9, ay); ctx.lineTo(ax + 5, ay - 9); ctx.lineTo(ax + 5, ay + 9); }
+    else { ctx.moveTo(ax + 9, ay); ctx.lineTo(ax - 5, ay - 9); ctx.lineTo(ax - 5, ay + 9); }
+    ctx.fill();
+    ctx.font = "700 12px 'Barlow Condensed', sans-serif";
+    ctx.fillText(name + " " + dist + "M", left ? ax + 40 : ax - 40, ay + 28);
+  }
+  ctx.restore();
+}
+
 function drawPlayers() {
-  for (const p of players) {
+  // Co-op: the partner is drawn like a second runner (tinted), from their latest position.
+  const ghost = typeof Coop !== "undefined" ? Coop.ghost : null;
+  for (const p of (ghost ? [ghost].concat(players) : players)) {
     if (p.invuln > 0 && !p.finished && Math.floor(frameTime * 14) % 2 === 0) continue;
     const [anim, frame] = kodaPose(p);
     const img = kodaSheetFor(p);
@@ -1913,6 +1946,7 @@ function render() {
   drawHound();
   drawDogs();
   drawPlayers();
+  drawCoopPartner();
   drawStallFronts();
   drawHedges();
   drawCrowds("front");

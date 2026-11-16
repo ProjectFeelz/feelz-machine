@@ -14,6 +14,8 @@ const leaderOverlay = document.getElementById("leaderOverlay");
 const skillsOverlay = document.getElementById("skillsOverlay");
 const journalOverlay = document.getElementById("journalOverlay");
 const joinOverlay = document.getElementById("joinOverlay");
+const coopOverlay = document.getElementById("coopOverlay");
+let coopMode = false;
 const gameFrame = document.querySelector(".game-frame");
 
 function setText(id, value) {
@@ -145,6 +147,7 @@ function startGame(fromJoin) {
   if (!entry || !entry.ready || !MISSION_DATA[selectedMission]) return;
   if (mustSignIn()) { updatePlayerCard(); return; }
   if (twoPlayer && !aiRival && fromJoin !== true) { openJoin(); return; }
+  if (coopMode && fromJoin !== "coop") { openCoop(); return; }
   playerNames = [signedIn() && Progress.data.name ? Progress.data.name.toUpperCase() : "", twoPlayer && !aiRival ? join.p2Name : ""];
   applyStyle();
   loadMission(selectedMission);
@@ -200,7 +203,7 @@ function showResults(result) {
   document.getElementById("soloResults").classList.remove("hidden");
   document.getElementById("raceResults").classList.add("hidden");
   const notes = result.notesLow + result.notesMid + result.notesHigh;
-  setText("finishMission", "MISSION " + String(mission.number).padStart(2, "0") + " · " + mission.title);
+  setText("finishMission", missionLabel(mission));
   setText("finalRecords", result.records + "/" + result.total.records);
   setText("finalNotes", notes + "/" + result.total.notes);
   setText("finalNotesSplit", result.notesHigh + " GOLD · " + result.notesMid + " DOUBLE · " + result.notesLow + " NOTE");
@@ -220,6 +223,7 @@ function showResults(result) {
     setText("finishLine", "The song beat you to " + result.misses + (result.misses === 1 ? " checkpoint" : " checkpoints") + ". Run it back and stay ahead of it.");
   }
   setText("finishTitle", "MISSION COMPLETE");
+  if (coopOn()) setText("finishEyebrow", "CO-OP WITH " + Coop.partnerName());
   setText("finalRp", result.rp.toLocaleString());
   setText("finalXp", "+" + result.xp + " XP");
   setText("finalRank", "");
@@ -272,7 +276,7 @@ function showRaceResults() {
   document.getElementById("soloResults").classList.add("hidden");
   document.getElementById("raceResults").classList.remove("hidden");
   document.getElementById("postScoreButton").classList.add("hidden");
-  setText("finishMission", "MISSION " + String(mission.number).padStart(2, "0") + " · " + mission.title + (aiRival ? " · VS RIVAL (" + aiLevel.toUpperCase() + ")" : " · 2 PLAYER RACE"));
+  setText("finishMission", missionLabel(mission) + (aiRival ? " · VS RIVAL (" + aiLevel.toUpperCase() + ")" : " · 2 PLAYER RACE"));
   document.querySelector("#raceP1 h3").textContent = aiRival ? "YOU" : "P1";
   document.querySelector("#raceP2 h3").textContent = aiRival ? "RIVAL" : "P2";
   // Points: every record counts, plus 10 for finishing first and 5 for finishing second.
@@ -447,11 +451,12 @@ function updateHud() {
 function pauseGame() {
   if (gameState !== "playing") return;
   gameState = "paused";
+  if (coopOn()) Coop.send("pause");
   sfx.holdPad(false);
   for (const k in keys) keys[k] = false;
   songAudio.pause();
   sfx.quiet();
-  setText("pauseTrack", "MISSION " + String(mission.number).padStart(2, "0") + " · " + mission.title + " · " + (mission.parts[currentPartIndex()] || {}).name);
+  setText("pauseTrack", missionLabel(mission) + " · " + (mission.parts[currentPartIndex()] || {}).name);
   pauseOverlay.classList.remove("hidden");
   navFocus(document.getElementById("resumeButton"));
 }
@@ -460,6 +465,7 @@ function resumeGame() {
   if (gameState !== "paused") return;
   pauseOverlay.classList.add("hidden");
   gameState = "playing";
+  if (coopOn()) Coop.send("resume");
   players.forEach(p => { p.jumpPressed = true; p.attackPressed = true; });
   sfx.init();
   songAudio.play().then(() => { musicBlocked = false; }).catch(() => { musicBlocked = true; });
@@ -471,11 +477,12 @@ function resumeGame() {
 function nextMissionEntry() {
   const id = mission ? mission.id : selectedMission;
   const i = MISSIONS.findIndex(mi => mi.id === id);
+  if (i >= 0 && MISSIONS[i].artist) return null;   // artist runs stand alone
   const next = i >= 0 ? MISSIONS[i + 1] : null;
   return next && next.ready && MISSION_DATA[next.id] ? next : null;
 }
 function setupNextButton() {
-  const next = nextMissionEntry(), btn = document.getElementById("nextMissionButton");
+  const next = coopOn() ? null : nextMissionEntry(), btn = document.getElementById("nextMissionButton");
   btn.classList.toggle("hidden", !next);
   if (next) btn.textContent = "NEXT: " + next.title + " →";
 }
@@ -518,6 +525,8 @@ window.addEventListener("resize", () => setTimeout(checkOrientation, 120));
 window.addEventListener("orientationchange", () => setTimeout(checkOrientation, 250));
 
 function restartRun() {
+  // Co-op runs can't restart on one phone alone: back to the menu to host again.
+  if (coopOn()) { goToMenu(); return; }
   pauseOverlay.classList.add("hidden");
   finishOverlay.classList.add("hidden");
   gameState = "ready";
@@ -538,6 +547,7 @@ function toggleLyrics() {
 }
 
 function goToMenu() {
+  if (typeof Coop !== "undefined" && (Coop.on || Coop.lobby)) Coop.leave();
   document.getElementById("rotateHint").classList.add("hidden");
   pauseOverlay.classList.add("hidden");
   finishOverlay.classList.add("hidden");
@@ -564,9 +574,9 @@ function buildMissionStrip() {
     const card = document.createElement("button");
     card.type = "button";
     card.className = "mission-card" + (mi.ready ? "" : " locked") + (mi.id === selectedMission ? " selected" : "");
-    card.style.backgroundImage = "url(assets/missions/" + mi.id + ".webp)";
+    card.style.backgroundImage = mi.cover ? "url(" + JSON.stringify(String(mi.cover)) + ")" : "url(assets/missions/" + mi.id + ".webp)";
     card.setAttribute("aria-label", "Mission " + (i + 1) + ": " + mi.title + (mi.ready ? "" : " (coming soon)"));
-    const num = document.createElement("span"); num.className = "mc-num"; num.textContent = String(i + 1).padStart(2, "0");
+    const num = document.createElement("span"); num.className = "mc-num"; num.textContent = mi.artist ? "♪" : String(i + 1).padStart(2, "0");
     const title = document.createElement("span"); title.className = "mc-title"; title.textContent = mi.title;
     const status = document.createElement("span"); status.className = "mc-status";
     const best = Progress.data.best[mi.id];
@@ -574,13 +584,20 @@ function buildMissionStrip() {
     card.append(num, title, status);
     card.addEventListener("click", () => {
       if (!mi.ready) return;
+      if (typeof Coop !== "undefined" && Coop.lobby && !Coop.host) return;   // the host picks the mission
       selectedMission = mi.id;
       buildMissionStrip();
+      if (typeof Coop !== "undefined") Coop.missionChanged(mi.id);
     });
     strip.appendChild(card);
   });
   const entry = MISSIONS.find(mi => mi.id === selectedMission);
-  setText("trackLine", "MISSION " + String(MISSIONS.indexOf(entry) + 1).padStart(2, "0") + " · " + entry.title);
+  setText("trackLine", entryLabel(entry));
+  // Keep the chosen mission in view (an artist run sits at the end of the strip).
+  const sel = strip.querySelector(".selected");
+  if (sel && (sel.offsetLeft < strip.scrollLeft || sel.offsetLeft + sel.offsetWidth > strip.scrollLeft + strip.clientWidth)) {
+    strip.scrollLeft = Math.max(0, sel.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2);
+  }
 }
 
 // mode: "1" one player, "2" two player race, "ai" race against the AI rival, "free" free roam.
@@ -588,6 +605,8 @@ function setMode(mode) {
   twoPlayer = mode === "2" || mode === "ai";
   aiRival = mode === "ai";
   freeRoam = mode === "free";
+  coopMode = mode === "coop";
+  document.getElementById("coopNote").classList.toggle("hidden", mode !== "coop");
   document.querySelectorAll("[data-mode]").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
   document.getElementById("controlsSolo").classList.toggle("hidden", mode === "2");
   document.getElementById("freeNote").classList.toggle("hidden", mode !== "free");
@@ -640,7 +659,7 @@ function updatePlayerCard() {
    SIGN IN AND LEADERBOARD
 --------------------------------------------------------------------------- */
 
-const MENU_PANELS = () => [authOverlay, leaderOverlay, skillsOverlay, journalOverlay, joinOverlay];
+const MENU_PANELS = () => [authOverlay, leaderOverlay, skillsOverlay, journalOverlay, joinOverlay, coopOverlay, document.getElementById("artistOverlay")];
 function menuOpen() {
   return MENU_PANELS().some(o => !o.classList.contains("hidden"));
 }
@@ -845,20 +864,32 @@ function renderCredits(body) {
   box.append(row, conv);
   body.append(box);
 
-  body.append(el("p", "skills-sub", "SONG VOUCHERS · MONEY OFF THE ALBUM ON FEELZ MACHINE"));
+  body.append(el("p", "skills-sub", "SONG VOUCHERS · MONEY OFF SONGS ON FEELZ MACHINE"));
   const pick = el("div", "voucher-pick");
   const select = el("select", "voucher-select");
-  for (const t of ALBUM_TRACKS) { const o = el("option", "", t.title); o.value = t.id; select.append(o); }
+  // The album songs, then any artist songs whose artist offers money off for credits.
+  const maxFor = {};
+  for (const t of ALBUM_TRACKS) { const o = el("option", "", t.title); o.value = t.id; select.append(o); maxFor[t.id] = 50; }
+  const artistTracks = typeof ArtistLevels !== "undefined" ? ArtistLevels.voucherTracks() : [];
+  for (const t of artistTracks) {
+    if (maxFor[t.id]) continue;
+    const o = el("option", "", t.title + " · " + String(t.artist || "").toUpperCase() + " (UP TO " + t.max + "%)"); o.value = t.id; select.append(o); maxFor[t.id] = t.max;
+  }
   const cur = MISSIONS.find(mi => mi.id === selectedMission);
-  const pre = ALBUM_TRACKS.find(t => t.mission === (cur ? cur.id : "m01"));
+  const pre = ALBUM_TRACKS.find(t => t.mission === (cur ? cur.id : "m01")) || artistTracks.find(t => t.mission === (cur ? cur.id : ""));
   if (pre) select.value = pre.id;
   pick.append(select);
+  const voucherButtons = [];
   for (const v of VOUCHERS) {
     const b = el("button", "secondary-button small", v.percent + "% OFF · " + v.cost.toLocaleString());
-    b.type = "button"; b.disabled = d.credits < v.cost;
+    b.type = "button";
     b.addEventListener("click", () => runSkillAction(b, async () => Progress.fromServer(await Backend.buyVoucher(select.value, v.percent))));
+    voucherButtons.push([b, v]);
     pick.append(b);
   }
+  const syncVoucherButtons = () => voucherButtons.forEach(([b, v]) => { b.disabled = d.credits < v.cost || v.percent > (maxFor[select.value] || 0); });
+  select.addEventListener("change", syncVoucherButtons);
+  syncVoucherButtons();
   body.append(pick);
 
   const list = el("div", "voucher-list");
@@ -898,7 +929,7 @@ async function openCheckout(v) {
   box.append(el("p", "skills-sub", v.title.toUpperCase() + " · " + v.percent + "% OFF WITH " + v.code));
   const holder = el("div", "paypal-holder"); holder.id = "paypalHolder";
   box.append(holder);
-  const note = el("p", "skills-note", "You pay Big Feelz directly through PayPal. The song goes into your Feelz Machine library.");
+  const note = el("p", "skills-note", "You pay " + (v.artist_name || "Big Feelz") + " directly through PayPal. The song goes into your Feelz Machine library.");
   box.append(note);
   box.scrollIntoView({ behavior: "smooth", block: "nearest" });
   try {
@@ -907,7 +938,7 @@ async function openCheckout(v) {
       style: { layout: "vertical", color: "gold", shape: "pill", label: "pay" },
       createOrder: async () => {
         skillsError("");
-        try { return (await Backend.createOrder(v.track_id, v.code, v.title)).orderId; }
+        try { return (await Backend.createOrder(v.track_id, v.code, v.title, v.artist_name)).orderId; }
         catch (e) { skillsError(e.message); throw e; }
       },
       onApprove: async data => {
@@ -930,7 +961,7 @@ async function openLeaderboard(period) {
   leaderOverlay.classList.remove("hidden");
   period = period || "all";
   const entry = MISSIONS.find(mi => mi.id === selectedMission);
-  setText("leaderMission", "MISSION " + String(MISSIONS.indexOf(entry) + 1).padStart(2, "0") + " · " + entry.title);
+  setText("leaderMission", entryLabel(entry));
   document.querySelectorAll("[data-period]").forEach(b => b.classList.toggle("active", b.dataset.period === period));
   const list = document.getElementById("leaderList");
   list.innerHTML = "<li class='leader-empty'>Loading...</li>";
@@ -1413,3 +1444,114 @@ if (Backend.online) {
 gameFrame.classList.add("menu-mode");
 requestAnimationFrame(attractLoop);
 requestAnimationFrame(padMenus);
+
+/* ---------------------------------------------------------------------------
+   ONLINE CO-OP LOBBY (the networking is in coop.js)
+--------------------------------------------------------------------------- */
+
+function chooseMission(id) {
+  if (!MISSION_DATA[id] && /^a-/.test(id) && typeof ArtistLevels !== "undefined") {
+    return ArtistLevels.ensure(id).then(mid => chooseMission(mid)).catch(() => {});
+  }
+  if (!MISSION_DATA[id]) return;
+  selectedMission = id;
+  buildMissionStrip();
+}
+
+// The run starts on a timer, not a tap, so wake the sound up while there is a tap to use.
+function primeAudio() {
+  try {
+    sfx.init();
+    const entry = MISSION_DATA[selectedMission];
+    if (entry && entry.song && songAudio.paused) {
+      songAudio.src = songSrcFor(entry.song.src);
+      songAudio.muted = true;
+      const pl = songAudio.play();
+      const done = () => { songAudio.pause(); songAudio.muted = false; };
+      if (pl && pl.then) pl.then(done).catch(() => { songAudio.muted = false; }); else done();
+    }
+  } catch (e) { /* sound stays off until the next tap */ }
+}
+
+function coopRender(msg) {
+  const inRoom = Coop.lobby;
+  document.getElementById("coopChoose").classList.toggle("hidden", inRoom);
+  document.getElementById("coopRoom").classList.toggle("hidden", !inRoom);
+  if (msg !== undefined) setText("coopError", inRoom ? "" : msg);
+  if (!inRoom) return;
+  const me = (Progress.data.name || "YOU").toUpperCase();
+  const partner = Coop.partner;
+  setText("coopCodeLabel", Coop.host ? "GIVE YOUR PARTNER THIS CODE" : "JOINED GAME");
+  setText("coopCode", Coop.code);
+  const entry = MISSIONS.find(mi => mi.id === selectedMission);
+  setText("coopMission", entryLabel(entry));
+  document.getElementById("coopPrev").classList.toggle("hidden", !Coop.host);
+  document.getElementById("coopNext").classList.toggle("hidden", !Coop.host);
+  setText("coopMeTag", Coop.host ? "HOST" : "PARTNER");
+  setText("coopMeName", me);
+  setText("coopThemTag", Coop.host ? "PARTNER" : "HOST");
+  setText("coopThemName", partner ? partner.name : "WAITING...");
+  document.getElementById("coopThem").classList.toggle("ready", !!partner);
+  const start = document.getElementById("coopStart");
+  start.classList.toggle("hidden", !Coop.host);
+  start.disabled = !partner;
+  setText("coopStatus", msg || (partner ? (Coop.host ? "READY WHEN YOU ARE" : "WAITING FOR " + partner.name + " TO START") : Coop.host ? "WAITING FOR YOUR PARTNER TO JOIN" : "CONNECTING..."));
+}
+
+function openCoop() {
+  if (!Backend.online) {
+    coopOverlay.classList.remove("hidden");
+    coopRender("Online co-op works at feelzmachine.com/run with your Feelz Machine account.");
+    document.getElementById("coopHost").disabled = true;
+    document.getElementById("coopJoin").disabled = true;
+    return;
+  }
+  Coop.onLobby = msg => coopRender(msg);
+  coopOverlay.classList.remove("hidden");
+  coopRender("");
+  navFocus(document.getElementById("coopHost"));
+}
+
+async function coopHostClick() {
+  primeAudio();
+  const b = document.getElementById("coopHost"); b.disabled = true;
+  try { await Coop.hostGame(); coopRender(""); }
+  catch (e) { Coop.leave(); coopRender(e.message); }
+  finally { b.disabled = false; }
+}
+
+async function coopJoinClick() {
+  primeAudio();
+  const input = document.getElementById("coopCodeInput");
+  const b = document.getElementById("coopJoin"); b.disabled = true;
+  try { await Coop.join(input.value); coopRender(""); }
+  catch (e) { Coop.leave(); coopRender(e.message); }
+  finally { b.disabled = false; }
+}
+
+// Both phones: the countdown is over, run.
+function coopBegin() {
+  coopOverlay.classList.add("hidden");
+  gameState = "ready";
+  startGame("coop");
+}
+
+document.getElementById("coopHost").addEventListener("click", coopHostClick);
+document.getElementById("coopJoin").addEventListener("click", coopJoinClick);
+document.getElementById("coopCodeInput").addEventListener("keydown", e => { if (e.key === "Enter") coopJoinClick(); });
+document.getElementById("coopCodeInput").addEventListener("input", e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5); });
+document.getElementById("coopStart").addEventListener("click", () => { primeAudio(); tryLandscape(); Coop.start(); });
+// The host picks the mission from the lobby.
+function coopStepMission(dir) {
+  if (!Coop.host) return;
+  const ready = MISSIONS.filter(mi => mi.ready && MISSION_DATA[mi.id]);
+  const i = ready.findIndex(mi => mi.id === selectedMission);
+  const next = ready[(i + dir + ready.length) % ready.length];
+  chooseMission(next.id);
+  Coop.missionChanged(next.id);
+  coopRender("");
+}
+document.getElementById("coopPrev").addEventListener("click", () => coopStepMission(-1));
+document.getElementById("coopNext").addEventListener("click", () => coopStepMission(1));
+document.getElementById("coopClose").addEventListener("click", () => { Coop.leave(); coopOverlay.classList.add("hidden"); navFocus(null); });
+window.addEventListener("pagehide", () => { if (typeof Coop !== "undefined") Coop.leave(); });

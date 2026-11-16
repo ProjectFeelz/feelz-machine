@@ -83,6 +83,7 @@
             <button type="button" data-mode="2">2 PLAYER RACE</button>
             <button type="button" data-mode="ai">VS RIVAL</button>
             <button type="button" data-mode="free">FREE ROAM</button>
+            <button type="button" data-mode="coop">CO-OP</button>
           </div>
           <div class="mode-toggle ai-levels hidden" id="aiLevels" role="group" aria-label="Rival difficulty">
             <button type="button" data-ai="easy">EASY</button>
@@ -94,6 +95,7 @@
             <button class="secondary-button" id="skillsButton" type="button">SKILLS</button>
             <button class="secondary-button" id="journalButton" type="button">JOURNAL</button>
             <button class="secondary-button hidden" id="leaderboardButton" type="button">LEADERBOARD</button>
+            <button class="secondary-button hidden" id="artistRunsButton" type="button">ARTIST RUNS</button>
           </div>
           <div class="signin-gate hidden" id="signinGate">
             <p class="gate-copy">Feelz Run is free with your Feelz Machine account, listener or artist. Sign in and your level, skills and credits follow you everywhere.</p>
@@ -116,6 +118,7 @@
             <p class="pc-save" id="pcSave">Progress saved on this device</p>
             <button class="text-button hidden" id="accountButton" type="button">PLAYER SETTINGS</button>
           </div>
+          <p class="control-hint hidden" id="coopNote">ONLINE CO-OP · TWO PHONES, ONE MISSION · SHARE THE SONG AND THE CHECKPOINTS, KEEP WHAT YOU COLLECT · FALL BEHIND AND YOU COME BACK IN BESIDE YOUR PARTNER</p>
           <p class="control-hint hidden" id="freeNote">FREE ROAM · WALK THE WORLD AT YOUR OWN PACE · NO CLOCK, NO ENFORCERS · FIVE HIDDEN GEMS IN EACH MISSION, UP IN THE HARDEST PLACES TO REACH</p>
           <p class="control-hint" id="controlsSolo">MOVE A / D · JUMP W OR SPACE (AGAIN IN THE AIR TO DOUBLE JUMP) · CROUCH S (WHILE RUNNING TO SLIDE) · HIT F<br>REACH EACH CHECKPOINT BEFORE ITS PART OF THE SONG ENDS · CLIMB THE PIPES · CONTROLLER: A JUMP, B CROUCH, X HIT</p>
           <p class="control-hint hidden" id="controlsRace">P1: A / D MOVE · W JUMP · S CROUCH · F HIT &nbsp; P2: ← / → MOVE · ↑ JUMP · ↓ CROUCH · / HIT<br>OR A CONTROLLER EACH · MOST RECORDS WINS, FIRST TO THE FINISH GETS A BONUS</p>
@@ -192,6 +195,51 @@
             </div>
           </div>
           <button class="primary-button start-play" id="joinStart" type="button" disabled><span class="play-icon">▶</span> START RACE</button>
+        </div>
+      </div>
+
+      <div class="overlay hidden" id="coopOverlay">
+        <div class="overlay-card join-card coop-card">
+          <button class="close-x" type="button" id="coopClose" aria-label="Close">×</button>
+          <p class="eyebrow">ONLINE CO-OP</p>
+          <h2>PLAY TOGETHER<span>.</span></h2>
+          <div id="coopChoose">
+            <p class="gate-copy">Two phones, one mission. You share the song and the checkpoints, and you each keep the records, notes and credits you collect.</p>
+            <div class="coop-choices">
+              <button class="primary-button" id="coopHost" type="button">HOST A GAME</button>
+              <div class="coop-join-row">
+                <input id="coopCodeInput" type="text" maxlength="5" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Game code">
+                <button class="secondary-button" id="coopJoin" type="button">JOIN</button>
+              </div>
+            </div>
+          </div>
+          <div id="coopRoom" class="hidden">
+            <p class="coop-code-label" id="coopCodeLabel">GIVE YOUR PARTNER THIS CODE</p>
+            <strong class="coop-code" id="coopCode">-----</strong>
+            <div class="coop-mission-row">
+              <button class="strip-arrow" id="coopPrev" type="button" aria-label="Previous mission">‹</button>
+              <p class="coop-mission" id="coopMission"></p>
+              <button class="strip-arrow" id="coopNext" type="button" aria-label="Next mission">›</button>
+            </div>
+            <div class="join-grid">
+              <div class="join-slot ready" id="coopMe"><span class="join-tag" id="coopMeTag">HOST</span><strong id="coopMeName">YOU</strong></div>
+              <div class="join-slot" id="coopThem"><span class="join-tag" id="coopThemTag">PARTNER</span><strong id="coopThemName">WAITING...</strong></div>
+            </div>
+            <p class="coop-status" id="coopStatus"></p>
+            <button class="primary-button start-play" id="coopStart" type="button" disabled><span class="play-icon">▶</span> START TOGETHER</button>
+          </div>
+          <p class="auth-error" id="coopError" role="alert"></p>
+        </div>
+      </div>
+
+      <div class="overlay hidden" id="artistOverlay">
+        <div class="overlay-card artist-card">
+          <button class="close-x" type="button" data-close aria-label="Close">×</button>
+          <p class="eyebrow">FROM ARTISTS ON FEELZ MACHINE</p>
+          <h2>ARTIST RUNS<span>.</span></h2>
+          <p class="gate-copy">Album levels, running to other artists' songs. Your runs, records and credits count the same.</p>
+          <div class="artist-list" id="artistList"></div>
+          <p class="auth-error" id="artistError" role="alert"></p>
         </div>
       </div>
 
@@ -326,6 +374,8 @@
   <script src="render.js"></script>
   <script src="systems.js"></script>
   <script src="ui.js"></script>
+  <script src="artist.js"></script>
+  <script src="coop.js"></script>
   <script>if ("serviceWorker" in navigator && location.protocol === "https:" && !/feelzmachine\.com$/.test(location.hostname)) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 </body>
 </html>

@@ -75,6 +75,8 @@ const Backend = (() => {
     setStyle: (outfit, dance) => rpc("game_set_style", { new_outfit: outfit, new_dance: dance }),
     convert: () => rpc("game_convert"),
     buyVoucher: (trackId, percent) => rpc("game_buy_voucher", { track: trackId, pct: percent }),
+    // Artist runs: every live one, or one by its id. Works signed in or not.
+    artistLevels: id => rpc("game_artist_levels_list", { p_id: id || null }),
 
     // Buying a song with a voucher goes through Feelz Machine's own PayPal checkout.
     async paypalClientId() {
@@ -84,10 +86,10 @@ const Backend = (() => {
       if (!data.paypalClientId) throw new Error("PayPal is briefly unavailable. Try again shortly.");
       return data.paypalClientId;
     },
-    async createOrder(trackId, voucherCode, title) {
+    async createOrder(trackId, voucherCode, title, artistName) {
       const res = await fetch("/.netlify/functions/paypal-order", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create", trackId, voucher: voucherCode, trackTitle: title, artistName: "Big Feelz" })
+        body: JSON.stringify({ action: "create", trackId, voucher: voucherCode, trackTitle: title, artistName: artistName || "Big Feelz" })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.orderId) throw new Error(data.error || "Couldn't start the payment. Nothing was charged.");
@@ -103,6 +105,10 @@ const Backend = (() => {
       return data;
     },
     accessToken,
+
+    // Online co-op: a Realtime channel on the same project (broadcast and presence only).
+    channel(name, opts) { return client && user ? client.channel(name, opts) : null; },
+    removeChannel(ch) { if (client && ch) client.removeChannel(ch); },
 
     // Player 2 in a race on the same screen: a separate sign-in that's never saved
     // in this browser, used only to show their player name above them.

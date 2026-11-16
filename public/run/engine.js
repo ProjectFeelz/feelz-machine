@@ -387,6 +387,20 @@ const STORM_HOLD = 1.4;   // seconds the storm pauses after it hits someone
 
 // Race mode: the AI rival.
 let aiRival = false;
+// How a mission is named on screen: album missions by number, artist runs by song and artist.
+function missionLabel(m) {
+  if (!m) return "";
+  if (m.artistLevel) return "ARTIST RUN · " + m.title + " · " + String(m.artistLevel.artist || "").toUpperCase();
+  return "MISSION " + String(m.number).padStart(2, "0") + " · " + m.title;
+}
+function entryLabel(entry) {
+  if (!entry) return "";
+  if (entry.artist) return "ARTIST RUN · " + entry.title + " · " + entry.artist;
+  return "MISSION " + String(MISSIONS.indexOf(entry) + 1).padStart(2, "0") + " · " + entry.title;
+}
+
+// Online co-op (coop.js): this phone runs one Koda, the partner is drawn from the network.
+function coopOn() { return typeof Coop !== "undefined" && Coop.on; }
 // Free roam: walk a mission's world at your own pace. No clock, no enforcers, only a few things to find.
 let freeRoam = false;
 let aiLevel = "normal";   // easy, normal or hard
@@ -443,7 +457,7 @@ function resetRun() {
   ai.pause = 0; ai.jumpFail = 0;
   particles = [];
   raceEndsAt = null; rewindFx = 0; flash = 0; shake = 0; lightningBolt = null;
-  banner = { text: mission.parts[0].name, sub: "MISSION " + String(mission.number).padStart(2, "0") + " · " + mission.title, time: 3 };
+  banner = { text: mission.parts[0].name, sub: missionLabel(mission), time: 3 };
   toast.time = 0;
   resetSystems();
   gameState = "playing";
@@ -1318,6 +1332,9 @@ function respawn(p, reason) {
   }
   // A lit shrine past the checkpoint holds your place.
   if (!twoPlayer && p.shrine && p.shrine.x > cp.x) spot = spot || p.shrine;
+  // Co-op: back in beside your partner when they're further on.
+  let besidePartner = false;
+  if (coopOn() && !twoPlayer) { const rs = Coop.reviveSpot(Math.max(cp.x, spot ? spot.x : 0)); if (rs) { spot = rs; besidePartner = true; } }
   spot = spot || cp;
   p.wipeouts += 1;
   p.x = spot.x; p.y = spot.y; p.vx = 0; p.vy = 0;
@@ -1328,7 +1345,7 @@ function respawn(p, reason) {
   setState(p, "normal");
   sfx.fall();
   const who = twoPlayer ? playerName(p) + " " : "";
-  const beside = twoPlayer && lead2 !== p ? "BACK IN BESIDE " + playerName(lead2) + " · -2 RECORDS" : twoPlayer ? "BACK IN AT THE CHECKPOINT · -2 RECORDS" : "BACK TO THE CHECKPOINT";
+  const beside = besidePartner ? "BACK IN BESIDE " + Coop.partnerName() : twoPlayer && lead2 !== p ? "BACK IN BESIDE " + playerName(lead2) + " · -2 RECORDS" : twoPlayer ? "BACK IN AT THE CHECKPOINT · -2 RECORDS" : "BACK TO THE CHECKPOINT";
   showBanner(who + reason, beside, 1.6);
   // Back at a checkpoint the storm is pushed back behind you (a race respawn beside the leader leaves it be).
   if (!twoPlayer || players.every(o => o === p || o.finished)) {
@@ -1787,11 +1804,19 @@ function updatePlayer(p, i, dt) {
 function knockOutWarden(wd, p) {
   wd.alive = false; wd.state = "ko"; wd.animT = 0; wd.windUp = 0;
   p.kos += 1;
+  if (coopOn() && p === players[0]) Coop.send("ko", { i: level.wardens.indexOf(wd) });
   for (const o of players) if (o.fightWith === wd) o.fightWith = null;
   if (!players.some(o => o.fightWith)) showBanner("K.O.", "", 0.9);
   showToast("KNOCKOUT", "+" + SCORING.rpPerKnockout + " RP", "ko");
   sfx.knockout();
   burst(wd.x, wd.y - m(1), "#ffd27a", 14, 220);
+}
+
+// The partner knocked this one out on their screen: down here too, credited to them.
+function coopDownWarden(wd) {
+  wd.alive = false; wd.state = "ko"; wd.animT = 0; wd.windUp = 0;
+  for (const o of players) if (o.fightWith === wd) o.fightWith = null;
+  burst(wd.x, wd.y - m(1), "#7fe3ff", 12, 200);
 }
 
 function wardenInReach(p, reach) {
@@ -1882,6 +1907,7 @@ function damageWarden(wd, p, dmg, kind) {
 
 function downDrone(dr, p) {
   dr.alive = false; p.kos += 1;
+  if (coopOn() && p === players[0]) Coop.send("drone", { i: level.drones.indexOf(dr) });
   sfx.drone();
   burst(dr.x, dr.y, "#7fe3ff", 20, 260);
   burst(dr.x, dr.y, "#ffb347", 12, 200);
@@ -2133,6 +2159,7 @@ function updateDeadline() {
 }
 
 function missCheckpoint(idx) {
+  if (coopOn()) { Coop.noteMiss(idx); Coop.send("miss", { i: idx }); }
   misses += 1;
   const lines = mission.taunts || ["TOO SLOW."];
   taunt = { text: lines[Math.floor(Math.random() * lines.length)], part: idx, t: TAUNT_SECONDS };
@@ -2296,12 +2323,9 @@ function updatePickups(dt) {
       if (r.taken || !near(r, 20)) continue;
       r.taken = true;
       rewindsUsed += 1;
-      sfx.rewindSweep(mission.song.src, songClock, REWIND_SECONDS);
-      seekSong(Math.max(0, songClock - REWIND_SECONDS));
-      rewindFx = 0.8;
-      showBanner("TIME REWIND", "-" + REWIND_SECONDS + "s ON THE SONG", 1.8);
-      sfx.rewind();
+      coopRewind("");
       burst(r.x, r.y, "#ff5ad8", 22, 240);
+      if (coopOn() && p === players[0]) Coop.send("rewind");
     }
     // Checkpoints: reach the next one before its part of the song ends.
     const next = level.checkpoints[p.cp + 1];
@@ -2326,6 +2350,15 @@ function updatePickups(dt) {
     // Touching the finish counts however you got there (a high route can pass a checkpoint's marker overhead).
     if (overlap(box, level.goal) && (p.cp >= level.checkpoints.length - 2 || (aiRival && p.id === 2))) { p.cp = Math.max(p.cp, level.checkpoints.length - 2); finishPlayer(p); }
   }
+}
+
+// A rewind token: the song goes back 10 seconds (in co-op, for both players).
+function coopRewind(who) {
+  sfx.rewindSweep(mission.song.src, songClock, REWIND_SECONDS);
+  seekSong(Math.max(0, songClock - REWIND_SECONDS));
+  rewindFx = 0.8;
+  showBanner("TIME REWIND", (who ? who + " · " : "") + "-" + REWIND_SECONDS + "s ON THE SONG", 1.8);
+  sfx.rewind();
 }
 
 function reachCheckpoint(p, cp) {
@@ -2399,6 +2432,11 @@ function preloadJournal() {
 
 // A find is a picture first; flip it over to read what it is, then put it away.
 function openReading(id, entry) {
+  // Co-op: the world can't stop for one player, so the page goes into the journal to read later.
+  if (coopOn()) {
+    showToast(String((entry && entry.kind) || "JOURNAL").toUpperCase(), ((entry && entry.title) || "") + " · IN YOUR JOURNAL", "", 2.8);
+    return;
+  }
   reading = { id, entry, t: 0, armed: false, flip: 0, flipped: !(entry && entry.image), flipAt: 0 };
   journalImage(entry && entry.image);
   songAudio.pause();
@@ -2575,6 +2613,7 @@ function finishPlayer(p) {
   p.finishTime = realTime;
   p.place = players.filter(o => o.finished).length;
   sfx.finish();
+  if (coopOn() && p === players[0]) Coop.send("finish");
   burst(level.goal.x + level.goal.w / 2, level.goal.y + level.goal.h / 2, "#ffd46a", 30, 260);
   if (!twoPlayer) { finishGame(); return; }
   if (p.place === 1) {
@@ -2645,6 +2684,7 @@ function update(realDt) {
     updateDrones(dt);
     checkInward();
   }
+  if (coopOn()) Coop.tick(realDt);
   updateStorm(dt, realDt);
   if (!inward.active) updatePickups(dt);
   updateDeadline();

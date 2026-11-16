@@ -39,6 +39,7 @@ const GuidesIndexPage = React.lazy(() => import('./pages/GuidesIndexPage'));
 const GuidePage = React.lazy(() => import('./pages/GuidePage'));
 const FaqPage = React.lazy(() => import('./pages/FaqPage'));
 const SplitsPage = React.lazy(() => import('./pages/SplitsPage'));
+const FeelzRunLevelsPage = React.lazy(() => import('./pages/FeelzRunLevelsPage'));
 const LoginPage = React.lazy(() => import('./pages/LoginPage'));
 const ResetPasswordPage = React.lazy(() => import('./pages/ResetPasswordPage'));
 const LibraryPage = React.lazy(() => import('./pages/LibraryPage'));
@@ -81,8 +82,6 @@ const AdminContent = React.lazy(() => import('./pages/AdminContent'));
 const AdminGrowth = React.lazy(() => import('./pages/AdminGrowth'));
 const BeatDetailPage = React.lazy(() => import('./pages/BeatDetailPage'));
 const AdminUserBehaviorPage = React.lazy(() => import('./pages/AdminUserBehaviorPage'));
-// Where people go, what they press, where they give up. Reads app_events.
-const AdminAppUsage = React.lazy(() => import('./pages/AdminAppUsage'));
 const TrackPage = React.lazy(() => import('./pages/TrackPage'));
 const CollabRadarPage = React.lazy(() => import('./pages/CollabRadarPage'));
 const AdminDuplicates = React.lazy(() => import('./pages/AdminDuplicates'));
@@ -105,68 +104,6 @@ const ListenerProfilePage = React.lazy(() => import('./pages/ListenerProfilePage
 const SchoolSessionsPage = React.lazy(() => import('./pages/SchoolSessionsPage'));
 const SchoolSessionsVotePage = React.lazy(() => import('./pages/SchoolSessionsVotePage'));
 const SchoolSessionsEntryPage = React.lazy(() => import('./pages/SchoolSessionsEntryPage'));
-const SessionsPrizeConsentPage = React.lazy(() => import('./pages/SessionsPrizeConsentPage'));
-
-// ── When a screen's code is not there ────────────────────────────────────────
-//
-// This app lazy-loads its routes, so opening a screen fetches that screen's
-// JavaScript. If that fetch fails — offline, or mid-deploy when the old file
-// names have gone — the lazy component rejects, React unmounts the tree, and
-// what is left on screen is the Suspense fallback below: a black div, one
-// hundred viewport units tall, forever.
-//
-// That is the black screen. Not a crash with a message, not a spinner that
-// never stops. A deliberate black rectangle doing exactly what it was written
-// to do, in a situation nobody wrote it for.
-//
-// React cannot recover from this on its own, and only an error boundary gets
-// told it happened. So this catches it and says the true thing, which offline
-// is not "something went wrong" but "this screen is not on your phone" — and
-// then points at the music that IS, because saved tracks live in IndexedDB and
-// do not need the network or this screen.
-class RouteBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { failed: false }; }
-  static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch(err) { console.error('[router] a screen failed to load:', err && err.message); }
-
-  render() {
-    if (!this.state.failed) return this.props.children;
-    const offline = navigator.onLine === false;
-    return (
-      <div style={{ minHeight: '100vh', background: '#000', color: '#fff',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <div style={{ maxWidth: 380, textAlign: 'center' }}>
-          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 10 }}>
-            {offline ? 'This screen needs the internet' : 'That screen did not load'}
-          </h1>
-          <p style={{ color: 'rgba(255,255,255,0.55)', lineHeight: 1.6, marginBottom: 20 }}>
-            {offline
-              ? 'Your saved music is still on this phone and plays without a connection.'
-              : 'The app updated while you were using it. Reloading will fix it.'}
-          </p>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-            {offline && (
-              <button
-                onClick={() => { window.location.href = '/library/offline'; }}
-                style={{ padding: '12px 18px', borderRadius: 12, border: 0,
-                         background: '#6366f1', color: '#fff', fontWeight: 600, fontSize: 15 }}>
-                Saved music
-              </button>
-            )}
-            <button
-              onClick={() => window.location.reload()}
-              style={{ padding: '12px 18px', borderRadius: 12, border: 0,
-                       background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 600, fontSize: 15 }}>
-              Try again
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-}
-
-
 const SchoolSessionsTermsPage = React.lazy(() => import('./pages/SchoolSessionsTermsPage'));
 const SchoolSessionsJudgePanel = React.lazy(() => import('./pages/SchoolSessionsJudgePanel'));
 const AdminSchoolSessions = React.lazy(() => import('./pages/AdminSchoolSessions'));
@@ -485,7 +422,6 @@ export default function AppRouter() {
             <OfflineProvider>
             <OnboardingGuard>
             <PurchaseReceipt />
-            <RouteBoundary>
             <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}>
             <Routes>
               {/* Legacy /player/* redirects */}
@@ -581,9 +517,6 @@ export default function AppRouter() {
                     a TikTok bio, so it has to work before voting opens, not
                     only once finalists exist. */}
                 <Route path="/sessions/entry/:id" element={<SchoolSessionsEntryPage />} />
-                <Route path="/sessions/prize-consent/:token" element={
-                  <PageTitle title="Sign for a prize"><SessionsPrizeConsentPage /></PageTitle>
-                } />
                 <Route path="/sessions/judge" element={<SchoolSessionsJudgePanel />} />
 
                 <Route path="/schoolsessions" element={
@@ -697,7 +630,6 @@ export default function AppRouter() {
                 <Route path="/admin/boost" element={<AdminBoost />} />
                 <Route path="/admin/broadcast" element={<AdminBroadcast />} />
                 <Route path="/admin/behavior" element={<AdminUserBehaviorPage />} />
-                <Route path="/admin/app-usage" element={<AdminAppUsage />} />
                 <Route path="/admin/duplicates" element={<AdminDuplicates />} />
                 <Route path="/admin/competitions" element={<AdminCompetitions />} />
                 <Route path="/admin/school-sessions" element={<AdminSchoolSessions />} />
@@ -708,6 +640,7 @@ export default function AppRouter() {
                 <Route path="/newsletter/:slug" element={<NewsletterPostPage />} />
                 <Route path="/legal/:slug" element={<LegalDocumentPage />} />
                 <Route path="/splits" element={<SplitsPage />} />
+                <Route path="/feelz-run-levels" element={<FeelzRunLevelsPage />} />
                 <Route path="/admin/home-hero" element={<AdminHomeHero />} />
                 <Route path="/admin/news" element={<AdminNews />} />
                 <Route path="/admin/cold-start" element={<AdminColdStart />} />
@@ -727,7 +660,6 @@ export default function AppRouter() {
               </Route>
             </Routes>
             </Suspense>
-            </RouteBoundary>
             </OnboardingGuard>
             </OfflineProvider>
             </TierProvider>
