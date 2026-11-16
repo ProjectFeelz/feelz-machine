@@ -11,6 +11,17 @@ import {
 
 const BASE_URL = 'https://www.feelzmachine.com';
 
+// The steps, in short words anyone can follow.
+const HOW_STEPS = (isListener) => [
+  { n: '1', title: 'Get your link', desc: 'We make it for you.' },
+  { n: '2', title: 'Send it', desc: 'Share it on WhatsApp, Instagram, anywhere.' },
+  { n: '3', title: 'A friend joins', desc: 'We know they came from you.' },
+  { n: '4', title: 'They pick a plan', desc: 'Artist Pro, Artist Premium or Fan Pro.' },
+  { n: '5', title: 'You get paid', desc: isListener
+      ? '20% of what they pay, every month they stay. Plus 50 credits when they sign up.'
+      : '20% of what they pay, every month they stay.' },
+];
+
 function StatCard({ icon: Icon, label, value, sub, color = 'text-purple-400' }) {
   return (
     <div className="bg-white/[0.03] rounded-2xl p-4 border border-white/[0.06]">
@@ -196,7 +207,7 @@ export default function AffiliatePage() {
   // This whole section used to be hardcoded to ZAR with an R200 minimum, which
   // meant the money could never be withdrawn: every subscription plan on the
   // platform bills in USD (see PAYPAL-SETUP.md), so commission lands in
-  // pending_usd and the payout form was reading pending_zar — a balance that
+  // pending_usd and the payout form was reading pending_zar, a balance that
   // will now always be zero for anyone earning through subscriptions.
   //
   // USD wins when there is a USD balance; ZAR is kept for any legacy balance
@@ -248,7 +259,7 @@ export default function AffiliatePage() {
     </div>
   );
 
-  // Venues get their own simple, self-contained view — a venue account has
+  // Venues get their own simple, self-contained view: a venue account has
   // no follows/streams history to run the artist/listener eligibility
   // logic against, so rather than force it through that branching, this is
   // deliberately separate and much simpler.
@@ -261,7 +272,7 @@ export default function AffiliatePage() {
             <ChevronLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-lg font-bold">Affiliate Programme</h1>
+            <h1 className="text-lg font-bold">Tell a Friend and Earn</h1>
             <p className="text-xs text-white/40">{retailVenue.business_name}</p>
           </div>
         </div>
@@ -276,24 +287,24 @@ export default function AffiliatePage() {
                 <Link className="w-8 h-8 text-purple-400" />
               </div>
               <div>
-                <h2 className="text-lg font-bold mb-1">Refer other venues, earn rewards</h2>
-                <p className="text-sm text-white/50">Same programme artists and listeners already use. Applications from venues go to an admin for a quick review before activating — not an automatic threshold, just a real look.</p>
+                <h2 className="text-lg font-bold mb-1">Tell other venues. Get paid.</h2>
+                <p className="text-sm text-white/50">Tell other shops and venues about Feelz Machine. When they join and pay, you get paid. We check each venue first, then your link turns on.</p>
               </div>
               <button onClick={handleApply} disabled={applying}
                 className="w-full py-3 rounded-xl bg-purple-500 text-white font-bold disabled:opacity-40">
-                {applying ? 'Applying…' : 'Apply now'}
+                {applying ? 'Joining…' : 'Join, it\'s free'}
               </button>
             </div>
           ) : affiliate.status === 'pending' ? (
             <div className="rounded-2xl border border-white/[0.06] p-6 text-center space-y-3">
               <Clock className="w-8 h-8 text-yellow-400 mx-auto" />
               <h2 className="text-lg font-bold">Application received</h2>
-              <p className="text-sm text-white/50">We'll activate your link once it's reviewed.</p>
+              <p className="text-sm text-white/50">We're checking it now. Your link turns on soon.</p>
             </div>
           ) : (
             <>
               <div className="rounded-2xl border border-white/[0.06] p-5 space-y-3">
-                <p className="text-xs text-white/40 uppercase tracking-wide font-bold">Your referral link</p>
+                <p className="text-xs text-white/40 uppercase tracking-wide font-bold">Your link. Share it.</p>
                 <div className="flex items-center space-x-2">
                   <div className="flex-1 px-3 py-2.5 bg-white/[0.06] rounded-lg text-sm text-white/80 truncate">{venueRefLink}</div>
                   <button onClick={handleCopy} className="p-2.5 rounded-lg bg-white/[0.06] flex-shrink-0">
@@ -302,7 +313,7 @@ export default function AffiliatePage() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <StatCard icon={Users} label="Signups" value={affiliate.total_signups || 0} />
+                <StatCard icon={Users} label="Friends who joined" value={affiliate.total_signups || 0} />
                 <StatCard icon={DollarSign} label="Earned" value={money(lifetime)} color="text-green-400" />
               </div>
             </>
@@ -313,10 +324,10 @@ export default function AffiliatePage() {
   }
 
   const tabs = [
-    { key: 'overview',     label: 'Overview',    icon: BarChart2 },
-    { key: 'campaigns',    label: 'Campaigns',   icon: Zap },
-    { key: 'conversions',  label: 'Earnings',    icon: DollarSign },
-    { key: 'payout',       label: 'Payout',      icon: Gift },
+    { key: 'overview',     label: 'My stats',    icon: BarChart2 },
+    { key: 'campaigns',    label: 'Share this',  icon: Zap },
+    { key: 'conversions',  label: 'Money in',    icon: DollarSign },
+    { key: 'payout',       label: 'Get paid',    icon: Gift },
   ];
 
   return (
@@ -328,8 +339,8 @@ export default function AffiliatePage() {
           <ChevronLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="text-lg font-bold">Affiliate Programme</h1>
-          <p className="text-xs text-white/40">Earn by growing the platform</p>
+          <h1 className="text-lg font-bold">Tell a Friend and Earn</h1>
+          <p className="text-xs text-white/40">Share Feelz Machine. Get paid.</p>
         </div>
       </div>
 
@@ -337,7 +348,7 @@ export default function AffiliatePage() {
         <div className="mx-4 mt-4 rounded-xl border border-purple-500/30 bg-purple-500/[0.08] p-4 flex items-center justify-between">
           <div>
             <p className="text-sm font-semibold text-white">Editor tools</p>
-            <p className="text-xs text-white/40 mt-0.5">Compose and send newsletters — nothing else on the platform is affected by this access.</p>
+            <p className="text-xs text-white/40 mt-0.5">Write and send newsletters.</p>
           </div>
           <button onClick={() => navigate('/newsletter/compose')} className="text-xs font-bold px-3 py-2 rounded-lg bg-purple-500 text-white flex-shrink-0 ml-3">Open</button>
         </div>
@@ -353,32 +364,32 @@ export default function AffiliatePage() {
             <div className="w-16 h-16 rounded-2xl bg-purple-500/20 flex items-center justify-center mx-auto">
               <Link className="w-8 h-8 text-purple-400" />
             </div>
-            <h2 className="text-xl font-black text-white">Join the Programme</h2>
-            <p className="text-sm text-white/50 leading-relaxed">
-              Share your unique link. Earn 20% of every subscription payment made by
-              someone who joined through it — every month they stay, for as long as
-              they stay. Same 20% whether you're an artist or a listener.
-              {isListener ? ' Listeners earn Feelz Credits on top.' : ''}
+            <h2 className="text-xl font-black text-white">Tell a friend. Get paid.</h2>
+            <p className="text-sm text-white/60 leading-relaxed">
+              You get your own link. Send it to friends.
+              When a friend joins and pays for a plan, you get 20% of what they pay.
+              You get it every month they stay.
+              {isListener ? ' You also get 50 credits when they sign up.' : ''}
             </p>
 
             {/* Requirements */}
             <div className="text-left bg-white/[0.03] rounded-xl p-4 space-y-4">
-              <p className="text-xs text-white/40 font-semibold uppercase tracking-wider mb-1">Requirements</p>
+              <p className="text-xs text-white/40 font-semibold uppercase tracking-wider mb-1">Before you can join</p>
               {progress ? (
                 isListener ? (
                   <>
-                    <RequirementRow label="Account age (days)" current={progress.accountDays} needed={progress.accountNeeded} />
-                    <RequirementRow label="Artists followed" current={progress.followingCount} needed={progress.followingNeeded} />
-                    <RequirementRow label="Streams recorded" current={progress.streamCount} needed={progress.streamNeeded} />
+                    <RequirementRow label="Days on Feelz Machine" current={progress.accountDays} needed={progress.accountNeeded} />
+                    <RequirementRow label="Artists you follow" current={progress.followingCount} needed={progress.followingNeeded} />
+                    <RequirementRow label="Songs you played" current={progress.streamCount} needed={progress.streamNeeded} />
                   </>
                 ) : (
                   <>
-                    <RequirementRow label="Account age (days)" current={progress.accountDays} needed={progress.accountNeeded} />
-                    <RequirementRow label="Published tracks" current={progress.trackCount} needed={progress.trackNeeded} />
+                    <RequirementRow label="Days on Feelz Machine" current={progress.accountDays} needed={progress.accountNeeded} />
+                    <RequirementRow label="Songs you put out" current={progress.trackCount} needed={progress.trackNeeded} />
                   </>
                 )
               ) : (
-                <p className="text-xs text-white/20">Loading your progress…</p>
+                <p className="text-xs text-white/20">Loading…</p>
               )}
             </div>
 
@@ -386,7 +397,7 @@ export default function AffiliatePage() {
               <button onClick={handleApply} disabled={applying}
                 className="w-full py-3.5 rounded-xl font-bold text-sm transition active:scale-[0.98] disabled:opacity-50"
                 style={{ background: 'linear-gradient(135deg, #a78bfa, #7c3aed)' }}>
-                {applying ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : 'Apply Now — Free'}
+                {applying ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : 'Join now. It\'s free.'}
               </button>
             ) : (
               <div className="flex items-center space-x-2 px-4 py-3 bg-yellow-500/10 rounded-xl border border-yellow-500/20">
@@ -397,15 +408,15 @@ export default function AffiliatePage() {
                         const missing = [];
                         if (isListener) {
                           if (progress.followingCount < progress.followingNeeded) missing.push(`follow ${progress.followingNeeded - progress.followingCount} more artist${progress.followingNeeded - progress.followingCount === 1 ? '' : 's'}`);
-                          if (progress.streamCount < progress.streamNeeded) missing.push(`${progress.streamNeeded - progress.streamCount} more stream${progress.streamNeeded - progress.streamCount === 1 ? '' : 's'}`);
-                          if (progress.accountDays < progress.accountNeeded) missing.push(`${progress.accountNeeded - progress.accountDays} more day${progress.accountNeeded - progress.accountDays === 1 ? '' : 's'} on your account`);
+                          if (progress.streamCount < progress.streamNeeded) missing.push(`play ${progress.streamNeeded - progress.streamCount} more song${progress.streamNeeded - progress.streamCount === 1 ? '' : 's'}`);
+                          if (progress.accountDays < progress.accountNeeded) missing.push(`wait ${progress.accountNeeded - progress.accountDays} more day${progress.accountNeeded - progress.accountDays === 1 ? '' : 's'}`);
                         } else {
-                          if (progress.trackCount < progress.trackNeeded) missing.push('publish a track');
-                          if (progress.accountDays < progress.accountNeeded) missing.push(`${progress.accountNeeded - progress.accountDays} more day${progress.accountNeeded - progress.accountDays === 1 ? '' : 's'} on your account`);
+                          if (progress.trackCount < progress.trackNeeded) missing.push('put out a song');
+                          if (progress.accountDays < progress.accountNeeded) missing.push(`wait ${progress.accountNeeded - progress.accountDays} more day${progress.accountNeeded - progress.accountDays === 1 ? '' : 's'}`);
                         }
-                        return missing.length > 0 ? `Almost there — ${missing.join(' and ')}.` : 'Keep growing your presence to unlock the programme';
+                        return missing.length > 0 ? `Almost there! Just ${missing.join(' and ')}.` : 'Keep using Feelz Machine and you can join soon.';
                       })()
-                    : 'Keep growing your presence to unlock the programme'}
+                    : 'Keep using Feelz Machine and you can join soon.'}
                 </p>
               </div>
             )}
@@ -414,15 +425,7 @@ export default function AffiliatePage() {
           {/* How it works */}
           <div className="space-y-3">
             <p className="text-xs text-white/40 font-semibold uppercase tracking-wider">How it works</p>
-            {[
-              { n: '01', title: 'Get your link', desc: 'A unique ref link is generated for you' },
-              { n: '02', title: 'Share it', desc: 'Post it on socials, WhatsApp, anywhere' },
-              { n: '03', title: 'Someone signs up or buys', desc: 'We track it automatically' },
-              { n: '03b', title: 'They subscribe', desc: 'Artist Pro, Artist Premium or Fan Pro' },
-              { n: '04', title: 'You earn, every month', desc: isListener
-                  ? '20% of what they pay, plus 50 credits for the signup'
-                  : '20% of what they pay, for as long as they keep paying' },
-            ].map(s => (
+            {HOW_STEPS(isListener).map(s => (
               <div key={s.n} className="flex items-start space-x-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
                 <span className="text-xs font-black text-white/20 w-6 flex-shrink-0">{s.n}</span>
                 <div>
@@ -439,7 +442,7 @@ export default function AffiliatePage() {
           {/* Ref link card */}
           <div className="mx-4 mt-4 p-4 rounded-2xl border border-purple-500/20"
             style={{ background: 'rgba(167,139,250,0.06)' }}>
-            <p className="text-xs text-white/40 mb-2">Your referral link</p>
+            <p className="text-xs text-white/40 mb-2">Your link. Send it to friends.</p>
             <div className="flex items-center space-x-2">
               <div className="flex-1 bg-black/40 rounded-xl px-3 py-2 text-xs text-white/60 truncate border border-white/[0.06]">
                 {refLink}
@@ -455,6 +458,16 @@ export default function AffiliatePage() {
             </div>
           </div>
 
+          {/* How it works, short, for when they forget */}
+          <div className="mx-4 mt-3 grid grid-cols-3 gap-2 text-center">
+            {[['1', 'Send your link'], ['2', 'A friend joins and pays'], ['3', 'You get 20%, every month']].map(([n, t]) => (
+              <div key={n} className="rounded-xl bg-white/[0.03] border border-white/[0.05] px-2 py-2.5">
+                <p className="text-sm font-black text-purple-400">{n}</p>
+                <p className="text-[11px] leading-tight text-white/60 mt-0.5">{t}</p>
+              </div>
+            ))}
+          </div>
+
           {/* Tab bar */}
           <div className="flex space-x-1 mx-4 mt-4 bg-white/[0.03] rounded-lg p-1">
             {tabs.map(({ key, label, icon: Icon }) => (
@@ -463,7 +476,7 @@ export default function AffiliatePage() {
                   activeTab === key ? 'bg-white text-black' : 'text-white/40 hover:text-white/60'
                 }`}>
                 <Icon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{label}</span>
+                <span>{label}</span>
               </button>
             ))}
           </div>
@@ -478,23 +491,23 @@ export default function AffiliatePage() {
                       now earn the same 20% commission an artist does, so hiding
                       the balance from them would hide their own money. Credits
                       are shown alongside rather than instead. */}
-                  <StatCard icon={DollarSign} label="Pending Payout" value={money(pending)} color="text-green-400" />
-                  <StatCard icon={TrendingUp} label="Total Earned" value={money(lifetime)} color="text-purple-400" />
+                  <StatCard icon={DollarSign} label="Ready to pay you" value={money(pending)} color="text-green-400" />
+                  <StatCard icon={TrendingUp} label="All you earned" value={money(lifetime)} color="text-purple-400" />
                   {isListener && (
                     <>
-                      <StatCard icon={Star} label="Credits Balance" value={affiliate.credits_balance?.toLocaleString() || 0} color="text-yellow-400" />
-                      <StatCard icon={TrendingUp} label="Lifetime Credits" value={affiliate.credits_lifetime?.toLocaleString() || 0} color="text-purple-400" />
+                      <StatCard icon={Star} label="Credits you have" value={affiliate.credits_balance?.toLocaleString() || 0} color="text-yellow-400" />
+                      <StatCard icon={TrendingUp} label="All credits earned" value={affiliate.credits_lifetime?.toLocaleString() || 0} color="text-purple-400" />
                     </>
                   )}
-                  <StatCard icon={Users} label="Signups" value={affiliate.total_signups || 0} color="text-blue-400" />
-                  <StatCard icon={BarChart2} label="Clicks" value={affiliate.total_clicks || 0} color="text-pink-400" />
+                  <StatCard icon={Users} label="Friends who joined" value={affiliate.total_signups || 0} color="text-blue-400" />
+                  <StatCard icon={BarChart2} label="Taps on your link" value={affiliate.total_clicks || 0} color="text-pink-400" />
                 </div>
 
                 {/* Conversion rate */}
                 {affiliate.total_clicks > 0 && (
                   <div className="bg-white/[0.03] rounded-2xl p-4 border border-white/[0.06]">
                     <div className="flex justify-between text-xs mb-2">
-                      <span className="text-white/40">Conversion rate</span>
+                      <span className="text-white/40">Taps that turned into money</span>
                       <span className="text-white font-bold">
                         {Math.round((affiliate.total_conversions / affiliate.total_clicks) * 100)}%
                       </span>
@@ -503,7 +516,7 @@ export default function AffiliatePage() {
                       <div className="h-full rounded-full bg-purple-400"
                         style={{ width: `${Math.min(100, Math.round((affiliate.total_conversions / affiliate.total_clicks) * 100))}%` }} />
                     </div>
-                    <p className="text-[10px] text-white/20 mt-1">{affiliate.total_conversions} conversions from {affiliate.total_clicks} clicks</p>
+                    <p className="text-[10px] text-white/20 mt-1">{affiliate.total_conversions} out of {affiliate.total_clicks} taps</p>
                   </div>
                 )}
               </div>
@@ -512,12 +525,12 @@ export default function AffiliatePage() {
             {/* ── CAMPAIGNS ── */}
             {activeTab === 'campaigns' && (
               <div className="space-y-3">
-                <p className="text-xs text-white/40">Active campaigns from the Feelz team. Share these for bonus rewards.</p>
+                <p className="text-xs text-white/40">Share these to earn extra.</p>
                 {campaigns.length === 0 ? (
                   <div className="text-center py-10 text-white/20">
                     <Zap className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">No active campaigns right now</p>
-                    <p className="text-xs mt-1">Check back weekly for new briefs</p>
+                    <p className="text-sm">Nothing here right now</p>
+                    <p className="text-xs mt-1">Check back next week</p>
                   </div>
                 ) : campaigns.map(c => (
                   <div key={c.id} className="bg-white/[0.03] rounded-2xl p-4 border border-white/[0.06] space-y-3">
@@ -555,8 +568,8 @@ export default function AffiliatePage() {
                 {conversions.length === 0 ? (
                   <div className="text-center py-10 text-white/20">
                     <DollarSign className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">No earnings yet</p>
-                    <p className="text-xs mt-1">Share your link to start earning</p>
+                    <p className="text-sm">No money in yet</p>
+                    <p className="text-xs mt-1">Send your link to a friend to start</p>
                   </div>
                 ) : conversions.map(c => (
                   <div key={c.id} className="flex items-center space-x-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
@@ -586,11 +599,11 @@ export default function AffiliatePage() {
                 {isListener ? (
                   <div className="bg-white/[0.03] rounded-2xl p-5 border border-white/[0.06] text-center space-y-3">
                     <Star className="w-10 h-10 text-yellow-400 mx-auto" />
-                    <p className="text-base font-bold text-white">Credits Balance</p>
+                    <p className="text-base font-bold text-white">Your credits</p>
                     <p className="text-4xl font-black text-yellow-400">{affiliate.credits_balance || 0}</p>
-                    <p className="text-xs text-white/30">Redeem for premium access, exclusive drops and more</p>
+                    <p className="text-xs text-white/30">Swap them for the things below</p>
                     <div className="space-y-2">
-                      <p className="text-xs text-white/30 font-semibold uppercase tracking-wider">Redeem For</p>
+                      <p className="text-xs text-white/30 font-semibold uppercase tracking-wider">Swap for</p>
                       {[
                         { key: 'fan_pro_month', label: '1 Month Fan Pro Free', cost: 500, icon: '⭐' },
                         { key: 'social_shoutout', label: 'Shoutout on Feelz Socials', cost: 1000, icon: '📣' },
@@ -616,7 +629,7 @@ export default function AffiliatePage() {
                         </div>
                         );
                       })}
-                      <p className="text-[10px] text-white/20 text-center pt-1">Redemptions are reviewed and applied manually within 24h</p>
+                      <p className="text-[10px] text-white/20 text-center pt-1">We check it and add it within 24 hours</p>
                     </div>
                   </div>
                 ) : (
@@ -624,17 +637,17 @@ export default function AffiliatePage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-white/[0.03] rounded-2xl p-4 border border-white/[0.06] text-center">
                         <p className="text-2xl font-black text-green-400">{money(pending)}</p>
-                        <p className="text-xs text-white/30 mt-1">Available</p>
+                        <p className="text-xs text-white/30 mt-1">Ready for you</p>
                       </div>
                       <div className="bg-white/[0.03] rounded-2xl p-4 border border-white/[0.06] text-center">
                         <p className="text-2xl font-black text-white">{money(affiliate.paid_out_zar || 0)}</p>
-                        <p className="text-xs text-white/30 mt-1">Paid Out</p>
+                        <p className="text-xs text-white/30 mt-1">Paid to you</p>
                       </div>
                     </div>
 
                     {pending >= minPayout && (
                       <div className="bg-white/[0.03] rounded-2xl p-4 border border-white/[0.06] space-y-3">
-                        <p className="text-sm font-semibold text-white">Request Payout</p>
+                        <p className="text-sm font-semibold text-white">Pay me</p>
                         <input type="number" value={payoutAmount}
                           onChange={e => setPayoutAmount(e.target.value)}
                           placeholder={`Amount (min ${money(minPayout)}, max ${money(pending)})`}
@@ -649,7 +662,7 @@ export default function AffiliatePage() {
                           style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
                           {requestingPayout ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : 'Request Payout'}
                         </button>
-                        <p className="text-[10px] text-white/20 text-center">Processed within 3–5 business days</p>
+                        <p className="text-[10px] text-white/20 text-center">You get it in 3 to 5 work days</p>
                       </div>
                     )}
 
@@ -665,7 +678,7 @@ export default function AffiliatePage() {
                     {/* Payout history */}
                     {payouts.length > 0 && (
                       <div className="space-y-2">
-                        <p className="text-xs text-white/40 font-semibold uppercase tracking-wider">Payout History</p>
+                        <p className="text-xs text-white/40 font-semibold uppercase tracking-wider">Money you got</p>
                         {payouts.map(p => (
                           <div key={p.id} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.04]">
                             <div>

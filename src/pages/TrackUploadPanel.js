@@ -21,6 +21,7 @@ import { notifyCollabRequest } from '../components/notificationTriggers';
 import RetailSubmitGate from '../components/legal/RetailSubmitGate';
 import InstagramRequestSheet from '../components/InstagramRequestSheet';
 import FeelzRunLevelSection from '../components/FeelzRunLevelSection';
+import UploadDoneCard from '../components/UploadDoneCard';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -905,6 +906,8 @@ function AddTrackToAlbum({
   const [collaborators, setCollaborators] = useState([]);
   const [uploading, setUploading]       = useState(false);
   const [message, setMessage]           = useState({ type: '', text: '' });
+  // The card shown once the track is up.
+  const [done, setDone]                 = useState(null);
 
   const isWorking = uploading || converting;
 
@@ -1074,6 +1077,12 @@ function AddTrackToAlbum({
 
       // No per-track notification for album tracks, album release sends its own
       showMessage('success', `"${trackForm.title}" added to album!`);
+      setDone({
+        kind: 'track', title: trackForm.title,
+        cover: data[0].cover_artwork_url || album?.cover_artwork_url || null,
+        published: !!data[0].is_published,
+        href: data[0].slug ? `/track/${data[0].slug}` : null,
+      });
       onTrackAdded(data[0]);
 
     } catch (err) {
@@ -1087,6 +1096,7 @@ function AddTrackToAlbum({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+      <UploadDoneCard done={done} onClose={() => setDone(null)} />
       {/* Toast */}
       {message.text && (
         <div className={`p-3 rounded-lg text-sm flex items-start space-x-2 ${
@@ -1468,6 +1478,10 @@ export default function TrackUploadPanel() {
   const [loading, setLoading]                   = useState(false);
   const [uploading, setUploading]               = useState(false);
   const [message, setMessage]                   = useState({ type: '', text: '' });
+  // The card shown once a track or a release is up.
+  const [uploadDone, setUploadDone]             = useState(null);
+  const closeUploadDone = React.useCallback(() => setUploadDone(null), []);
+  const albumSlugRef = React.useRef(null);
 
   // Upload state
   const [release, setRelease]                   = useState({ ...BLANK_RELEASE, release_type: isBeatmaker ? 'beat' : 'single' });
@@ -1692,6 +1706,7 @@ export default function TrackUploadPanel() {
     // Every track on the album uses this artwork unless it has its own. This
     // ref was read but never set, which is why each track asked for artwork.
     albumCoverUrlRef.current = coverUrl;
+    albumSlugRef.current = data.slug || null;
     setSessionAlbumId(data.id);
     await fetchAlbums();
     return data.id;
@@ -2060,6 +2075,14 @@ export default function TrackUploadPanel() {
             ? `Track uploaded, but the Sessions entry couldn't be saved: ${ssEntryError}. Please contact us to enter manually.`
             : 'Track uploaded successfully!'
         );
+        if (!ssEntryError) {
+          setUploadDone({
+            kind: trackForm.is_beat ? 'beat' : 'track', title: trackForm.title,
+            cover: data[0].cover_artwork_url || null,
+            published: !!data[0].is_published,
+            href: data[0].slug ? `/track/${data[0].slug}` : null,
+          });
+        }
         resetAll();
       }
       fetchTracks();
@@ -2135,6 +2158,15 @@ export default function TrackUploadPanel() {
       } else {
         showMessage('success', `${release.release_type.toUpperCase()} saved as a draft. Publish it from Albums when you are ready.`);
       }
+      setUploadDone({
+        kind: release.release_type || 'album', title: release.album_title,
+        cover: cover || null,
+        published: !!release.album_is_published,
+        count: albumTrackQueue.length,
+        href: albumSlugRef.current && artist?.slug
+          ? `/album/${artist.slug}/${albumSlugRef.current}`
+          : `/album/${sessionAlbumId}`,
+      });
       resetAll();
       fetchTracks(); fetchAlbums();
     } catch (err) {
@@ -2608,6 +2640,7 @@ export default function TrackUploadPanel() {
     <div className="space-y-5">
 
       {showHelp && <UploadHelpPanel onClose={() => setShowHelp(false)} />}
+      <UploadDoneCard done={uploadDone} onClose={closeUploadDone} />
 
       {message.text && (
         <div className={`p-3 rounded-lg text-sm flex items-start space-x-2 ${
