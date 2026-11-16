@@ -36,6 +36,8 @@ export const MENU_TINTS = {
   profile: [167, 139, 250],   // violet
   account: [96, 165, 250],    // blue
   more:    [148, 163, 184],   // slate
+  now:     [251, 146, 60],    // orange: something running right now
+  money:   [52, 211, 153],    // green: what you earn
 };
 
 export default function CreateMenuSection({ heading, tint, items }) {

@@ -28,7 +28,17 @@ export default function ListenerCreateMenu({ onClose }) {
   // only way to compare what a listener uses against what an artist uses.
   const go = (path, id) => () => { if (id) tap('menu_' + id); onClose(); navigate(path); };
 
+  // ORDERED BY WHAT LISTENERS USE MOST (app_events, menu_* taps): whatever is
+  // running right now first, then making playlists and your people, then your
+  // listening and earning, profile and account, and help last.
   const groups = [
+    ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
+      ? [{ heading: 'Happening now', tint: MENU_TINTS.now, items: [{
+          id: 'sessions', icon: '\u{1F3C6}', label: 'Sessions',
+          sub: 'The cover competition. Listen, vote, or enter it yourself',
+          onClick: go('/sessions', 'sessions'),
+        }] }]
+      : []),
     {
       heading: 'Create',
       tint: MENU_TINTS.create,
@@ -44,6 +54,15 @@ export default function ListenerCreateMenu({ onClose }) {
       ],
     },
     {
+      heading: 'You and Feelz Machine',
+      tint: MENU_TINTS.money,
+      items: [
+        { id: 'stats', icon: '\u{1F4CA}', label: 'Your listening', sub: 'Your top songs, artists and hours', onClick: go('/listener/stats', 'stats') },
+        // The Earn tab gave its place in the bottom bar to Games, so this is the way in now.
+        { id: 'affiliate', icon: '\u{1F517}', label: 'Affiliate Programme', sub: 'Share Feelz Machine and earn', onClick: go('/affiliates', 'affiliate') },
+      ],
+    },
+    {
       heading: 'Your profile',
       tint: MENU_TINTS.profile,
       items: [
@@ -51,62 +70,21 @@ export default function ListenerCreateMenu({ onClose }) {
       ],
     },
     {
-      // SETTINGS, AND WHY IT IS NOT THE SAME ROW AS EDIT PROFILE
-      //
-      // /profile and /profile/edit are two different pages whose names do not
-      // distinguish them. /profile/edit is the photo-and-details form in the
-      // group above. /profile is the account: the theme picker, notifications
-      // and the rest. Nothing in this menu pointed at it, so the only way in
-      // was to already know the address — and "Edit Profile" is where people
-      // looked first, which is the whole problem. Its own band, so the two
-      // never read as the same thing again.
       heading: 'Account',
       tint: MENU_TINTS.account,
       items: [
         { id: 'settings', icon: '⚙️', label: 'Settings', sub: 'Theme, account and notifications', onClick: go('/profile', 'settings') },
-        // EMAIL PREFERENCES, for the same reason as the artist menu.
-        //
-        // Somebody who wants fewer emails and cannot find the switch marks
-        // the next one as spam instead, and that costs deliverability for
-        // everybody. The cheapest way to keep an inbox is a visible way out
-        // of it. Listeners are the bigger half of the mailing list, so this
-        // matters more here than on the artist side, not less.
-        { id: 'contactprefs', icon: '\u2709\uFE0F', label: 'Email preferences', sub: 'Choose what reaches your inbox', onClick: go('/contact-preferences', 'contactprefs') },
         isPro
           ? { id: 'fanpro', icon: '✨', label: 'Fan Pro Themes', sub: 'Change your app theme', onClick: go('/profile', 'fanpro') }
           : { id: 'fanpro', icon: '✨', label: 'Get Fan Pro', sub: 'Unlock themes and a supporter badge', onClick: go('/listener/upgrade', 'fanpro') },
+        { id: 'contactprefs', icon: '\u2709\uFE0F', label: 'Email preferences', sub: 'Choose what reaches your inbox', onClick: go('/contact-preferences', 'contactprefs') },
       ],
     },
     {
-      // Last, same reasoning as the artist menu: offers rather than actions.
-      //
-      // SESSIONS IS HERE FOR LISTENERS AS MUCH AS FOR ARTISTS.
-      //
-      // The Hub card is the main way in, but the Hub is not where a listener
-      // spends their time and Home does not appear in the mobile nav at all.
-      // The plus button does. So the one thing a listener can do in this
-      // competition, vote, is reachable from the button they already use.
-      //
-      // Same gate as everywhere else and it fails closed, so between seasons
-      // this row simply is not here — and CreateMenuSection drops a group
-      // that ends up with nothing in it, so no stray heading is left behind.
-      heading: 'More',
+      heading: 'Help',
       tint: MENU_TINTS.more,
       items: [
-        // YOUR LISTENING, which is the listener's version of the earnings
-        // page: the screen that gives somebody a reason to come back. It was
-        // only reachable by knowing the address.
-        { id: 'stats', icon: '\u{1F4CA}', label: 'Your listening', sub: 'Your top songs, artists and hours', onClick: go('/listener/stats', 'stats') },
         { id: 'course', icon: '🎓', label: 'How to Use Feelz Machine', sub: 'A short course on how it all works', onClick: go('/learn', 'course') },
-        ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
-          ? [{
-              id: 'sessions', icon: '\u{1F3C6}', label: 'Sessions',
-              sub: 'The cover competition. Listen, vote, or enter it yourself',
-              onClick: go('/sessions'),
-            }]
-          : []),
-        { id: 'affiliate', icon: '\u{1F517}', label: 'Affiliate Programme', sub: 'Share Feelz Machine and earn', onClick: go('/affiliates', 'affiliate') },
-        { id: 'game', icon: '\u{1F3AE}', label: 'Feelz Games', sub: 'Feelz Run and more', onClick: go('/games', 'games') },
       ],
     },
   ];
