@@ -1261,7 +1261,7 @@ function setState(p, state, seconds) {
 let playerNames = ["", ""];   // signed-in names for a race, set by the menu
 function playerName(p) {
   if (!twoPlayer) return "";
-  if (aiRival) return p.id === 1 ? (playerNames[0] || "YOU") : "RIVAL";
+  if (aiRival) return p.id === 1 ? (playerNames[0] || "YOU") : "AI";
   return playerNames[p.id - 1] || "P" + p.id;
 }
 
@@ -1815,9 +1815,12 @@ function knockOutWarden(wd, p) {
 // Co-op: the partner slid into you. A short stumble, no hearts lost.
 function coopTripped(who) {
   const p = players[0];
-  if (!p || p.finished || p.invuln > 0 || p.climb || p.move || !p.ground || p.state === "slide") return;
-  p.vx = 0; p.knock = 0.2; p.knockDir = -p.facing;
-  setState(p, "stun", 0.8);
+  if (!p || p.finished || p.climb || p.move || p.state === "slide") return;
+  p.vx = 0; p.knock = 0.3; p.knockDir = -p.facing;
+  if (p.ground) p.vy = -260 * K;   // knocked off their feet
+  p.ground = null;
+  setState(p, "stun", 0.9);
+  burst(p.x, p.y - 10, "#d9c7a0", 14, 180);
   p.invuln = 1.2;
   sfx.stun && sfx.stun();
   rumble(0, 0.5, 200);

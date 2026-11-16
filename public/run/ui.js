@@ -143,6 +143,7 @@ function buildResult(p) {
 
 function startGame(fromJoin) {
   if (gameState === "playing") return;
+  keepAwake(true);
   const entry = MISSIONS.find(mi => mi.id === selectedMission);
   if (!entry || !entry.ready || !MISSION_DATA[selectedMission]) return;
   if (mustSignIn()) { updatePlayerCard(); return; }
@@ -249,7 +250,7 @@ function showResults(result) {
     postResult(result, levelBefore);
   } else {
     const d = Progress.data;
-    d.xp += result.xp; d.vinyl += result.records; d.notes += notes; d.kos += result.kos; d.rp_bank += result.rp;
+    d.xp += result.xp; d.vinyl += result.records; d.notes += notes; d.kos += result.kos; d.rp_bank += Math.ceil(result.rp / 2);
     d.coins += result.coin; d.runs += 1;
     // what this run is worth in credits, waiting to be turned into credits when you sign in
     d.stash = d.stash || { records: 0, notes: 0, pages: 0, coins: 0 };
@@ -276,9 +277,9 @@ function showRaceResults() {
   document.getElementById("soloResults").classList.add("hidden");
   document.getElementById("raceResults").classList.remove("hidden");
   document.getElementById("postScoreButton").classList.add("hidden");
-  setText("finishMission", missionLabel(mission) + (aiRival ? " · VS RIVAL (" + aiLevel.toUpperCase() + ")" : " · 2 PLAYER RACE"));
+  setText("finishMission", missionLabel(mission) + (aiRival ? " · VS AI (" + aiLevel.toUpperCase() + ")" : " · 2 PLAYER RACE"));
   document.querySelector("#raceP1 h3").textContent = aiRival ? "YOU" : "P1";
-  document.querySelector("#raceP2 h3").textContent = aiRival ? "RIVAL" : "P2";
+  document.querySelector("#raceP2 h3").textContent = aiRival ? "AI" : "P2";
   // Points: every record counts, plus 10 for finishing first and 5 for finishing second.
   const points = p => p.records + (p.place === 1 ? 10 : p.place === 2 ? 5 : 0);
   const [a, b] = players;
@@ -286,7 +287,7 @@ function showRaceResults() {
   let winner = pa > pb ? a : pb > pa ? b : (a.place && (!b.place || a.place < b.place) ? a : b);
   if (pa === pb && !a.place && !b.place) winner = a.x >= b.x ? a : b;
   setText("finishEyebrow", "RACE OVER");
-  setText("finishTitle", aiRival ? (winner.id === 1 ? "YOU BEAT THE RIVAL" : "THE RIVAL WINS") : "P" + winner.id + " WINS");
+  setText("finishTitle", aiRival ? (winner.id === 1 ? "YOU BEAT THE AI" : "THE AI WINS") : "P" + winner.id + " WINS");
   setText("finishLine", "First to the finish gets 10 bonus points, second gets 5. Every record is a point.");
   for (const p of players) {
     const n = p.notes.low + p.notes.mid + p.notes.high;
@@ -316,10 +317,11 @@ async function postResult(result, levelBefore) {
     });
     result.posted = true;
     setText("finalRp", Number(res.rp).toLocaleString());
+    const banked = res.rp_earned !== undefined ? Number(res.rp_earned) : Number(res.rp);
     setText("finalXp", "+" + res.xp_gained + " XP");
     setText("finalBest", res.new_best ? "NEW PERSONAL BEST" : "");
     setText("finalRank", res.rank ? "GLOBAL RANK #" + res.rank : "");
-    setText("finalSaved", "Posted to the global leaderboard. +" + Number(res.rp).toLocaleString() + " RP to spend in SKILLS.");
+    setText("finalSaved", "Posted to the global leaderboard. +" + banked.toLocaleString() + " RP to spend in SKILLS.");
     const profile = await Backend.me();
     Progress.fromServer(profile);
     showLevelUp(levelBefore);
@@ -389,7 +391,7 @@ function startDance(playerId) {
     if (finishOverlay.classList.contains("hidden")) { clearInterval(danceTimer); danceTimer = null; return; }
     const img = danceSheet(id, playerOutfit, rival) || danceSheet("default", playerOutfit, rival);
     if (!img) return;
-    const rect = c.getBoundingClientRect();
+    const rect = { width: c.clientWidth, height: c.clientHeight };   // layout size, right even when the page is drawn sideways
     const ratio = Math.min(2, window.devicePixelRatio || 1);
     const wantW = Math.max(60, Math.round(rect.width * ratio)), wantH = Math.max(60, Math.round(rect.height * ratio));
     if (c.width !== wantW || c.height !== wantH) { c.width = wantW; c.height = wantH; }
@@ -477,18 +479,22 @@ function resumeGame() {
 function nextMissionEntry() {
   const id = mission ? mission.id : selectedMission;
   const i = MISSIONS.findIndex(mi => mi.id === id);
-  if (i >= 0 && MISSIONS[i].artist) return null;   // artist runs stand alone
+  // After an artist's run, the way on is the Big Feelz story: the first mission not yet played.
+  if (i >= 0 && MISSIONS[i].artist) {
+    const best = (Progress.data && Progress.data.best) || {};
+    const story = MISSIONS.filter(mi => !mi.artist && mi.ready && MISSION_DATA[mi.id]);
+    return story.find(mi => !best[mi.id]) || story[0] || null;
+  }
   const next = i >= 0 ? MISSIONS[i + 1] : null;
   return next && next.ready && MISSION_DATA[next.id] ? next : null;
 }
 function setupNextButton() {
   const next = nextMissionEntry(), btn = document.getElementById("nextMissionButton");
-  // Co-op: the host picks what's next for everyone; the rest wait for them.
-  const guest = coopOn() && !Coop.host;
-  btn.classList.toggle("hidden", !next || guest);
-  if (next) btn.textContent = (coopOn() ? "NEXT TOGETHER: " : "NEXT: ") + next.title + " →";
-  document.getElementById("restartButton").classList.toggle("hidden", guest);
-  if (guest) setText("finishLine", "Waiting for the host to pick what's next.");
+  // Co-op: anyone can take the crew on to the next mission or run it back.
+  btn.classList.toggle("hidden", !next);
+  const fromArtist = next && mission && MISSIONS.some(mi => mi.id === mission.id && mi.artist);
+  if (next) btn.textContent = (coopOn() ? "NEXT TOGETHER: " : "NEXT: ") + (fromArtist ? "BIG FEELZ · " : "") + next.title + " →";
+  document.getElementById("restartButton").classList.remove("hidden");
 }
 function playNextMission() {
   const next = nextMissionEntry();
@@ -507,19 +513,13 @@ function isPhonePortrait() {
   return window.matchMedia("(pointer: coarse)").matches && window.innerHeight > window.innerWidth;
 }
 function checkOrientation() {
-  const running = gameState === "playing" || gameState === "paused";
-  // Upright on a phone: the card shows on the menu too, since the whole game is made sideways.
-  const show = isPhonePortrait();
-  document.getElementById("rotateHint").classList.toggle("hidden", !show);
-  setText("rotateText", running ? "Feelz Run plays full screen in landscape. The game is paused until you turn it." : "Feelz Run plays full screen in landscape.");
-  const canTurn = !!(document.documentElement.requestFullscreen && screen.orientation && screen.orientation.lock);
-  document.getElementById("rotateTap").classList.toggle("hidden", !canTurn);
-  document.getElementById("rotateBack").classList.toggle("hidden", running || !/(^|\.)feelzmachine\.com$/.test(location.hostname));
-  if (show && gameState === "playing") { pauseGame(); rotatePaused = true; }
-  else if (!show && rotatePaused && gameState === "paused") { rotatePaused = false; resumeGame(); }
-  if (!running) rotatePaused = false;
+  // Upright on a phone: the game is simply drawn sideways, so it's plain to turn the phone.
+  const root = document.documentElement, on = isPhonePortrait();
+  root.classList.toggle("rotated", on);
+  const vars = { "--vw": innerHeight / 100, "--vh": innerWidth / 100, "--dvh": innerWidth / 100, "--rot-w": innerHeight, "--rot-h": innerWidth };
+  for (const [k, v] of Object.entries(vars)) { if (on) root.style.setProperty(k, v + "px"); else root.style.removeProperty(k); }
+  document.getElementById("rotateHint").classList.add("hidden");
 }
-let rotatePaused = false;
 function tryLandscape() {
   // Full screen on every device when a run starts, like the Feelz Machine app: no browser bar.
   // (Already installed and running full screen: nothing to do.)
@@ -535,8 +535,8 @@ window.addEventListener("resize", () => setTimeout(checkOrientation, 120));
 window.addEventListener("orientationchange", () => setTimeout(checkOrientation, 250));
 
 function restartRun() {
-  // Co-op: the host runs it back for everyone, from the lobby.
-  if (coopOn()) { if (Coop.host) Coop.regroup(mission.id); return; }
+  // Co-op: runs it back for everyone, from the lobby.
+  if (coopOn()) { Coop.regroup(mission.id); return; }
   pauseOverlay.classList.add("hidden");
   finishOverlay.classList.add("hidden");
   gameState = "ready";
@@ -557,6 +557,7 @@ function toggleLyrics() {
 }
 
 function goToMenu() {
+  keepAwake(false);
   if (typeof Coop !== "undefined" && (Coop.on || Coop.lobby)) Coop.leave();
   document.getElementById("rotateHint").classList.add("hidden");
   pauseOverlay.classList.add("hidden");
@@ -1087,6 +1088,8 @@ function padMenus() {
     else if (gameState === "playing") { if (startDown) pauseGame(); }
     else if (reading) { /* the game reads the page input */ }
     else {
+      // Right stick: scrolls the open page (skills, journal, leaderboard...) smoothly, without moving the pick.
+      if (pad.lookY) padScroll(pad.lookY);
       if (dir && (!pad.navT || now - pad.navT > (pad.navHeld ? 130 : 240))) { pad.navHeld = !!pad.navT; pad.navT = now; navMove(dir[0], dir[1]); }
       if (!dir) { pad.navT = 0; pad.navHeld = false; }
       if (bDown) navBack();
@@ -1254,6 +1257,14 @@ function navLayer() {
 function navItems(layer) {
   return Array.from(layer.querySelectorAll("button, a[href], select, input, [tabindex='0']"))
     .filter(e => !e.disabled && e.offsetParent !== null && !e.closest(".hidden"));
+}
+// The scrolling part of whatever page is open: the right stick moves it.
+function padScroll(amount) {
+  const layer = navLayer();
+  if (!layer) return;
+  const box = [layer.querySelector(".journal-body, .skills-body, .leader-list, #artistList"), layer.querySelector(".overlay-card"), layer]
+    .find(b => b && b.scrollHeight > b.clientHeight + 2 && getComputedStyle(b).overflowY !== "hidden");
+  if (box) box.scrollTop += amount * 16;
 }
 function navFocus(elm) {
   if (navCurrent) navCurrent.classList.remove("nav-focus");
@@ -1489,6 +1500,7 @@ function coopRender(msg) {
   document.getElementById("coopRoom").classList.toggle("hidden", !inRoom);
   if (msg !== undefined) setText("coopError", inRoom ? "" : msg);
   if (!inRoom) return;
+  keepAwake(true);   // waiting in a lobby counts as playing
   startCoopStage();
   const roster = Coop.roster, others = roster.filter(r => !r.me).length;
   setText("coopCodeLabel", Coop.host ? "GIVE YOUR CREW THIS CODE" : "JOINED GAME");
@@ -1562,7 +1574,7 @@ function coopStepMission(dir) {
 }
 document.getElementById("coopPrev").addEventListener("click", () => coopStepMission(-1));
 document.getElementById("coopNext").addEventListener("click", () => coopStepMission(1));
-document.getElementById("coopClose").addEventListener("click", () => { Coop.leave(); coopOverlay.classList.add("hidden"); navFocus(null); });
+document.getElementById("coopClose").addEventListener("click", () => { keepAwake(false); Coop.leave(); coopOverlay.classList.add("hidden"); navFocus(null); });
 window.addEventListener("pagehide", () => { if (typeof Coop !== "undefined") Coop.leave(); });
 
 /* ---------------------------------------------------------------------------
@@ -1673,3 +1685,27 @@ function coopToLobby() {
   coopOverlay.classList.remove("hidden");
   coopRender("");
 }
+
+/* ---------------------------------------------------------------------------
+   KEEP THE SCREEN ON
+   From pressing Play until you are back on the main menu (pauses, the finish
+   screen and co-op lobbies included), the phone does not dim or sleep. The
+   browser drops the hold whenever the page is hidden, so it is taken again
+   when the game comes back into view.
+--------------------------------------------------------------------------- */
+const awake = { lock: null, want: false };
+async function keepAwake(on) {
+  awake.want = on;
+  try {
+    if (on) {
+      if (awake.lock || !("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+      awake.lock = await navigator.wakeLock.request("screen");
+      awake.lock.addEventListener("release", () => { awake.lock = null; });
+      if (!awake.want) { const l = awake.lock; awake.lock = null; l.release(); }
+    } else if (awake.lock) {
+      const l = awake.lock; awake.lock = null;
+      await l.release();
+    }
+  } catch (e) { awake.lock = null; /* not allowed here: the phone's own sleep setting applies */ }
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && awake.want) keepAwake(true); });

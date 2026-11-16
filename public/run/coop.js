@@ -212,6 +212,9 @@ const Coop = (() => {
       case "resume":
         if (st.on && gameState === "paused") { st.quiet = true; try { resumeGame(); } finally { st.quiet = false; } }
         break;
+      case "wantnext":         // a guest pressed Next or Run it back: the host takes everyone there
+        if (st.host && (st.on || st.lobby) && d.mission) regroupAll(d.mission);
+        break;
       case "regroup":          // host -> everyone: back to the lobby for the next one
         if (st.host || !(st.on || st.lobby)) return;
         toLobby(d.mission);
@@ -289,6 +292,11 @@ const Coop = (() => {
     lobbyChanged();
   }
 
+  function regroupAll(missionId) {
+    send("regroup", { mission: missionId });
+    toLobby(missionId);
+  }
+
   // Called every frame from the game's update.
   function tick(realDt) {
     if (!st.on) return;
@@ -328,10 +336,15 @@ const Coop = (() => {
       if (!g.hidden && me.state === "slide" && st.tripT <= 0 && t.g && t.a !== "slide"
           && Math.abs(g.x - me.x) < BODY_W * 1.1 && Math.abs(g.y - me.y) < 24) {
         st.tripT = 2.5;
+        p.fallUntil = now() + 900;   // show them going down here straight away
+        burst(g.x, g.y - 10, "#d9c7a0", 14, 180);
+        floatText(g.x, g.y - g.h - 20, "TRIPPED!", p.colour.text);
         send("trip", { to: p.id });
         showToast("TRIPPED", p.name + " GOES DOWN", "ko", 1.4);
         sfx.stun && sfx.stun();
       }
+      // Someone you've just tripped goes down on your screen straight away, not when their next update lands.
+      if (p.fallUntil > now()) g.pose = ["stun", Math.min(5, Math.floor((900 - (p.fallUntil - now())) / 150))];
     }
     // Shared checkpoints: once anyone is past one, it counts for everyone.
     if (bestCp > me.cp && !me.finished) me.cp = Math.min(bestCp, level.checkpoints.length - 2);
@@ -388,11 +401,12 @@ const Coop = (() => {
       send("start", { mission: selectedMission, at });
       scheduleStart(at);
     },
-    // Host: take the whole crew back to the lobby with this mission ready.
+    // Next or Run it back. The host takes the whole crew back to the lobby with
+    // that mission ready; anyone else asks the host's game to do it.
     regroup(missionId) {
-      if (!st.host || !(st.on || st.lobby)) return;
-      send("regroup", { mission: missionId });
-      toLobby(missionId);
+      if (!(st.on || st.lobby)) return;
+      if (st.host) regroupAll(missionId);
+      else send("wantnext", { mission: missionId });
     },
     leave,
     tick,

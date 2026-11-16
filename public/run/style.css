@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap');
 
 :root {
+  --vw: 1vw; --vh: 1vh; --dvh: 1dvh;
   --bg: #10110f;
   --panel: #191b18;
   --gold: #d7a64c;
@@ -20,7 +21,7 @@ html, body {
 }
 
 body {
-  min-height: 100vh;
+  min-height: calc(100 * var(--vh));
   display: grid;
   place-items: center;
   padding: 24px;
@@ -200,7 +201,7 @@ h1, h2 {
   font-weight: 900;
   line-height: .9;
   letter-spacing: .025em;
-  font-size: clamp(54px, 8vw, 82px);
+  font-size: clamp(54px, calc(8 * var(--vw)), 82px);
 }
 h1 span, h2 span { color: var(--gold); }
 
@@ -282,7 +283,7 @@ h1 span, h2 span { color: var(--gold); }
 .pause-button:hover { background: #d7a64c22; }
 
 .pause-card { padding-top: 32px; padding-bottom: 28px; }
-.pause-card h2 { font-size: clamp(42px, 7vw, 66px); margin-bottom: 20px; }
+.pause-card h2 { font-size: clamp(42px, calc(7 * var(--vw)), 66px); margin-bottom: 20px; }
 .pause-actions {
   display: flex;
   flex-direction: column;
@@ -313,7 +314,7 @@ body.pad-active .touch-controls { display: none !important; }
 }
 
 .finish-card { width: min(480px, 100%); padding-top: 32px; padding-bottom: 32px; }
-.finish-card h2 { font-size: clamp(42px, 7vw, 66px); }
+.finish-card h2 { font-size: clamp(42px, calc(7 * var(--vw)), 66px); }
 .finish-card .intro-copy strong { color: var(--gold-light); }
 
 .touch-controls {
@@ -353,24 +354,36 @@ body.pad-active .touch-controls { display: none !important; }
 }
 
 @media (max-width: 700px) {
-  body { padding: 10px; }
-  .topbar { margin-bottom: 10px; }
-  .topbar-tag, .footer { font-size: 8px; }
-  .hud { height: 42px; padding: 0 10px; }
-  .hud-center { font-size: 9px; letter-spacing: .12em; }
-  .hud-item { min-width: auto; gap: 5px; }
-  .hud-label { font-size: 7px; }
-  .hud-item strong { font-size: 17px; }
-  .touch-controls {
+
+  :where(html:not(.rotated)) body { padding: 10px; }
+
+  :where(html:not(.rotated)) .topbar { margin-bottom: 10px; }
+
+  :where(html:not(.rotated)) .topbar-tag, :where(html:not(.rotated)) .footer { font-size: 8px; }
+
+  :where(html:not(.rotated)) .hud { height: 42px; padding: 0 10px; }
+
+  :where(html:not(.rotated)) .hud-center { font-size: 9px; letter-spacing: .12em; }
+
+  :where(html:not(.rotated)) .hud-item { min-width: auto; gap: 5px; }
+
+  :where(html:not(.rotated)) .hud-label { font-size: 7px; }
+
+  :where(html:not(.rotated)) .hud-item strong { font-size: 17px; }
+
+  :where(html:not(.rotated)) .touch-controls {
     display: flex;
     position: static;
     padding: 12px 14px 14px;
     background: #0d0f0e;
     border-top: 1px solid #4b4638;
   }
-  .overlay { position: fixed; }
-  .overlay-card { padding: 16px 15px; }
-  .lyric-bar {
+
+  :where(html:not(.rotated)) .overlay { position: fixed; }
+
+  :where(html:not(.rotated)) .overlay-card { padding: 16px 15px; }
+
+  :where(html:not(.rotated)) .lyric-bar {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -385,25 +398,34 @@ body.pad-active .touch-controls { display: none !important; }
     text-align: center;
     transition: opacity .2s ease;
   }
-  .lyric-bar.off { display: none; }
-  .character-art { width: 75px; height: 75px; margin-bottom: 10px; }
-  .intro-copy { margin: 10px auto 13px; font-size: 10px; }
-  .control-hint { font-size: 7px; }
-  .hearts { font-size: 12px; margin-right: 6px; }
-  .stats { grid-template-columns: repeat(2, 1fr); }
+
+  :where(html:not(.rotated)) .lyric-bar.off { display: none; }
+
+  :where(html:not(.rotated)) .character-art { width: 75px; height: 75px; margin-bottom: 10px; }
+
+  :where(html:not(.rotated)) .intro-copy { margin: 10px auto 13px; font-size: 10px; }
+
+  :where(html:not(.rotated)) .control-hint { font-size: 7px; }
+
+  :where(html:not(.rotated)) .hearts { font-size: 12px; margin-right: 6px; }
+
+  :where(html:not(.rotated)) .stats { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 420px) {
-  .topbar-tag { display: none; }
-  .hud-center { display: none; }
-  .overlay-card { max-width: 330px; }
+
+  :where(html:not(.rotated)) .topbar-tag { display: none; }
+
+  :where(html:not(.rotated)) .hud-center { display: none; }
+
+  :where(html:not(.rotated)) .overlay-card { max-width: 330px; }
 }
 
 /* Phones held sideways: fit the whole game to the screen height. */
 @media (orientation: landscape) and (max-height: 500px) {
   body { padding: 6px; }
   .topbar, .footer { display: none; }
-  .game-shell { width: min(100%, calc((100vh - 12px) * 16 / 9)); }
+  .game-shell { width: min(100%, calc((calc(100 * var(--vh)) - 12px) * 16 / 9)); }
   .hud { height: 40px; padding: 0 14px; }
   .hud-item { min-width: auto; gap: 5px; }
   .hud-label { font-size: 7px; }
@@ -416,6 +438,36 @@ body.pad-active .touch-controls { display: none !important; }
   .intro-copy { margin: 8px auto 12px; }
   .control-hint { display: none; }
 }
+/* the same, for a phone shown sideways */
+
+  :where(html.rotated) body { padding: 6px; }
+
+  :where(html.rotated) .topbar, :where(html.rotated) .footer { display: none; }
+
+  :where(html.rotated) .game-shell { width: min(100%, calc((calc(100 * var(--vh)) - 12px) * 16 / 9)); }
+
+  :where(html.rotated) .hud { height: 40px; padding: 0 14px; }
+
+  :where(html.rotated) .hud-item { min-width: auto; gap: 5px; }
+
+  :where(html.rotated) .hud-label { font-size: 7px; }
+
+  :where(html.rotated) .hud-center { font-size: 10px; letter-spacing: .12em; }
+
+  :where(html.rotated) .hud-item strong { font-size: 17px; }
+
+  :where(html.rotated) .overlay { position: fixed; }
+
+  :where(html.rotated) .overlay-card { padding: 14px 18px; }
+
+  :where(html.rotated) .character-art { width: 64px; height: 64px; margin-bottom: 8px; }
+
+  :where(html.rotated) h1 { font-size: 48px; }
+
+  :where(html.rotated) .intro-copy { margin: 8px auto 12px; }
+
+  :where(html.rotated) .control-hint { display: none; }
+
 
 /* ---------------------------------------------------------------------------
    START SCREEN: title panel on the left, the attract scene runs behind it
@@ -437,8 +489,8 @@ body.pad-active .touch-controls { display: none !important; }
   text-shadow: 0 6px 30px #000a;
 }
 .st-small { font-size: 24px; letter-spacing: .3em; color: #d9d4c8; }
-.st-big { font-size: clamp(56px, 7.4vw, 84px); color: var(--gold-light); letter-spacing: .02em; animation: titlePulse 1.6s ease-in-out infinite; }
-.st-run { font-size: clamp(40px, 5.2vw, 60px); letter-spacing: .08em; color: #f4f0e8; }
+.st-big { font-size: clamp(56px, calc(7.4 * var(--vw)), 84px); color: var(--gold-light); letter-spacing: .02em; animation: titlePulse 1.6s ease-in-out infinite; }
+.st-run { font-size: clamp(40px, calc(5.2 * var(--vw)), 60px); letter-spacing: .08em; color: #f4f0e8; }
 .st-run span { color: var(--gold); }
 @keyframes titlePulse {
   0%, 100% { text-shadow: 0 0 0 #f1ca7800, 0 6px 30px #000a; }
@@ -474,7 +526,7 @@ body.pad-active .touch-controls { display: none !important; }
    SIGN IN AND LEADERBOARD PANELS
 --------------------------------------------------------------------------- */
 .auth-card, .leader-card { position: relative; width: min(440px, 100%); text-align: left; }
-.auth-card h2, .leader-card h2 { font-size: clamp(40px, 6vw, 56px); margin-bottom: 4px; }
+.auth-card h2, .leader-card h2 { font-size: clamp(40px, calc(6 * var(--vw)), 56px); margin-bottom: 4px; }
 .auth-card .intro-copy { margin: 8px 0 14px; max-width: none; }
 .close-x {
   position: absolute; top: 8px; right: 10px;
@@ -584,7 +636,7 @@ body.pad-active .touch-controls { display: none !important; }
 .finish-brand { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-family: "Barlow Condensed", sans-serif; font-weight: 800; letter-spacing: .2em; color: #d9d4c8; font-size: 14px; }
 .finish-brand img { width: 26px; height: 26px; border-radius: 5px; }
 .finish-panel { display: flex; flex-direction: column; justify-content: center; text-align: left; padding: 22px 28px; overflow-y: auto; min-height: 0; }
-.finish-panel h2 { font-size: clamp(38px, 5.4vw, 60px); }
+.finish-panel h2 { font-size: clamp(38px, calc(5.4 * var(--vw)), 60px); }
 .finish-mission { font-size: 9px; letter-spacing: .22em; color: #b8b2a5; font-weight: 700; margin: 0 0 8px; }
 .rp-line { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 0; }
 .rp-value { font-family: "Barlow Condensed", sans-serif; font-weight: 900; font-size: 50px; color: var(--gold-light); line-height: 1; }
@@ -615,14 +667,22 @@ body.pad-active .touch-controls { display: none !important; }
 
 /* Phones held upright: Koda on top, results underneath. */
 @media (max-width: 700px) and (orientation: portrait) {
-  .finish-layout { grid-template-columns: 1fr; grid-template-rows: minmax(150px, 34vh) minmax(0, 1fr); }
-  .finish-stage { border-right: 0; border-bottom: 1px solid #ffffff10; padding: 10px 10px 6px; }
-  .finish-panel { justify-content: flex-start; padding: 14px 16px 18px; text-align: center; }
-  .finish-panel .stats { grid-template-columns: repeat(3, 1fr); }
-  .level-line, .rp-line, .finish-actions { justify-content: center; }
-  .finish-panel .xp-bar, .finish-panel .intro-copy { margin-left: auto; margin-right: auto; }
-  .rp-value { font-size: 40px; }
-  .mission-card { flex-basis: 104px; height: 72px; }
+
+  :where(html:not(.rotated)) .finish-layout { grid-template-columns: 1fr; grid-template-rows: minmax(150px, calc(34 * var(--vh))) minmax(0, 1fr); }
+
+  :where(html:not(.rotated)) .finish-stage { border-right: 0; border-bottom: 1px solid #ffffff10; padding: 10px 10px 6px; }
+
+  :where(html:not(.rotated)) .finish-panel { justify-content: flex-start; padding: 14px 16px 18px; text-align: center; }
+
+  :where(html:not(.rotated)) .finish-panel .stats { grid-template-columns: repeat(3, 1fr); }
+
+  :where(html:not(.rotated)) .level-line, :where(html:not(.rotated)) .rp-line, :where(html:not(.rotated)) .finish-actions { justify-content: center; }
+
+  :where(html:not(.rotated)) .finish-panel .xp-bar, :where(html:not(.rotated)) .finish-panel .intro-copy { margin-left: auto; margin-right: auto; }
+
+  :where(html:not(.rotated)) .rp-value { font-size: 40px; }
+
+  :where(html:not(.rotated)) .mission-card { flex-basis: 104px; height: 72px; }
 }
 
 /* Phones held sideways: compact so it fits without scrolling. */
@@ -645,6 +705,42 @@ body.pad-active .touch-controls { display: none !important; }
   .st-run { font-size: 34px; }
   .mode-toggle button { padding: 6px 0; }
 }
+/* the same, for a phone shown sideways */
+
+  :where(html.rotated) .finish-panel { padding: 10px 16px; }
+
+  :where(html.rotated) .finish-panel h2 { font-size: 30px; }
+
+  :where(html.rotated) .finish-panel .intro-copy, :where(html.rotated) .notes-split { display: none; }
+
+  :where(html.rotated) .finish-panel .stats { margin: 6px 0 2px; gap: 5px; }
+
+  :where(html.rotated) .finish-panel .stats div { padding: 3px; }
+
+  :where(html.rotated) .finish-panel .stats dd { font-size: 16px; }
+
+  :where(html.rotated) .rp-value { font-size: 34px; }
+
+  :where(html.rotated) .level-line { margin-top: 4px; }
+
+  :where(html.rotated) .final-saved { margin-bottom: 6px; }
+
+  :where(html.rotated) .finish-actions .primary-button, :where(html.rotated) .finish-actions .secondary-button { padding: 8px 12px; min-width: 0; }
+
+  :where(html.rotated) .finish-brand { display: none; }
+
+  :where(html.rotated) .mission-strip { margin-bottom: 6px; }
+
+  :where(html.rotated) .mission-card { height: 60px; flex-basis: 96px; }
+
+  :where(html.rotated) .brand-row { display: none; }
+
+  :where(html.rotated) .st-big { font-size: 48px; }
+
+  :where(html.rotated) .st-run { font-size: 34px; }
+
+  :where(html.rotated) .mode-toggle button { padding: 6px 0; }
+
 
 /* ===========================================================================
    GLOSS: modern retro finish. Glass panels, lacquered gold, neon glow.
@@ -853,7 +949,8 @@ h1, h2, .st-big { text-shadow: none; }
 .ai-levels { max-width: 300px; margin-top: -4px; }
 .ai-levels button { padding-top: 7px; padding-bottom: 7px; font-size: 10px; }
 @media (max-width: 700px) {
-  .mode-toggle button { letter-spacing: .05em; font-size: 9px; }
+
+  :where(html:not(.rotated)) .mode-toggle button { letter-spacing: .05em; font-size: 9px; }
 }
 
 /* ---------- Feelz Machine sign-in gate, wallet, settings ---------- */
@@ -870,8 +967,8 @@ h1, h2, .st-big { text-shadow: none; }
 .hearts span.hidden { display: none; }
 
 /* ---------- Skills page ---------- */
-.skills-card { position: relative; width: min(860px, 100%); max-height: min(92vh, 760px); display: flex; flex-direction: column; text-align: left; }
-.skills-card h2 { font-size: clamp(40px, 6vw, 56px); margin-bottom: 4px; }
+.skills-card { position: relative; width: min(860px, 100%); max-height: min(calc(92 * var(--vh)), 760px); display: flex; flex-direction: column; text-align: left; }
+.skills-card h2 { font-size: clamp(40px, calc(6 * var(--vw)), 56px); margin-bottom: 4px; }
 .skills-card .tabs { flex-wrap: wrap; }
 .skills-body { flex: 1; min-height: 0; overflow-y: auto; margin-top: 12px; padding-right: 4px; -webkit-overflow-scrolling: touch; }
 .skills-sub { margin: 14px 0 8px; font: 700 11px/1.2 "Barlow Condensed", sans-serif; letter-spacing: .18em; color: var(--gold-light); }
@@ -914,12 +1011,18 @@ button:disabled { opacity: .45; cursor: not-allowed; transform: none !important;
 .paypal-holder { max-width: 360px; min-height: 48px; }
 
 @media (max-width: 640px) {
-  .skills-card { max-height: 94vh; padding: 18px 14px; }
-  .skill-grid { grid-template-columns: 1fr; }
-  .style-grid { grid-template-columns: repeat(2, 1fr); }
-  .voucher-item { grid-template-columns: auto 1fr; }
-  .voucher-item .voucher-code { grid-column: 1 / -1; }
-  .voucher-item button { grid-column: 1 / -1; }
+
+  :where(html:not(.rotated)) .skills-card { max-height: calc(94 * var(--vh)); padding: 18px 14px; }
+
+  :where(html:not(.rotated)) .skill-grid { grid-template-columns: 1fr; }
+
+  :where(html:not(.rotated)) .style-grid { grid-template-columns: repeat(2, 1fr); }
+
+  :where(html:not(.rotated)) .voucher-item { grid-template-columns: auto 1fr; }
+
+  :where(html:not(.rotated)) .voucher-item .voucher-code { grid-column: 1 / -1; }
+
+  :where(html:not(.rotated)) .voucher-item button { grid-column: 1 / -1; }
 }
 
 /* More contrast so the gloss pops */
@@ -964,15 +1067,15 @@ html, body { background-color: #0a0a0a; }
   background: linear-gradient(90deg, #050506f2 0%, #050506d9 38%, #05050640 64%, #05050600 78%); }
 .pause-card { width: min(420px, 100%); text-align: left; background: none !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .pause-card::before { display: none; }
-.pause-title .st-big { font-size: clamp(52px, 9vw, 96px); }
-.pause-title .st-run { font-size: clamp(26px, 4.4vw, 44px); }
+.pause-title .st-big { font-size: clamp(52px, calc(9 * var(--vw)), 96px); }
+.pause-title .st-run { font-size: clamp(26px, calc(4.4 * var(--vw)), 44px); }
 .pause-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
 .pause-actions #resumeButton { grid-column: 1 / -1; }
 .pause-card .control-hint { text-align: left; }
 
 /* Journal */
-.journal-card { width: min(900px, 100%); max-height: min(92vh, 760px); display: flex; flex-direction: column; text-align: left; position: relative; }
-.journal-card h2 { font-size: clamp(40px, 6vw, 56px); margin-bottom: 4px; }
+.journal-card { width: min(900px, 100%); max-height: min(calc(92 * var(--vh)), 760px); display: flex; flex-direction: column; text-align: left; position: relative; }
+.journal-card h2 { font-size: clamp(40px, calc(6 * var(--vw)), 56px); margin-bottom: 4px; }
 .journal-body { overflow-y: auto; margin-top: 10px; padding-right: 4px; }
 .journal-mission h3 { margin: 14px 0 8px; font: 800 14px "Barlow Condensed", sans-serif; letter-spacing: .14em; color: var(--gold-light); }
 .journal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
@@ -998,7 +1101,7 @@ html, body { background-color: #0a0a0a; }
 
 /* Player 2 joins */
 .join-card { width: min(640px, 100%); text-align: left; position: relative; }
-.join-card h2 { font-size: clamp(40px, 6vw, 56px); margin-bottom: 10px; }
+.join-card h2 { font-size: clamp(40px, calc(6 * var(--vw)), 56px); margin-bottom: 10px; }
 .join-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
 .join-slot { padding: 14px; border-radius: 14px; border: 1px dashed rgba(255, 255, 255, .2); background: rgba(255, 255, 255, .03); display: flex; flex-direction: column; gap: 4px; }
 .join-slot.ready { border-style: solid; border-color: var(--gold-light); box-shadow: 0 0 18px rgba(241, 202, 120, .2); }
@@ -1009,7 +1112,10 @@ html, body { background-color: #0a0a0a; }
 .join-signin { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .join-signin input { padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, .16); background: #141414; color: #fff; font: 600 13px "DM Sans", sans-serif; }
 .join-or { text-align: center; font: 800 10px "Barlow Condensed", sans-serif; letter-spacing: .2em; color: #8d8d92; }
-@media (max-width: 640px) { .join-grid { grid-template-columns: 1fr; } .pause-actions { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+ :where(html:not(.rotated)) .join-grid { grid-template-columns: 1fr; }
+ :where(html:not(.rotated)) .pause-actions { grid-template-columns: 1fr; }
+}
 
 
 /* Phones held upright during a run: ask for landscape, where the game fills the screen. */
@@ -1034,9 +1140,9 @@ html, body { background-color: #0a0a0a; }
 /* Edge to edge: the game fills the browser window on every screen, no frame around it. */
 html, body { height: 100%; background: #000; }
 body { padding: 0; display: block; min-height: 0; overflow: hidden; }
-.game-shell { width: 100vw; height: 100vh; height: 100dvh; display: grid; place-items: center; }
+.game-shell { width: calc(100 * var(--vw)); height: calc(100 * var(--vh)); height: calc(100 * var(--dvh)); display: grid; place-items: center; }
 .topbar, .footer { display: none; }
-.game-frame { width: min(100vw, calc(100vh * var(--game-ar, 1.7778))); width: min(100vw, calc(100dvh * var(--game-ar, 1.7778))); border: 0; border-radius: 0; box-shadow: none; background: #000; }
+.game-frame { width: min(calc(100 * var(--vw)), calc(calc(100 * var(--vh)) * var(--game-ar, 1.7778))); width: min(calc(100 * var(--vw)), calc(calc(100 * var(--dvh)) * var(--game-ar, 1.7778))); border: 0; border-radius: 0; box-shadow: none; background: #000; }
 #gameCanvas { border-radius: 0; aspect-ratio: auto; height: auto; }
 
 /* Online co-op lobby */
@@ -1051,7 +1157,7 @@ body { padding: 0; display: block; min-height: 0; overflow: hidden; }
 .coop-mission { text-align: center; font-size: 11px; letter-spacing: .16em; color: #f4f0e8; margin: 0; flex: 1; }
 .coop-status { text-align: center; font-size: 12px; letter-spacing: .12em; color: #7fe3ff; min-height: 16px; margin: 8px 0; }
 #coopThem.ready strong { color: #7fe3ff; }
-.coop-card { max-height: 94vh; overflow-y: auto; }
+.coop-card { max-height: calc(94 * var(--vh)); overflow-y: auto; }
 .coop-mission-row .strip-arrow { height: 34px; flex-basis: 30px; }
 @media (orientation: landscape) and (max-height: 500px) {
   .coop-card { padding: 14px 18px 12px; }
@@ -1063,9 +1169,27 @@ body { padding: 0; display: block; min-height: 0; overflow: hidden; }
   .coop-status { margin: 4px 0; }
   .coop-mission-row { margin-bottom: 6px; }
 }
+/* the same, for a phone shown sideways */
+
+  :where(html.rotated) .coop-card { padding: 14px 18px 12px; }
+
+  :where(html.rotated) .coop-card h2 { font-size: 26px; margin: 2px 0 4px; }
+
+  :where(html.rotated) .coop-code { font-size: 32px; margin-bottom: 4px; }
+
+  :where(html.rotated) .coop-code-label { margin-top: 2px; }
+
+  :where(html.rotated) .coop-card .join-slot { padding: 6px 10px; }
+
+  :where(html.rotated) .coop-card .join-slot strong { font-size: 18px; }
+
+  :where(html.rotated) .coop-status { margin: 4px 0; }
+
+  :where(html.rotated) .coop-mission-row { margin-bottom: 6px; }
+
 
 /* Artist runs */
-.artist-card { width: min(560px, 100%); max-height: 92vh; overflow-y: auto; }
+.artist-card { width: min(560px, 100%); max-height: calc(92 * var(--vh)); overflow-y: auto; }
 .artist-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; text-align: left; }
 .artist-run { position: relative; min-height: 130px; border-radius: 14px; border: 1px solid #ffffff22; background: #1a1c1a center / cover no-repeat; overflow: hidden; cursor: pointer; color: #fff; padding: 0; display: flex; flex-direction: column; justify-content: flex-end; text-align: left; }
 .artist-run::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, #0b0d0c10, #0b0d0cf0 70%); }
@@ -1126,6 +1250,71 @@ body { padding: 0; display: block; min-height: 0; overflow: hidden; }
   .touch-controls { position: absolute; padding: 0 14px; background: none; border-top: 0; bottom: 13px; }
   .lyric-bar { display: none !important; }   /* the lyrics show in the picture instead */
 }
+/* the same, for a phone shown sideways */
+
+  :where(html.rotated) .start-screen { padding: 10px 16px 8px; place-items: stretch; overflow: hidden; }
+
+  :where(html.rotated) .start-panel {
+    width: 100%; max-width: none;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 31%); column-gap: 18px;
+    align-content: start;
+  }
+
+  :where(html.rotated) .start-panel > * { grid-column: 1; min-width: 0; }
+
+  :where(html.rotated) .start-panel > .player-card, :where(html.rotated) .start-panel > .signin-gate { grid-column: 2; grid-row: 1 / span 12; align-self: start; margin-top: 40px; max-width: none; }
+
+  :where(html.rotated) .start-title { margin: 0 0 2px; gap: 8px; }
+
+  :where(html.rotated) .st-big { font-size: 34px; }
+
+  :where(html.rotated) .st-run { font-size: 24px; }
+
+  :where(html.rotated) .track-line { margin: 0 0 6px; font-size: 9px; }
+
+  :where(html.rotated) .strip-wrap { margin-bottom: 6px; }
+
+  :where(html.rotated) .mission-strip { margin-bottom: 0; }
+
+  :where(html.rotated) .mission-card { height: 68px; flex-basis: 104px; }
+
+  :where(html.rotated) .strip-arrow { height: 68px; }
+
+  :where(html.rotated) .mc-num { font-size: 14px; top: 4px; }
+
+  :where(html.rotated) .mc-title { font-size: 11px; bottom: 17px; }
+
+  :where(html.rotated) .mc-status { bottom: 5px; font-size: 7px; }
+
+  :where(html.rotated) .mode-toggle { margin-bottom: 6px; max-width: none; gap: 5px; }
+
+  :where(html.rotated) .mode-toggle button { padding: 6px 4px; font-size: 9px; }
+
+  :where(html.rotated) .start-actions { gap: 6px; margin-bottom: 0; }
+
+  :where(html.rotated) .start-play { min-width: 104px; padding: 9px 16px; font-size: 12px; }
+
+  :where(html.rotated) .start-actions .secondary-button { padding: 8px 11px; font-size: 9px; }
+
+  :where(html.rotated) .player-card { padding: 9px 11px 8px; }
+
+  :where(html.rotated) .pc-stats { margin-top: 6px; }
+
+  :where(html.rotated) .pc-stats strong, :where(html.rotated) .pc-wallet strong { font-size: 16px; }
+
+  :where(html.rotated) .pc-wallet { margin-top: 5px; padding-top: 5px; }
+
+  :where(html.rotated) .pc-save { margin-top: 4px; }
+
+  :where(html.rotated) .signin-gate .gate-copy { font-size: 11px; }
+
+  :where(html.rotated) .pad-hint, :where(html.rotated) .control-hint { display: none !important; }
+
+  /* Small phones sideways: the touch buttons sit over the picture, never under it, so nothing scrolls. */
+  :where(html.rotated) .touch-controls { position: absolute; padding: 0 14px; background: none; border-top: 0; bottom: 13px; }
+
+  :where(html.rotated) .lyric-bar { display: none !important; }
+
 .game-frame.menu-mode .touch-controls { display: none; }
 
 /* Phones held upright on the menu: a tap turns it sideways where the phone allows. */
@@ -1143,6 +1332,10 @@ body { padding: 0; display: block; min-height: 0; overflow: hidden; }
 @media (orientation: landscape) and (max-height: 500px) {
   .coop-stage { max-height: 110px; width: auto; margin: 0 auto -4px; }
 }
+/* the same, for a phone shown sideways */
+
+  :where(html.rotated) .coop-stage { max-height: 110px; width: auto; margin: 0 auto -4px; }
+
 .coop-join-row input { width: auto; flex: 1 1 0; min-width: 0; }
 .coop-choices { grid-template-columns: minmax(0, 1fr); }
 .coop-join-row input { width: 0; }
@@ -1153,3 +1346,37 @@ body { padding: 0; display: block; min-height: 0; overflow: hidden; }
 .back-toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 .coop-names { display: none; }
+
+
+/* Phones held upright: the whole game is drawn sideways, so it's plain to turn the phone.
+   (ui.js sets html.rotated and the swapped sizes.) */
+html.rotated { overflow: hidden; }
+html.rotated body {
+  position: fixed; top: 0; left: 0; overflow: hidden;
+  width: var(--rot-w); height: var(--rot-h);
+  transform-origin: top left; transform: translateX(var(--rot-h)) rotate(90deg);
+}
+html.rotated .rotate-hint { display: none !important; }
+
+/* Journal on phones: smaller finds, more to a row, so each mission's finds sit together and the
+   page moves a row at a time instead of flying past them. */
+.journal-body { overscroll-behavior: contain; scroll-padding-top: 6px; }
+.journal-mission { scroll-margin-top: 6px; }
+.jc-back { overflow-y: auto; scrollbar-width: none; }
+.jc-back::-webkit-scrollbar { display: none; }
+@media (max-width: 700px), (orientation: landscape) and (max-height: 500px) {
+  .journal-card { max-height: calc(96 * var(--dvh)); padding: 12px 14px; }
+  .journal-card h2 { font-size: 26px; margin: 0; }
+  .journal-mission h3 { margin: 8px 0 5px; font-size: 12px; }
+  .journal-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+  .jc-front { padding: 5px 5px 18px; }
+  .jc-label { left: 7px; bottom: 3px; font-size: 10px; }
+  .jc-back { padding: 8px; }
+  .jc-back strong { font-size: 13px; margin: 2px 0 3px; }
+  .jc-back p { font-size: 10.5px; line-height: 1.35; }
+  .jc-back .jp-kind { font-size: 8px; }
+}
+:where(html.rotated) .journal-card { max-height: calc(96 * var(--dvh)); padding: 12px 14px; }
+:where(html.rotated) .journal-card h2 { font-size: 26px; margin: 0; }
+:where(html.rotated) .journal-mission h3 { margin: 8px 0 5px; font-size: 12px; }
+:where(html.rotated) .journal-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }

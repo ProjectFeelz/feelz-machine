@@ -1837,8 +1837,8 @@ function hudBottom() {
   if (frameTime - hudCache.t < 1) return hudCache.v;
   hudCache.t = frameTime;
   const hud = document.querySelector(".hud"), cv = ctx.canvas;
-  const r = cv.getBoundingClientRect();
-  hudCache.v = hud && r.height ? hud.getBoundingClientRect().height * (cv.height / r.height) / (cv.height / H) : 0;
+  const ch = cv.clientHeight;   // layout sizes: right even when the page is drawn sideways
+  hudCache.v = hud && ch ? hud.offsetHeight * (cv.height / ch) / (cv.height / H) : 0;
   return hudCache.v;
 }
 

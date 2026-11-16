@@ -256,7 +256,8 @@ function updateSystems(dt) {
 }
 
 function drivePartActive() {
-  if (twoPlayer || inward.active || freeRoam) return false;
+  // In co-op the song is shared, so one runner standing still can't hold it for everyone.
+  if (twoPlayer || inward.active || freeRoam || (typeof coopOn === "function" && coopOn())) return false;
   const part = mission.parts[playingPartIndex()];
   return !!(part && part.drive);
 }
@@ -265,7 +266,7 @@ function drivePartActive() {
 function driveHoldsClock(realDt) {
   drive.hint = Math.max(0, drive.hint - realDt);
   // Stillness: the song only plays while you stand still.
-  if (!twoPlayer && !freeRoam && level && partFlag("stillness")) {
+  if (!twoPlayer && !freeRoam && !(typeof coopOn === "function" && coopOn()) && level && partFlag("stillness")) {
     if (!drive.stillShown) { drive.stillShown = true; showBanner("STILLNESS", "THE SONG ONLY PLAYS WHILE YOU STAND STILL", 2.4); }
     const p = players[0];
     if (veil.still > 0.25 || p.finished) {
@@ -282,7 +283,17 @@ function driveHoldsClock(realDt) {
   if (sfx.holdPad) sfx.holdPad(false);
   const on = drivePartActive();
   if (on && !drive.active) { drive.active = true; drive.trail = []; drive.stopT = 0; showBanner("MUSIC DRIVE", "THE SONG ONLY PLAYS WHILE YOU MOVE", 2.2); }
-  if (!on) { if (drive.active) { drive.active = false; drive.rewinding = false; } songHeld = false; sfx.rewindTape(false); return false; }
+  if (!on) {
+    // Leaving a drive part (or a stillness part): if the song was being held, start it again from where the clock is.
+    const wasHolding = drive.active || songHeld;
+    if (drive.active) { drive.active = false; drive.rewinding = false; }
+    songHeld = false; sfx.rewindTape(false);
+    if (wasHolding && songAudio.paused && soundOn && !reading && gameState === "playing" && !taunt) {
+      seekSong(songClock);
+      songAudio.play().then(() => { musicBlocked = false; }).catch(() => { musicBlocked = true; });
+    }
+    return false;
+  }
   const p = players[0];
   const ctl = controlsFor(0);
   // Only going forward counts. Walking back holds the song, and a hop or a step on the way back doesn't restart it.
