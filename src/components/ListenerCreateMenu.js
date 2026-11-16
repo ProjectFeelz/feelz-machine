@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { X } from 'lucide-react';
@@ -18,11 +18,16 @@ import CreateMenuSection, { MENU_TINTS } from './CreateMenuSection';
 // starts uploading does not have to relearn where things live. The rows
 // themselves come from CreateMenuSection, which is why a change to the look
 // cannot land in one menu and miss the other.
+// Groups that are always open: what's running right now, and making something.
+const ALWAYS_OPEN = ['Happening now', 'Create'];
+
 export default function ListenerCreateMenu({ onClose }) {
   const navigate = useNavigate();
   const { isListenerPro } = useTier();
   const sessionsGate = useSchoolSessions();
   const isPro = isListenerPro;
+  // Which folded group is open (one at a time); Create and Happening now never fold.
+  const [openGroup, setOpenGroup] = useState(null);
 
   // The id is passed so the two menus report in the same shape, which is the
   // only way to compare what a listener uses against what an artist uses.
@@ -106,7 +111,10 @@ export default function ListenerCreateMenu({ onClose }) {
 
         <div className="p-4 space-y-3">
           {groups.map(({ heading, tint, items }) => (
-            <CreateMenuSection key={heading} heading={heading} tint={tint} items={items} />
+            <CreateMenuSection key={heading} heading={heading} tint={tint} items={items}
+              collapsible={!ALWAYS_OPEN.includes(heading)}
+              open={openGroup === heading}
+              onToggle={() => setOpenGroup(g => (g === heading ? null : heading))} />
           ))}
         </div>
       </div>

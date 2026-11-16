@@ -22,6 +22,9 @@ import CreateMenuSection, { MENU_TINTS } from './CreateMenuSection';
 // Kept fully self-contained (its own state/handlers) so it can be mounted
 // from anywhere — the profile page's own "+" button, or the mobile nav's
 // center plus button — without the two call sites fighting over shared state.
+// Groups that are always open: what's running right now, and making music.
+const ALWAYS_OPEN = ['Happening now', 'Create'];
+
 export default function CreateMenuModal({ artist, user, onClose, primaryColor = '#90AF2F', bgColor = '#000000' }) {
   const navigate = useNavigate();
   const sessionsGate = useSchoolSessions();
@@ -29,6 +32,8 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
   // Newsletter shortcut, shown only to admins and newsletter editors so
   // Jane can reach it in one tap instead of Monetize > Affiliates > Newsletter.
   const [canNewsletter, setCanNewsletter] = useState(false);
+  // Which folded group is open (one at a time); Create and Happening now never fold.
+  const [openGroup, setOpenGroup] = useState(null);
 
   // ── My Top Pick ───────────────────────────────────────────────────────
   // The control for this existed only in ProfileSetup.js (/setup). The
@@ -337,20 +342,34 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                 they are gone rather than left to rot.
               */}
               {[
+                // ORDERED BY WHAT ARTISTS USE MOST (app_events, menu_* taps).
+                // Whatever is running right now first, then making music,
+                // then the money, then fans, profile, account, and help last.
+                // Extra features sit in their own bands so the top stays short.
+                ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
+                  ? [{ heading: 'Happening now', tint: MENU_TINTS.now, items: [
+                      { id: 'sessions', icon: '🏆', label: 'Enter Sessions', sub: 'The cover competition, open to everyone' },
+                    ] }]
+                  : []),
                 {
                   heading: 'Create',
                   tint: MENU_TINTS.create,
                   items: [
                     { id: 'upload', icon: '🎵', label: 'Upload Track', sub: 'Add new music to your profile' },
-                    gated('stories', { id: 'story', icon: '📸', label: 'Add Story', sub: 'Share a 24hr clip with fans' }),
-                    // 'Thought of the Day' removed. It wrote to artist_thoughts
-                    // and rendered in exactly one place — the artist's own
-                    // profile — so the entry sat in the create menu offering a
-                    // post almost nobody made and nobody found. Voice Memo and
-                    // Story cover the same "say something today" intent and
-                    // both actually surface.
-                    gated('voice_memo', { id: 'memo', icon: '🎙️', label: 'Voice Memo', sub: 'Record a message for your fans' }),
                     gated('live_streaming', { id: 'live', icon: '🔴', label: 'Go Live', sub: 'Start a live session' }),
+                    gated('stories', { id: 'story', icon: '📸', label: 'Add Story', sub: 'Share a 24hr clip with fans' }),
+                    gated('voice_memo', { id: 'memo', icon: '🎙️', label: 'Voice Memo', sub: 'Record a message for your fans' }),
+                  ],
+                },
+                {
+                  // Money owed to you and money you can make, together.
+                  heading: 'Your money',
+                  tint: MENU_TINTS.money,
+                  items: [
+                    { id: 'earnings', icon: '📈', label: 'Earnings and stats', sub: 'What you have made and who is listening' },
+                    { id: 'splits', icon: '🤝', label: 'Splits', sub: 'Collab shares owed to you and by you' },
+                    { id: 'retail', icon: '🏬', label: 'Feelz Retail', sub: 'Put your music in venues and get paid for it' },
+                    { id: 'affiliates', icon: '💸', label: 'Affiliate Programme', sub: 'Earn by bringing people to the platform' },
                   ],
                 },
                 {
@@ -359,15 +378,10 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   items: [
                     gated('fan_broadcast', { id: 'dm', icon: '📣', label: 'Message Fans', sub: 'Send a notification to all followers' }),
                     { id: 'chats', icon: '💬', label: 'Chats',        sub: 'Your rooms and artist chats' },
-                    // COLLAB RADAR. The thing that turns two artists into a
-                    // track, and it lived only on the Hub, which is the page
-                    // nobody opens. Here rather than under Account because
-                    // finding somebody to work with is reaching people, not
-                    // administration.
-                    { id: 'radar', icon: '🛰️', label: 'Collab Radar', sub: 'Find artists to work with' },
                     ...(canNewsletter
                       ? [{ id: 'newsletter', icon: '📨', label: 'Newsletter', sub: 'Write an update for the app or venues' }]
                       : []),
+                    { id: 'radar', icon: '🛰️', label: 'Collab Radar', sub: 'Find artists to work with' },
                   ],
                 },
                 {
@@ -376,10 +390,6 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   items: [
                     { id: 'edit',    icon: '✏️', label: 'Edit Profile', sub: 'Update your bio, photo and links' },
                     { id: 'toppick', icon: '⭐', label: 'Top Pick',     sub: 'Choose the track or album your profile leads with' },
-                    // Merch is parked (src/config/features.js). The entry stays
-                    // visible rather than vanishing, because an artist who set a
-                    // store up should be told it is paused, not left wondering
-                    // where it went. Tapping it explains; it does not open a shop.
                     MERCH_PARKED
                       ? { id: 'merch_parked', icon: '🛍️', label: 'Merch Store', sub: 'Paused, tap to see why' }
                       : isPremium
@@ -388,96 +398,29 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   ],
                 },
                 {
-                  // SETTINGS, AND WHY IT IS NOT THE SAME ROW AS EDIT PROFILE
-                  //
-                  // /profile and /profile/edit are two different pages whose
-                  // names do not distinguish them. /profile/edit is the bio and
-                  // photo form in the group above. /profile is the account: the
-                  // PayPal details an artist is paid through, the theme editor,
-                  // and the rest. Nothing in this menu pointed at it, so the
-                  // only way an artist reached the page that pays them was to
-                  // already know the address — and "Edit Profile" is where they
-                  // looked first, which is the whole problem. Its own group, so
-                  // the two never read as the same thing again.
                   heading: 'Account',
                   tint: MENU_TINTS.account,
                   items: [
                     // The Hub moved here from the bottom bar on phones, where Games now sits.
                     { id: 'hub', icon: '🏠', label: isBeatmaker ? 'Studio' : 'Hub', sub: 'All your tools in one place' },
                     { id: 'settings', icon: '⚙️', label: 'Settings', sub: 'Payments, theme and account' },
-                    // EARNINGS, THE PAGE THAT JUSTIFIES THE WHOLE PLATFORM.
-                    //
-                    // This menu linked /dashboard?tab=upload and nothing else
-                    // on the dashboard, so the only way to the page showing
-                    // what you have been paid was to land on the dashboard and
-                    // find the right tab. An artist deciding whether this is
-                    // worth their time is deciding on that screen, and it was
-                    // three taps and a guess away.
-                    { id: 'earnings', icon: '📈', label: 'Earnings and stats', sub: 'What you have made and who is listening' },
-                    // FEELZ RETAIL, A SECOND INCOME NOBODY COULD FIND.
-                    //
-                    // Getting a song into venues pays separately from
-                    // streaming, and nothing in this menu pointed at it.
-                    { id: 'retail', icon: '🏬', label: 'Feelz Retail', sub: 'Put your music in venues and get paid for it' },
-                    // SPLITS, FOR THE SAME REASON AS SETTINGS
-                    //
-                    // /splits is the ledger of collaborator shares: what you
-                    // are owed on other people's sales, and what you owe on
-                    // yours. It is where a collaborator confirms a share
-                    // reached them.
-                    //
-                    // The whole app linked to it from one place: a text link
-                    // on the Payments tab of /profile, which itself had no
-                    // entry point in this menu until today. So a collaborator
-                    // told to "confirm when it reaches you" had to already
-                    // know the address of a page two levels inside another
-                    // page they could not find either.
-                    { id: 'splits', icon: '🤝', label: 'Splits', sub: 'Collab shares owed to you and by you' },
-                    // THE AFFILIATE PROGRAMME, FOR THE THIRD TIME FOR THE SAME
-                    // REASON.
-                    //
-                    // /affiliates is a page that pays artists for bringing
-                    // people to the platform, and the only way in was through
-                    // the hub menu, which almost nobody opens. Settings and
-                    // Splits were both buried the same way and both got moved
-                    // here; this is the last of the three.
-                    //
-                    // In Account rather than More on purpose. It is money
-                    // owed to you, which is what the rest of this group is.
-                    { id: 'affiliates', icon: '💸', label: 'Affiliate Programme', sub: 'Earn by bringing people to the platform' },
-                    // EMAIL PREFERENCES, WHICH MATTER MORE THAN THEY LOOK.
-                    //
-                    // Somebody who wants fewer emails and cannot find the
-                    // switch marks the next one as spam instead, and that
-                    // costs deliverability for every other artist on the
-                    // platform. The cheapest place to keep an inbox is a
-                    // visible way out of it.
+                    // Somebody who wants fewer emails and cannot find the switch marks the
+                    // next one as spam instead, which costs every artist deliverability.
                     { id: 'contactprefs', icon: '✉️', label: 'Email preferences', sub: 'Choose what reaches your inbox' },
                   ],
                 },
                 {
-                  // Last on purpose. Nothing here is an action on your own
-                  // catalogue, and somebody who needs it is looking for it
-                  // rather than reaching past it.
-                  //
-                  // Sessions is in this group for the same reason: it is the
-                  // one thing you go and take part in, so it does not compete
-                  // with Upload. It appears only when the gate says the
-                  // competition is running and this viewer is eligible. The
-                  // gate fails closed, so between seasons the row is simply
-                  // not here and nobody has to remember to remove it.
-                  heading: 'More',
+                  heading: 'Help',
                   tint: MENU_TINTS.more,
                   items: [
                     { id: 'course', icon: '🎓', label: 'How to Use Feelz Machine', sub: 'Recording, uploading, splits, getting paid' },
-                    ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
-                      ? [{ id: 'sessions', icon: '🏆', label: 'Enter Sessions', sub: 'The cover competition, open to everyone' }]
-                      : []),
-                    { id: 'game', icon: '\u{1F3AE}', label: 'Feelz Games', sub: 'Feelz Run and more' },
                   ],
                 },
               ].map(({ heading, tint, items }) => (
                 <CreateMenuSection key={heading} heading={heading} tint={tint}
+                  collapsible={!ALWAYS_OPEN.includes(heading)}
+                  open={openGroup === heading}
+                  onToggle={() => setOpenGroup(g => (g === heading ? null : heading))}
                   items={items.filter(Boolean).map(it => ({
                     ...it,
                     onClick: () => {
@@ -510,7 +453,6 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                       else if (id === 'chats') { close(); navigate('/community'); }
                       else if (id === 'course') { close(); navigate('/learn'); }
                       else if (id === 'sessions') { close(); navigate('/sessions'); }
-                      else if (id === 'game') { close(); navigate('/games'); }
                       else setCreateTab(id);
                     },
                   }))} />

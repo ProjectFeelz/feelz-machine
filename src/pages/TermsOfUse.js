@@ -6,7 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 
 const COMPANY     = 'Feelz Machine';
 const CONTACT     = 'legal@feelzmachine.com';
-const LAST_UPDATED = 'September 2026';
+const LAST_UPDATED = 'November 2026';
 
 function Section({ title, children }) {
   return (
@@ -119,7 +119,26 @@ export default function TermsOfUse() {
           <p>Listeners may post comments on tracks and interact with artists. Comments must not contain harassment, hate speech, spam, or illegal content. We may remove comments and suspend accounts that violate these standards.</p>
         </Section>
 
-        <Section title="13. Platform Analytics & Data">
+        <Section title="13. Feelz Games">
+          <p><strong className="text-white/70">What they are.</strong> Feelz Games, starting with Feelz Run, are games played to music on {COMPANY}. You can play as a guest, with your progress kept only on your device, or signed in, with your progress saved to your account.</p>
+          <p><strong className="text-white/70">Points, credits and items.</strong> XP, RP, credits, skills, outfits, dances, journal pages and anything else you earn or unlock in a game are part of the game. They have no cash value. They cannot be sold, transferred, moved between accounts or paid out. We may change how they are earned, what things cost and what they unlock, and we may remove any that were earned by cheating or by mistake.</p>
+          <p><strong className="text-white/70">Money off music.</strong> Where an artist allows it, you can use game credits for a voucher that takes money off that artist's song. The artist sets the discount and it comes off the artist's own price. A voucher is not cash and cannot be exchanged for cash.</p>
+          <p><strong className="text-white/70">Leaderboards.</strong> Runs posted while you are signed in appear on public leaderboards with your display name and score. Your email address is never shown.</p>
+          <p><strong className="text-white/70">Online co-op.</strong> Up to six people can play one mission together by sharing a game code. While a game is running, the players in it see each other's display name, character and position. There is no chat or voice. Only share a code with people you know. Parents and guardians of players under 18 should supervise online play.</p>
+          <p><strong className="text-white/70">Streams from games.</strong> When a signed-in player finishes a mission, it counts as one stream of that mission's song, at most once per song per player every 10 minutes. Plays by the artist who owns the song are not counted. These streams follow the same rules as any other stream, including section 17.</p>
+          <p><strong className="text-white/70">Fair play.</strong> Runs are checked before they are posted. You may not cheat, use bots or scripts, alter the game, or post results you did not play for. We may remove scores, reset progress and suspend accounts that do.</p>
+          <p><strong className="text-white/70">Your health.</strong> The games use flashing light effects, lightning and screen shake. A very small number of people may have a seizure when exposed to flashing lights. If you or anyone in your family has a history of epilepsy or seizures, speak to a doctor before playing. Stop playing at once if you feel dizzy or have blurred vision, eye or muscle twitches, or any loss of awareness. Take regular breaks, and keep aware of your surroundings while you play.</p>
+          <p><strong className="text-white/70">Changes.</strong> Games, levels, modes and rewards may change, be paused or be removed at any time.</p>
+        </Section>
+
+        <Section title="14. Artist Levels in Feelz Run">
+          <p>Artists on a plan that includes it can put their own songs into Feelz Run as levels that fans play. Premium includes one live level, and the Feelz Run add-on adds four more. What each plan includes may change, as described in section 9.</p>
+          <p><strong className="text-white/70">Your rights.</strong> When you switch a level on, you confirm that you hold all the rights needed for the song, its artwork and your artist name to be used in an interactive game, including the master recording, the underlying composition and any samples or features in it. You grant {COMPANY} a non-exclusive, royalty-free licence to use the song, its artwork and your artist name inside Feelz Games, on leaderboards, in share links and in promoting the game, for as long as the level is switched on, and afterwards only for runs and scores already recorded. You can switch a level off at any time.</p>
+          <p><strong className="text-white/70">Discounts.</strong> If you let fans use game credits for money off your song, the discount you choose comes off your own price, and you receive the discounted price for those sales.</p>
+          <p><strong className="text-white/70">The add-on.</strong> The Feelz Run add-on is a monthly subscription, billed through PayPal at the price shown when you take it. You can cancel at any time in PayPal, and it stays on until the end of the period you have paid for. When it ends, any levels beyond what your plan includes stop appearing in the game until you have room for them again.</p>
+        </Section>
+
+        <Section title="15. Platform Analytics & Data">
           <p>We collect streaming data, device information, and engagement metrics to provide artists with analytics about their content's performance. This data is used to operate the Platform, power the recommendation algorithm, and provide per-track analytics to artists. See our Privacy Policy for full details.</p>
         </Section>
 
@@ -137,7 +156,7 @@ export default function TermsOfUse() {
 
             If any of those three stops being true in the product, this clause
             stops being a defence and becomes a misrepresentation. */}
-        <Section title="14. Emails & Direct Marketing">
+        <Section title="16. Emails & Direct Marketing">
           <p><strong className="text-white/70">How you are subscribed.</strong> When you create an account, you are subscribed to Platform emails about {COMPANY}: new features, releases, competitions and announcements. When you follow an artist, you are added to that artist's contact list and may receive emails from that artist about their music. We do not ask you to tick a box for either; you are opted in by default and you may opt out at any time. This section is that notice.</p>
 
           <p><strong className="text-white/70">How you opt out.</strong> Every marketing email we send carries an unsubscribe link that works immediately and needs no password and no account. You can also manage everything in one place, artist by artist, under Email Preferences in your Hub, at any time, for free. We act on an objection as soon as we receive it. If something is already in the process of sending, it may still arrive.</p>
@@ -151,26 +170,26 @@ export default function TermsOfUse() {
           <p><strong className="text-white/70">Your rights.</strong> You may object to direct marketing at any time, without giving a reason and without charge. You may also ask us what we hold about you, ask for it to be corrected, or ask for it to be deleted. Write to {CONTACT}. These rights are set out in the Protection of Personal Information Act 4 of 2013 and, where it applies to you, the General Data Protection Regulation. See our Privacy Policy for the full picture.</p>
         </Section>
 
-        <Section title="15. Prohibited Uses">
-          <p>You may not: (a) use bots, scripts, or automated tools to artificially inflate stream counts, follower counts, or engagement metrics; (b) attempt to gain unauthorised access to other accounts or Platform systems; (c) scrape or harvest Platform data without permission; (d) use the Platform to transmit spam; (e) attempt to reverse engineer the Platform.</p>
+        <Section title="17. Prohibited Uses">
+          <p>You may not: (a) use bots, scripts, or automated tools to artificially inflate stream counts, follower counts, game scores, or engagement metrics, including through Feelz Games; (b) attempt to gain unauthorised access to other accounts or Platform systems; (c) scrape or harvest Platform data without permission; (d) use the Platform to transmit spam; (e) attempt to reverse engineer the Platform.</p>
           <p>We use automated and manual systems to detect fraud. Accounts found manipulating metrics will be suspended and may have earnings reversed.</p>
         </Section>
 
-        <Section title="16. Termination">
+        <Section title="18. Termination">
           <p>We may suspend or terminate your account at any time for breach of these Terms. You may delete your account at any time from your profile settings. Upon deletion, your public profile and content will be removed from active circulation.</p>
         </Section>
 
-        <Section title="17. Disclaimers & Limitation of Liability">
+        <Section title="19. Disclaimers & Limitation of Liability">
           <p>The Platform is provided "as is" without warranties of any kind, express or implied. We do not warrant that the Platform will be uninterrupted, error-free, or that content will be preserved indefinitely.</p>
           <p>To the maximum extent permitted by applicable law, {COMPANY} shall not be liable for indirect, incidental, special, or consequential damages arising from your use of the Platform, including loss of revenue, data, or goodwill.</p>
           <p>Our total liability to you for any claim shall not exceed the amount you paid to us in the 12 months preceding the claim.</p>
         </Section>
 
-        <Section title="18. Governing Law">
+        <Section title="20. Governing Law">
           <p>These Terms are governed by applicable law. Disputes will be resolved through good faith negotiation where possible. If you are a consumer, nothing in these Terms affects your statutory rights under applicable consumer protection legislation.</p>
         </Section>
 
-        <Section title="19. Contact">
+        <Section title="21. Contact">
           <p>For legal notices, copyright takedown requests, or questions about these Terms, contact us at <strong className="text-white/70">{CONTACT}</strong>.</p>
         </Section>
       </div>

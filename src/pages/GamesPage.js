@@ -86,6 +86,11 @@ export default function GamesPage() {
             </div>
           ))}
         </div>
+
+        <p className="mt-6 text-[11px] text-white/35 leading-relaxed">
+          Feelz Games use flashing lights and screen shake. If you or anyone in your family has had seizures, read the
+          {' '}<a href="/terms-of-use" className="underline text-white/55">health note in our Terms</a> before playing.
+        </p>
       </div>
     </div>
   );

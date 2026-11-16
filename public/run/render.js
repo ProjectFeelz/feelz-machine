@@ -1901,10 +1901,15 @@ function postBloom() {
     fx.sk = fx.small.getContext("2d");
   }
   const k = fx.sk;
-  k.globalCompositeOperation = "copy";
-  k.filter = "brightness(0.72) contrast(3) saturate(1.4) blur(2.5px)";
-  k.drawImage(canvas, 0, 0, fx.small.width, fx.small.height);
-  k.filter = "none";
+  // The glow is soft and a quarter size, so working it out every other frame looks the same and halves the cost.
+  fx.n = (fx.n || 0) + 1;
+  if (fx.n % 2 === 1 || !fx.made) {
+    k.globalCompositeOperation = "copy";
+    k.filter = "brightness(0.72) contrast(3) saturate(1.4) blur(2.5px)";
+    k.drawImage(canvas, 0, 0, fx.small.width, fx.small.height);
+    k.filter = "none";
+    fx.made = true;
+  }
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   ctx.globalAlpha = 0.26;

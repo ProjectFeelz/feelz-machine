@@ -1099,7 +1099,9 @@ function padMenus() {
     }
     pad.prevStart = pad.start; pad.prevA = pad.jump; pad.prevY = pad.y; pad.prevB = pad.b; pad.prevX = pad.attack;
   }
-  requestAnimationFrame(padMenus);
+  // Every frame while a controller is plugged in; with none, a quick look four times a second is enough.
+  if (pads.some(pd => pd.connected)) requestAnimationFrame(padMenus);
+  else setTimeout(() => requestAnimationFrame(padMenus), 250);
 }
 
 document.getElementById("playButton").addEventListener("click", startGame);
@@ -1412,9 +1414,19 @@ function drawKitScreen(name, x, y, w, h) {
   if (r && art.kit.ready) ctx.drawImage(art.kit, r[0], r[1], r[2], r[3], x, y, w, h);
 }
 
+/* Phones with 90 and 120Hz screens ask for frames up to twice as often as the game needs, and every
+   extra frame is heat and battery. The run draws at most about 90 a second (60 on a 120Hz screen);
+   the menu scene and the results screen behind the buttons draw at 30. */
+const frameGate = { run: 0, calm: 0 };
+function frameDue(now, which, minMs) {
+  if (now - frameGate[which] < minMs) return false;
+  frameGate[which] = now;
+  return true;
+}
+
 function attractLoop(now) {
   if (gameState !== "ready") return;
-  drawAttract(now);
+  if (frameDue(now, "calm", 28)) drawAttract(now);
   requestAnimationFrame(attractLoop);
 }
 
@@ -1427,6 +1439,7 @@ function gameLoop(now) {
     if (gameState === "finished") { render(); }
     return;
   }
+  if (!frameDue(now, "run", 10)) { requestAnimationFrame(gameLoop); return; }
   const dt = Math.max(0, Math.min(0.05, (now - lastTime) / 1000));
   lastTime = now;
   frameTime += dt;
@@ -1440,6 +1453,7 @@ function gameLoop(now) {
 // After the finish the scene keeps moving behind the results.
 function finishedLoop(now) {
   if (gameState !== "finished") return;
+  if (!frameDue(now, "calm", 28)) { requestAnimationFrame(finishedLoop); return; }
   const dt = Math.max(0, Math.min(0.05, (now - lastTime) / 1000));
   lastTime = now;
   frameTime += dt;

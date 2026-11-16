@@ -76,8 +76,11 @@ const WARDEN_ANIMS = {
 
 const SPRITES = {
   koda: {
-    src: "assets/sprites/koda.webp",
-    cell: 288, metres: 1.81, footY: 0.99,
+    // Half-size copies of the 288px renders (koda.webp, zora.webp, koda-mask.webp), cell by cell.
+    // A sheet over 4096px tall is too big for many phone GPUs and gets redrawn the slow way every
+    // frame; these are still bigger than Koda is ever drawn. Re-make them after any re-render.
+    src: "assets/sprites/koda-144.webp",
+    cell: 144, metres: 1.81, footY: 0.99,
     animations: {
       idle:        { row: 0,  frames: 8,  fps: 5 },
       run:         { row: 1,  frames: 10, phasePerCycle: 11 },
@@ -118,9 +121,9 @@ const SPRITES = {
       ko:         { row: 6, frames: 8, fps: 12, loop: false }
     }
   },
-  koda_mask: { src: "assets/sprites/koda-mask.webp" },
+  koda_mask: { src: "assets/sprites/koda-mask-144.webp" },
   // Zora, for the mission she plays: the same moves, frames and scale as Koda's sheet.
-  zora: { src: "assets/sprites/zora.webp" },
+  zora: { src: "assets/sprites/zora-144.webp" },
   // Running into the picture (inward runs): seen from behind.
   back: {
     koda: "assets/sprites/koda-back.webp", koda_mask: "assets/sprites/koda-back-mask.webp", zora: "assets/sprites/zora-back.webp",
