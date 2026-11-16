@@ -145,6 +145,10 @@ const Coop = (() => {
         if (dr && dr.alive) { dr.alive = false; burst(dr.x, dr.y, "#7fe3ff", 14, 220); }
         break;
       }
+      case "trip":             // the partner slid into you
+        if (!st.on || gameState !== "playing") return;
+        coopTripped(partnerName());
+        break;
       case "finish":
         st.partnerFinished = true;
         if (st.on && gameState === "playing") showBanner(partnerName() + " MADE IT HOME", "", 2.2);
@@ -253,6 +257,16 @@ const Coop = (() => {
       g.boostTime = t.b ? 1 : 0; g.shield = !!t.sh; g.ground = t.g ? { y: g.y } : null;
       g.cp = t.cp | 0; g.finished = !!t.fin; g.hidden = !!t.iw || !!t.fin;
     }
+    // Slide into your partner to trip them up (once every couple of seconds).
+    st.tripT = Math.max(0, (st.tripT || 0) - realDt);
+    if (g && t && !g.hidden && me.state === "slide" && st.tripT <= 0 && t.g && t.a !== "slide"
+        && Math.abs(g.x - me.x) < BODY_W * 1.1 && Math.abs(g.y - me.y) < 24) {
+      st.tripT = 2.5;
+      send("trip", {});
+      showToast("TRIPPED", partnerName() + " GOES DOWN", "ko", 1.4);
+      sfx.stun && sfx.stun();
+    }
+
     // Shared checkpoints: once the partner is past one, it counts for you too.
     if (st.partnerCp > me.cp && !me.finished) me.cp = Math.min(st.partnerCp, level.checkpoints.length - 2);
   }

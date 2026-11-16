@@ -1812,6 +1812,18 @@ function knockOutWarden(wd, p) {
   burst(wd.x, wd.y - m(1), "#ffd27a", 14, 220);
 }
 
+// Co-op: the partner slid into you. A short stumble, no hearts lost.
+function coopTripped(who) {
+  const p = players[0];
+  if (!p || p.finished || p.invuln > 0 || p.climb || p.move || !p.ground || p.state === "slide") return;
+  p.vx = 0; p.knock = 0.2; p.knockDir = -p.facing;
+  setState(p, "stun", 0.8);
+  p.invuln = 1.2;
+  sfx.stun && sfx.stun();
+  rumble(0, 0.5, 200);
+  showBanner("TRIPPED", (who || "YOUR PARTNER") + " SLID INTO YOU", 1.4);
+}
+
 // The partner knocked this one out on their screen: down here too, credited to them.
 function coopDownWarden(wd) {
   wd.alive = false; wd.state = "ko"; wd.animT = 0; wd.windUp = 0;

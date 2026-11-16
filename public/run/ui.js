@@ -503,8 +503,13 @@ function isPhonePortrait() {
 }
 function checkOrientation() {
   const running = gameState === "playing" || gameState === "paused";
-  const show = running && isPhonePortrait();
+  // Upright on a phone: the card shows on the menu too, since the whole game is made sideways.
+  const show = isPhonePortrait();
   document.getElementById("rotateHint").classList.toggle("hidden", !show);
+  setText("rotateText", running ? "Feelz Run plays full screen in landscape. The game is paused until you turn it." : "Feelz Run plays full screen in landscape.");
+  const canTurn = !!(document.documentElement.requestFullscreen && screen.orientation && screen.orientation.lock);
+  document.getElementById("rotateTap").classList.toggle("hidden", !canTurn);
+  document.getElementById("rotateBack").classList.toggle("hidden", running || !/(^|\.)feelzmachine\.com$/.test(location.hostname));
   if (show && gameState === "playing") { pauseGame(); rotatePaused = true; }
   else if (!show && rotatePaused && gameState === "paused") { rotatePaused = false; resumeGame(); }
   if (!running) rotatePaused = false;
@@ -1479,6 +1484,7 @@ function coopRender(msg) {
   document.getElementById("coopRoom").classList.toggle("hidden", !inRoom);
   if (msg !== undefined) setText("coopError", inRoom ? "" : msg);
   if (!inRoom) return;
+  startCoopStage();
   const me = (Progress.data.name || "YOU").toUpperCase();
   const partner = Coop.partner;
   setText("coopCodeLabel", Coop.host ? "GIVE YOUR PARTNER THIS CODE" : "JOINED GAME");
@@ -1555,3 +1561,88 @@ document.getElementById("coopPrev").addEventListener("click", () => coopStepMiss
 document.getElementById("coopNext").addEventListener("click", () => coopStepMission(1));
 document.getElementById("coopClose").addEventListener("click", () => { Coop.leave(); coopOverlay.classList.add("hidden"); navFocus(null); });
 window.addEventListener("pagehide", () => { if (typeof Coop !== "undefined") Coop.leave(); });
+
+/* ---------------------------------------------------------------------------
+   PHONES: SIDEWAYS FROM THE MENU, AND THE BACK BUTTON
+--------------------------------------------------------------------------- */
+
+// The first tap anywhere on the menu goes full screen and sideways, the same as pressing Play does.
+document.getElementById("rotateHint").addEventListener("click", e => { if (!(e.target.closest && e.target.closest("#rotateBack"))) tryLandscape(); });
+document.getElementById("startOverlay").addEventListener("pointerdown", e => {
+  if (e.pointerType === "mouse" || !window.matchMedia("(pointer: coarse)").matches) return;
+  if (e.target.closest && e.target.closest("#backHome")) return;
+  tryLandscape();
+}, { passive: true });
+setTimeout(checkOrientation, 0);
+
+// Back (the phone's back button or gesture, or the browser's) steps back through
+// the game: it closes a panel, pauses a run, leaves a paused or finished run for
+// the menu, and only from the menu leaves the game.
+const backNav = { armed: false, leaving: false, warnUntil: 0 };
+function armBack() {
+  if (backNav.armed || backNav.leaving) return;
+  try { history.pushState({ feelzrun: true }, ""); backNav.armed = true; } catch (e) { /* history not available */ }
+}
+armBack();
+window.addEventListener("pointerdown", armBack);
+window.addEventListener("keydown", armBack);
+function backToast(text) {
+  let t = document.getElementById("backToast");
+  if (!t) { t = document.createElement("div"); t.id = "backToast"; t.className = "back-toast"; document.body.appendChild(t); }
+  t.textContent = text;
+  t.classList.add("show");
+  clearTimeout(backToast.timer);
+  backToast.timer = setTimeout(() => t.classList.remove("show"), 2500);
+}
+window.addEventListener("popstate", () => {
+  if (!backNav.armed || backNav.leaving) return;
+  backNav.armed = false;
+  const visible = el => el && !el.classList.contains("hidden");
+  if (visible(coopOverlay)) { document.getElementById("coopClose").click(); }
+  else if (menuOpen()) { closeMenus(); }
+  else if (gameState === "playing") { pauseGame(); }
+  else if (gameState === "paused") { goToMenu(); }
+  else if (visible(finishOverlay)) { goToMenu(); }
+  else if (Date.now() > backNav.warnUntil) {
+    // From the menu: one swipe warns, a second within a few seconds leaves.
+    backNav.warnUntil = Date.now() + 2500;
+    backToast("SWIPE BACK AGAIN TO LEAVE FEELZ RUN");
+  } else { backNav.leaving = true; history.back(); return; }
+  armBack();
+});
+
+// The lobby stage: you and your partner standing ready, idling, under a spotlight each.
+// Your Koda wears your outfit; your partner is the blue runner they'll see in the game.
+let coopStageRaf = 0;
+function drawCoopStage(now) {
+  coopStageRaf = 0;
+  const c = document.getElementById("coopStage");
+  if (!c || coopOverlay.classList.contains("hidden") || !Coop.lobby) return;
+  const g = c.getContext("2d");
+  const W2 = c.width, H2 = c.height;
+  g.clearRect(0, 0, W2, H2);
+  const def = SPRITES.koda, a = def.animations.idle, cell = def.cell;
+  const size = H2 * 1.02;
+  const spots = [
+    { x: W2 * 0.3, img: kodaSheet(playerOutfit), here: true, glow: "rgba(241, 202, 120, 0.32)", off: 0 },
+    { x: W2 * 0.7, img: kodaSheetFor({ id: 2 }), here: !!Coop.partner, glow: "rgba(127, 227, 255, 0.28)", off: 3 }
+  ];
+  for (const s of spots) {
+    const floor = H2 * 0.93;
+    const light = g.createRadialGradient(s.x, floor, 4, s.x, floor, W2 * 0.2);
+    light.addColorStop(0, s.glow); light.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = light; g.fillRect(s.x - W2 * 0.22, 0, W2 * 0.44, H2);
+    g.fillStyle = "rgba(0, 0, 0, 0.45)";
+    g.beginPath(); g.ellipse(s.x, floor, 52, 9, 0, 0, Math.PI * 2); g.fill();
+    if (!s.img || s.img.ready === false) continue;
+    const f = (Math.floor(now / 1000 * a.fps) + s.off) % a.frames;
+    g.save();
+    if (!s.here) { g.globalAlpha = 0.28 + 0.1 * Math.sin(now / 400); g.filter = "brightness(0)"; }
+    g.translate(s.x, floor);
+    if (s.x > W2 / 2) g.scale(-1, 1);   // facing each other
+    g.drawImage(s.img, f * cell, a.row * cell, cell, cell, -size / 2, -size * def.footY, size, size);
+    g.restore();
+  }
+  coopStageRaf = requestAnimationFrame(drawCoopStage);
+}
+function startCoopStage() { if (!coopStageRaf) coopStageRaf = requestAnimationFrame(drawCoopStage); }

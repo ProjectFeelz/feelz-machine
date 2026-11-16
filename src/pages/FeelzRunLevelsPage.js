@@ -8,6 +8,11 @@
 // mark in it. Fans play it from Artist Runs in the game, or straight from the
 // link this page gives them.
 //
+// A Premium feature with a limit: Premium includes 1 live level, the Feelz Run
+// add-on (a monthly subscription, billed like the Instagram add-on) adds 4
+// more. The database enforces it (game_artist_level_room); this page only
+// explains it and offers the add-on.
+//
 // Optional: the artist can let fans spend game credits on money off the song
 // (10, 25 or 50%). The discount comes off the artist's own price at checkout,
 // the buyer still pays the artist directly, and Feelz Machine takes nothing.
@@ -19,12 +24,84 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { ArrowLeft, Loader, Gamepad2, AlertCircle, Play, Pause, Check, Copy, Music } from 'lucide-react';
+import { ArrowLeft, Loader, Gamepad2, AlertCircle, Play, Pause, Check, Copy, Music, Crown } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import useGoBack from '../hooks/useGoBack';
 
 const GAME_URL = 'https://www.feelzmachine.com/run/';
+const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID;
+
+async function addonCall(action, extra = {}) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch('/.netlify/functions/addon-subscription', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+    body: JSON.stringify({ action, addon: 'feelzrun', ...extra }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || 'Request failed');
+  return json;
+}
+
+// The Feelz Run add-on: 4 more live levels, a monthly PayPal subscription.
+function AddonOffer({ onUnlocked }) {
+  const [info, setInfo] = useState(null);
+  const [sdkReady, setSdkReady] = useState(!!window.paypalAddon);
+  const [error, setError] = useState('');
+
+  useEffect(() => { addonCall('status').then(setInfo).catch(() => setInfo({ live: false })); }, []);
+
+  useEffect(() => {
+    if (!info?.live || window.paypalAddon) return;
+    const script = document.createElement('script');
+    script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&vault=true&intent=subscription&currency=USD`;
+    script.setAttribute('data-namespace', 'paypalAddon');
+    script.async = true;
+    script.onload = () => setSdkReady(true);
+    script.onerror = () => setError('PayPal did not load. Refresh and try again.');
+    document.head.appendChild(script);
+  }, [info?.live]);
+
+  useEffect(() => {
+    if (!info?.live || !sdkReady || !window.paypalAddon) return;
+    const el = document.getElementById('paypal-feelzrun-container');
+    if (!el) return;
+    el.innerHTML = '';
+    window.paypalAddon.Buttons({
+      style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'subscribe' },
+      createSubscription: async (data, actions) => {
+        setError('');
+        const { planId } = await addonCall('plan');
+        return actions.subscription.create({ plan_id: planId });
+      },
+      onApprove: async (data) => {
+        try { await addonCall('link', { subscriptionID: data.subscriptionID }); onUnlocked(); }
+        catch (e) { setError(e.message); }
+      },
+      onError: () => setError('The payment did not go through. Nothing was charged.'),
+    }).render(el).catch(() => {});
+  }, [info?.live, sdkReady, onUnlocked]);
+
+  if (!info) return null;
+  const price = info.priceUsd ? `$${Number(info.priceUsd).toFixed(2)} a month` : '';
+  return (
+    <div className="mt-3 rounded-xl p-3.5 border border-amber-400/20 bg-amber-500/[0.04]">
+      <p className="text-sm font-semibold text-white">Feelz Run add-on{price ? `, ${price}` : ''}</p>
+      <p className="text-xs text-white/50 mt-1">Four more of your songs in the game at once, on top of the one Premium includes.</p>
+      {info.live ? (
+        <>
+          <p className="text-[11px] text-white/40 mt-2">Cancel any time in PayPal. You keep it until the end of the month you paid for.</p>
+          <div id="paypal-feelzrun-container" className="mt-2" />
+        </>
+      ) : (
+        <p className="text-[11px] text-white/40 mt-2">Coming soon.</p>
+      )}
+      {error && <p className="text-xs text-red-300 mt-2">{error}</p>}
+    </div>
+  );
+}
 const FIT_MIN = 0.75, FIT_MAX = 1.6, PART_MIN = 0.7;
 
 const mmss = (s) => {
@@ -268,7 +345,9 @@ function Editor({ track, level, templates, onSaved, onClose }) {
 
 export default function FeelzRunLevelsPage() {
   const { artist } = useAuth();
+  const navigate = useNavigate();
   const goBack = useGoBack('/hub');
+  const [plan, setPlan] = useState({ slots: 0, tier: null, addon: false });
   const [tracks, setTracks] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [levels, setLevels] = useState([]);
@@ -291,7 +370,9 @@ export default function FeelzRunLevelsPage() {
     if (t.error || tp.error || mine.error) setError('Could not load everything. Refresh the page, or try again shortly.');
     setTracks(t.data || []);
     setTemplates(tp.data || []);
-    setLevels(mine.data || []);
+    const m = mine.data || {};
+    setLevels(Array.isArray(m) ? m : (m.levels || []));
+    setPlan(Array.isArray(m) ? { slots: 0, tier: artist?.tier, addon: false } : { slots: m.slots || 0, tier: m.tier, addon: !!m.addon });
     setLoading(false);
   }, [artist?.id]);
 
@@ -312,6 +393,9 @@ export default function FeelzRunLevelsPage() {
   };
 
   const ready = tracks.filter(playable);
+  const liveCount = levels.filter(l => l.is_live).length;
+  const room = liveCount < plan.slots;
+  const premium = plan.slots > 0;
   const others = tracks.filter(t => !playable(t));
 
   return (
@@ -341,6 +425,27 @@ export default function FeelzRunLevelsPage() {
           </div>
         )}
 
+        {!loading && artist?.id && (
+          <div className="mt-5 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3.5">
+            {premium ? (
+              <p className="text-xs text-white/60">
+                {liveCount} of {plan.slots >= 1000 ? 'unlimited' : plan.slots} live {plan.slots === 1 ? 'level' : 'levels'} used.
+                {!room && plan.slots < 1000 ? ' Switch one off to put another song in.' : ''}
+              </p>
+            ) : (
+              <div className="flex items-start gap-3">
+                <Crown className="w-5 h-5 text-amber-300 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-white">A Premium feature</p>
+                  <p className="text-xs text-white/50 mt-0.5">Premium includes one of your songs in the game, and the Feelz Run add-on gives you four more.</p>
+                  <button type="button" onClick={() => navigate('/upgrade')} className="mt-2 px-3 py-1.5 rounded-full bg-amber-400 text-black text-xs font-bold">See Premium</button>
+                </div>
+              </div>
+            )}
+            {premium && plan.slots < 1000 && !plan.addon && <AddonOffer onUnlocked={load} />}
+          </div>
+        )}
+
         {loading ? (
           <div className="flex justify-center py-20"><Loader className="w-5 h-5 text-white/30 animate-spin" /></div>
         ) : !artist?.id ? (
@@ -367,18 +472,19 @@ export default function FeelzRunLevelsPage() {
                         <p className="text-sm font-semibold text-white truncate">{t.title}</p>
                         <p className="text-xs text-white/40 mt-0.5 truncate">
                           {lv
-                            ? `${lv.is_live ? 'In the game' : 'Switched off'} · ${tpl ? tpl.title : lv.template} level · ${lv.plays} ${lv.plays === 1 ? 'run' : 'runs'}${lv.discount_max ? ` · up to ${lv.discount_max}% off with credits` : ''}`
+                            ? `${lv.is_live ? (lv.in_game === false ? 'Waiting for a free slot' : 'In the game') : 'Switched off'} · ${tpl ? tpl.title : lv.template} level · ${lv.plays} ${lv.plays === 1 ? 'run' : 'runs'}${lv.discount_max ? ` · up to ${lv.discount_max}% off with credits` : ''}`
                             : 'Not in the game'}
                         </p>
                       </div>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-1.5">
-                      <button type="button" onClick={() => setOpen(open === t.id ? null : t.id)} className="px-3 py-1.5 rounded-full bg-amber-400/15 border border-amber-300/30 text-xs text-amber-100">
+                      <button type="button" disabled={!lv && (!premium || !room)} onClick={() => setOpen(open === t.id ? null : t.id)}
+                        className="px-3 py-1.5 rounded-full bg-amber-400/15 border border-amber-300/30 text-xs text-amber-100 disabled:opacity-35">
                         {lv ? 'Change level or sections' : 'Put it in the game'}
                       </button>
                       {lv && (
                         <>
-                          <button type="button" disabled={busy === t.id} onClick={() => setLive(t.id, !lv.is_live)} className="px-3 py-1.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-xs text-white/70">
+                          <button type="button" disabled={busy === t.id || (!lv.is_live && !room)} onClick={() => setLive(t.id, !lv.is_live)} className="px-3 py-1.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-xs text-white/70">
                             {lv.is_live ? 'Switch off' : 'Switch on'}
                           </button>
                           {lv.is_live && (

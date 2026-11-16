@@ -235,26 +235,26 @@ const SCORING = {
 --------------------------------------------------------------------------- */
 
 const SKILLS = [
-  { id: "air_dash",      kind: "movement", name: "Air Dash",      level: 2, rp: 300,  how: "HIT in the air", text: "Burst forward through the air once per jump." },
-  { id: "triple_jump",   kind: "movement", name: "Triple Jump",   level: 3, rp: 600,  how: "JUMP twice in the air", text: "A third jump, for the gaps you nearly make." },
-  { id: "power_slide",   kind: "movement", name: "Power Slide",   level: 3, rp: 500,  how: "CROUCH while running", text: "A longer, faster slide that takes a warden's legs out." },
-  { id: "wall_kick",     kind: "movement", name: "Wall Kick",     level: 4, rp: 900,  how: "JUMP against a wall in the air", text: "Kick off walls to climb where there's no pipe." },
-  { id: "ground_pound",  kind: "movement", name: "Ground Pound",  level: 5, rp: 1000, how: "CROUCH in the air", text: "Slam down and flatten everyone around you." },
-  { id: "takedown",      kind: "combat",   name: "Takedown",      level: 2, rp: 400,  how: "HIT a warden from behind", text: "Drop him in one move before he knows you're there." },
-  { id: "flying_kick",   kind: "combat",   name: "Flying Kick",   level: 4, rp: 800,  how: "HIT at full speed", text: "Launch into a kick that ends a fight before it starts." },
-  { id: "spin_kick",     kind: "combat",   name: "Spin Kick",     level: 5, rp: 1000, how: "Third HIT of a combo", text: "Your finisher spins and hits everyone around you." },
-  { id: "heavy_smash",   kind: "combat",   name: "Heavy Smash",   level: 6, rp: 1400, how: "HOLD HIT", text: "A shockwave that floors him, stuns the rest and swats debris." },
-  { id: "record_magnet", kind: "perk",     name: "Record Magnet", level: 2, rp: 350,  how: "Always on", text: "Records nearby fly to you." },
-  { id: "storm_shield",  kind: "perk",     name: "Storm Shield",  level: 3, rp: 700,  how: "Always on", text: "Takes one hit from the storm; back at every checkpoint." },
-  { id: "long_boost",    kind: "perk",     name: "Long Boost",    level: 4, rp: 600,  how: "Always on", text: "FEELZ BOOST lasts 60% longer." },
-  { id: "extra_heart",   kind: "perk",     name: "Extra Heart",   level: 6, rp: 1500, how: "Always on", text: "Run with four hearts instead of three." },
-  { id: "dance_bboy",    kind: "dance",    name: "B-Boy",         level: 2, rp: 200,  dance: "bboy" },
-  { id: "dance_swing",   kind: "dance",    name: "Swing",         level: 4, rp: 400,  dance: "swing" },
-  { id: "dance_robot",   kind: "dance",    name: "Robot",         level: 6, rp: 600,  dance: "robot" },
-  { id: "outfit_ice",    kind: "outfit",   name: "Ice",           level: 2, rp: 250,  outfit: "ice" },
-  { id: "outfit_crimson",kind: "outfit",   name: "Crimson",       level: 3, rp: 400,  outfit: "crimson" },
-  { id: "outfit_violet", kind: "outfit",   name: "Violet",        level: 5, rp: 600,  outfit: "violet" },
-  { id: "outfit_emerald",kind: "outfit",   name: "Emerald",       level: 7, rp: 900,  outfit: "emerald" }
+  { id: "air_dash",      kind: "movement", name: "Air Dash",      level: 4, rp: 2500,  how: "HIT in the air", text: "Burst forward through the air once per jump." },
+  { id: "triple_jump",   kind: "movement", name: "Triple Jump",   level: 8, rp: 5500,  how: "JUMP twice in the air", text: "A third jump, for the gaps you nearly make." },
+  { id: "power_slide",   kind: "movement", name: "Power Slide",   level: 7, rp: 4500,  how: "CROUCH while running", text: "A longer, faster slide that takes a warden's legs out." },
+  { id: "wall_kick",     kind: "movement", name: "Wall Kick",     level: 13, rp: 9000,  how: "JUMP against a wall in the air", text: "Kick off walls to climb where there's no pipe." },
+  { id: "ground_pound",  kind: "movement", name: "Ground Pound",  level: 16, rp: 12000, how: "CROUCH in the air", text: "Slam down and flatten everyone around you." },
+  { id: "takedown",      kind: "combat",   name: "Takedown",      level: 5, rp: 3500,  how: "HIT a warden from behind", text: "Drop him in one move before he knows you're there." },
+  { id: "flying_kick",   kind: "combat",   name: "Flying Kick",   level: 12, rp: 8000,  how: "HIT at full speed", text: "Launch into a kick that ends a fight before it starts." },
+  { id: "spin_kick",     kind: "combat",   name: "Spin Kick",     level: 15, rp: 11000, how: "Third HIT of a combo", text: "Your finisher spins and hits everyone around you." },
+  { id: "heavy_smash",   kind: "combat",   name: "Heavy Smash",   level: 18, rp: 14000, how: "HOLD HIT", text: "A shockwave that floors him, stuns the rest and swats debris." },
+  { id: "record_magnet", kind: "perk",     name: "Record Magnet", level: 5, rp: 3000,  how: "Always on", text: "Records nearby fly to you." },
+  { id: "storm_shield",  kind: "perk",     name: "Storm Shield",  level: 10, rp: 7000,  how: "Always on", text: "Takes one hit from the storm; back at every checkpoint." },
+  { id: "long_boost",    kind: "perk",     name: "Long Boost",    level: 9, rp: 6000,  how: "Always on", text: "FEELZ BOOST lasts 60% longer." },
+  { id: "extra_heart",   kind: "perk",     name: "Extra Heart",   level: 20, rp: 16000, how: "Always on", text: "Run with four hearts instead of three." },
+  { id: "dance_bboy",    kind: "dance",    name: "B-Boy",         level: 3, rp: 1500,  dance: "bboy" },
+  { id: "dance_swing",   kind: "dance",    name: "Swing",         level: 7, rp: 4000,  dance: "swing" },
+  { id: "dance_robot",   kind: "dance",    name: "Robot",         level: 11, rp: 7500,  dance: "robot" },
+  { id: "outfit_ice",    kind: "outfit",   name: "Ice",           level: 3, rp: 2000,  outfit: "ice" },
+  { id: "outfit_crimson",kind: "outfit",   name: "Crimson",       level: 6, rp: 3500,  outfit: "crimson" },
+  { id: "outfit_violet", kind: "outfit",   name: "Violet",        level: 10, rp: 6500,  outfit: "violet" },
+  { id: "outfit_emerald",kind: "outfit",   name: "Emerald",       level: 14, rp: 10000,  outfit: "emerald" }
 ];
 
 // Outfit colours: hoodie dark to light, then trousers dark to light (0 to 1).

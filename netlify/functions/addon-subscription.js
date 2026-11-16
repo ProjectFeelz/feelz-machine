@@ -1,6 +1,8 @@
 // netlify/functions/addon-subscription.js
 //
-// The Instagram add-on subscription (migration 153).
+// Artist add-on subscriptions: the Instagram add-on (migration 153) and the
+// Feelz Run add-on (more Feelz Run levels). The request says which with
+// body.addon; anything else is the Instagram add-on, as it always was.
 //
 //   action 'status'  price, whether it is live, waitlist count and target, and
 //                    the caller's own add-on row (if signed in as an artist)
@@ -21,11 +23,14 @@ const paypalEnv = require('../lib/paypal-env');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const PAYPAL_API = `https://${paypalEnv.hostApiM}`;
-const ADDON = 'instagram';
+const ADDONS = {
+  instagram: { label: 'Instagram add-on', product: 'Feelz Machine Instagram add-on' },
+  feelzrun:  { label: 'Feelz Run add-on', product: 'Feelz Machine Feelz Run add-on' },
+};
 
 const json = (statusCode, body) => ({ statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
-async function settings() {
+async function settings(ADDON) {
   const keys = ['monthly_usd', 'live', 'waitlist_target', 'paypal_product_id', 'paypal_plan_id', 'paypal_plan_usd']
     .map(k => `addon_${ADDON}_${k}`);
   const { data } = await supabase.from('platform_settings').select('key, value').in('key', keys);
@@ -41,7 +46,7 @@ async function settings() {
   };
 }
 
-async function saveSetting(key, value) {
+async function saveSetting(ADDON, key, value) {
   const { error } = await supabase.from('platform_settings')
     .upsert({ key: `addon_${ADDON}_${key}`, value: String(value), updated_at: new Date().toISOString() });
   if (error) console.error('[addon-subscription] could not save', key, error.message);
@@ -85,8 +90,11 @@ exports.handler = async (event) => {
   let body;
   try { body = JSON.parse(event.body || '{}'); } catch { return json(400, { error: 'Invalid JSON' }); }
 
+  const ADDON = ADDONS[body.addon] ? body.addon : 'instagram';
+  const A = ADDONS[ADDON];
+
   try {
-    const s = await settings();
+    const s = await settings(ADDON);
 
     if (body.action === 'status') {
       const artist = await artistFor(event);
@@ -104,7 +112,7 @@ exports.handler = async (event) => {
     if (!artist) return json(401, { error: 'Sign in with your artist account.' });
 
     if (body.action === 'plan') {
-      if (!s.live) return json(409, { error: 'The Instagram add-on is not open yet. Join the waitlist instead.' });
+      if (!s.live) return json(409, { error: `The ${A.label} is not open yet. Join the waitlist instead.` });
       if (!s.priceUsd) return json(503, { error: 'No price set.' });
       if (s.planId && s.planUsd === s.priceUsd) return json(200, { planId: s.planId, priceUsd: s.priceUsd });
 
@@ -112,18 +120,18 @@ exports.handler = async (event) => {
       let productId = s.productId;
       if (!productId) {
         const pr = await paypal('POST', '/v1/catalogs/products', token, {
-          name: 'Feelz Machine Instagram add-on', type: 'SERVICE', category: 'SOFTWARE',
+          name: A.product, type: 'SERVICE', category: 'SOFTWARE',
         });
         if (pr.status !== 201) {
           console.error('[addon-subscription] product refused:', pr.status, JSON.stringify(pr.body).slice(0, 400));
           return json(502, { error: 'Billing could not be set up right now. Try again shortly.' });
         }
         productId = pr.body.id;
-        await saveSetting('paypal_product_id', productId);
+        await saveSetting(ADDON, 'paypal_product_id', productId);
       }
       const plan = await paypal('POST', '/v1/billing/plans', token, {
         product_id: productId,
-        name: 'Instagram add-on, monthly',
+        name: `${A.label}, monthly`,
         billing_cycles: [{
           frequency: { interval_unit: 'MONTH', interval_count: 1 },
           tenure_type: 'REGULAR', sequence: 1, total_cycles: 0,
@@ -135,8 +143,8 @@ exports.handler = async (event) => {
         console.error('[addon-subscription] plan refused:', plan.status, JSON.stringify(plan.body).slice(0, 400));
         return json(502, { error: 'Billing could not be set up right now. Try again shortly.' });
       }
-      await saveSetting('paypal_plan_id', plan.body.id);
-      await saveSetting('paypal_plan_usd', s.priceUsd);
+      await saveSetting(ADDON, 'paypal_plan_id', plan.body.id);
+      await saveSetting(ADDON, 'paypal_plan_usd', s.priceUsd);
       return json(200, { planId: plan.body.id, priceUsd: s.priceUsd });
     }
 
@@ -146,7 +154,7 @@ exports.handler = async (event) => {
       const token = await paypalToken();
       const v = await paypal('GET', `/v1/billing/subscriptions/${encodeURIComponent(subId)}`, token);
       if (v.status !== 200) return json(400, { error: 'Could not check the subscription with PayPal.' });
-      if (!s.planId || v.body.plan_id !== s.planId) return json(400, { error: 'That subscription is not for the Instagram add-on.' });
+      if (!s.planId || v.body.plan_id !== s.planId) return json(400, { error: `That subscription is not for the ${A.label}.` });
 
       const { data: other } = await supabase.from('artist_addons')
         .select('artist_id').eq('paypal_subscription_id', subId).maybeSingle();

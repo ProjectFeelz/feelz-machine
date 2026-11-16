@@ -48,7 +48,9 @@
       <div class="rotate-hint hidden" id="rotateHint" role="dialog" aria-label="Turn your phone sideways">
         <div class="rotate-phone" aria-hidden="true"></div>
         <strong>TURN YOUR PHONE SIDEWAYS</strong>
-        <span>Feelz Run plays full screen in landscape. The game is paused until you turn it.</span>
+        <span id="rotateText">Feelz Run plays full screen in landscape. The game is paused until you turn it.</span>
+        <span class="rotate-tap" id="rotateTap">TAP TO PLAY SIDEWAYS</span>
+        <a class="text-button hidden" id="rotateBack" href="/" style="margin-top:14px;text-decoration:none">← BACK TO FEELZ MACHINE</a>
       </div>
 
       <canvas id="gameCanvas" width="960" height="540" aria-label="Game canvas">
@@ -80,10 +82,10 @@
           </div>
           <div class="mode-toggle" role="group" aria-label="Players">
             <button type="button" data-mode="1" class="active">1 PLAYER</button>
-            <button type="button" data-mode="2">2 PLAYER RACE</button>
+            <button type="button" data-mode="2">2 PLAYER LOCAL</button>
             <button type="button" data-mode="ai">VS RIVAL</button>
             <button type="button" data-mode="free">FREE ROAM</button>
-            <button type="button" data-mode="coop">CO-OP</button>
+            <button type="button" data-mode="coop">ONLINE CO-OP</button>
           </div>
           <div class="mode-toggle ai-levels hidden" id="aiLevels" role="group" aria-label="Rival difficulty">
             <button type="button" data-ai="easy">EASY</button>
@@ -221,7 +223,8 @@
               <p class="coop-mission" id="coopMission"></p>
               <button class="strip-arrow" id="coopNext" type="button" aria-label="Next mission">›</button>
             </div>
-            <div class="join-grid">
+            <canvas class="coop-stage" id="coopStage" width="880" height="300" aria-hidden="true"></canvas>
+            <div class="join-grid coop-names">
               <div class="join-slot ready" id="coopMe"><span class="join-tag" id="coopMeTag">HOST</span><strong id="coopMeName">YOU</strong></div>
               <div class="join-slot" id="coopThem"><span class="join-tag" id="coopThemTag">PARTNER</span><strong id="coopThemName">WAITING...</strong></div>
             </div>
