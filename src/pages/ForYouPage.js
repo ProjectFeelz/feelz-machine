@@ -1619,7 +1619,9 @@ export default function ForYouPage() {
           const { data: rankedTracks, error: rankedErr } = await supabase
             .from('tracks')
             .select('id, title, slug, short_code, is_podcast, is_competition_entry, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
-            .in('id', idList);
+            .in('id', idList)
+            // Competition entries are not catalogue songs. See migration 233.
+            .is('competition_id', null);
 
           if (rankedErr) console.error('[ForYou] ranked tracks query failed:', rankedErr.code, rankedErr.message, rankedErr.hint || '');
 
@@ -1778,7 +1780,7 @@ export default function ForYouPage() {
 
         let recentQuery = supabase.from('tracks')
           .select('id, title, slug, short_code, is_podcast, is_competition_entry, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
-          .eq('is_published', true)
+          .eq('is_published', true).is('competition_id', null)
           .order('created_at', { ascending: false })
           .limit(halfPage);
         if (existingIdsStr) recentQuery = recentQuery.not('id', 'in', existingIdsStr);
@@ -1792,7 +1794,7 @@ export default function ForYouPage() {
         // stream_count stays as the tiebreak for tracks not yet scored.
         let topQuery = supabase.from('tracks')
           .select('id, title, slug, short_code, is_podcast, is_competition_entry, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
-          .eq('is_published', true)
+          .eq('is_published', true).is('competition_id', null)
           .order('engagement_score', { ascending: false, nullsFirst: false })
           .order('stream_count', { ascending: false })
           .limit(pageRoom - fetched.length);
@@ -1919,7 +1921,7 @@ export default function ForYouPage() {
       const { data } = await supabase
         .from('tracks')
         .select('id, title, slug, short_code, is_podcast, is_competition_entry, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
-        .eq('is_published', true)
+        .eq('is_published', true).is('competition_id', null)
         .order('created_at', { ascending: false })
         .limit(30);
       if (cancelled || !data?.length) return;
