@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { step } from '../utils/track';
 // Shared with ProfilePage, which was missing this behaviour entirely.
-import { generateSlug, getUniqueSlug } from '../utils/artistSlug';
+import { slugForNameChange } from '../utils/artistSlug';
 import { useAuth } from '../contexts/AuthContext';
 import {
   LogOut, ChevronRight, User, Music, Globe, Shield, Loader,
@@ -242,15 +242,26 @@ export default function ProfilePage() {
         social_links: sl,
         // Mirrored into artist_payment_profiles below, see the note there.
         paypal_email: form.paypal_email?.trim() || null,
+        // is_published, which this file never set and ProfilePage always did.
+        //
+        // The column defaults to false, so an artist stayed invisible until
+        // they happened to save on the OTHER profile page. 293 of 362 artists
+        // are currently unpublished, and that is not a choice anybody made.
+        // Finishing setup is exactly the moment you should become visible.
+        is_published: true,
         updated_at:   new Date().toISOString(),
       };
 
-      // Generate slug if not set, or if artist_name changed
-      const nameChanged = form.artist_name?.trim() !== artist.artist_name?.trim();
-      if (!artist.slug || nameChanged) {
-        const base = generateSlug(form.artist_name?.trim() || '');
-        if (base) updateData.slug = await getUniqueSlug(base, artist.id);
-      }
+      // utils/artistSlug.js was extracted FROM this file so both profile pages
+      // could share one implementation. ProfilePage was switched over; this
+      // file, the one it came from, was left running its own copy. Same rule,
+      // written twice, which is how the two drift apart again.
+      //
+      // `if (!slug || nameChanged)` and the helper's `if (slug && !nameChanged)
+      // return null` are the same condition inverted, so this is a swap, not a
+      // change of behaviour.
+      const newSlug = await slugForNameChange(form.artist_name, artist);
+      if (newSlug) updateData.slug = newSlug;
 
       if (profileImgFile) updateData.profile_image_url = await uploadFile(profileImgFile, 'profile-images/');
       const { error } = await supabase.from('artists').update(updateData).eq('id', artist.id);
@@ -302,6 +313,9 @@ export default function ProfilePage() {
         artist_name: newName,
         bio:         editBio.trim() || null,
         genre:       editGenres[0] || null,
+        // Matches save() above and both handlers on ProfilePage. See the note
+        // there: this page never published anybody and that was the bug.
+        is_published: true,
         mood:        editMood || null,
         updated_at:  new Date().toISOString(),
       };
@@ -313,12 +327,10 @@ export default function ProfilePage() {
       SOCIALS.forEach(p => { if (form[p.key]?.trim()) sl[p.key] = form[p.key].trim(); });
       artistUpdate.social_links = sl;
 
-      // Generate slug if not set or name changed
-      const editNameChanged = newName !== artist?.artist_name;
-      if (!artist?.slug || editNameChanged) {
-        const base = generateSlug(newName || '');
-        if (base) artistUpdate.slug = await getUniqueSlug(base, artist.id);
-      }
+      // Same helper as above and as both handlers on ProfilePage. Four call
+      // sites, one rule.
+      const editSlug = await slugForNameChange(newName, artist);
+      if (editSlug) artistUpdate.slug = editSlug;
 
       await supabase.from('artists').update(artistUpdate).eq('id', artist.id);
       // Also upsert user_profiles for listener side

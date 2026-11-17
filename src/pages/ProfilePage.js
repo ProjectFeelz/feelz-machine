@@ -281,6 +281,17 @@ export default function ProfilePage() {
       SOCIALS.forEach(p => { if (form[p.key]?.trim()) sl[p.key] = form[p.key].trim(); });
       artistUpdate.social_links = sl;
 
+      // Keep the vanity URL in step with the name, same as save() above.
+      //
+      // utils/artistSlug.js exists precisely because changing your artist name
+      // on one page updated the slug and on another did not. That fix was wired
+      // into save() and never into this handler, so the bug survived on the
+      // quick-edit path: change your display name here and your /artist/ URL
+      // kept pointing at the old name. Same page, same field, two outcomes
+      // depending on which control you happened to use.
+      const editSlug = await slugForNameChange(artistUpdate.artist_name, artist);
+      if (editSlug) artistUpdate.slug = editSlug;
+
       await supabase.from('artists').update(artistUpdate).eq('id', artist.id);
       // Also upsert user_profiles for listener side
       await supabase.from('user_profiles').upsert({
