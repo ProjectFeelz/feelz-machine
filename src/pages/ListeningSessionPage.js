@@ -16,14 +16,15 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import TipButton from '../components/TipButton';
+import LiveStage from '../components/LiveStage';
 import { supabase } from '../supabaseClient';
 import { resolveStreamSrc, resolveStreamLater, playableFallback } from '../utils/streamUrl';
 import { assignPlaybackSrc } from '../utils/offlineStore';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Play, Pause, SkipForward, X, Users, Music, Radio,
-  Plus, Search, Loader, Send, Youtube, Mic, MicOff,
-  ChevronDown, Heart, Flame, Star, Zap, Trash2, BarChart2
+  Plus, Search, Loader, Send, Gift,
+  ChevronDown, Star, Trash2, BarChart2
 } from 'lucide-react';
 
 const YOUTUBE_REGEX = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
@@ -110,20 +111,50 @@ function TrackSearch({ artistId, onAdd, existingIds = [] }) {
 }
 
 // ── Chat message ──────────────────────────────────────────────────────────────
-function ChatMessage({ msg }) {
+// Every name gets its own colour, worked out from the name so it stays the
+// same for that person all stream.
+const NAME_COLOURS = ['#f472b6', '#a78bfa', '#67e8f9', '#fbbf24', '#86efac', '#fb923c', '#f9a8d4', '#93c5fd'];
+function nameColour(name) {
+  const n = String(name || '?');
+  let h = 0;
+  for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0;
+  return NAME_COLOURS[h % NAME_COLOURS.length];
+}
+
+function ChatMessage({ msg, hostUserId }) {
+  const colour = nameColour(msg.name);
+  const isHostMsg = hostUserId && msg.user_id === hostUserId;
+
+  if (msg.is_tip) {
+    return (
+      <div className="mx-3 my-1.5 p-3 rounded-2xl bg-gradient-to-r from-amber-400/20 via-pink-500/15 to-violet-500/20 border border-amber-300/30">
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 rounded-md bg-amber-400 text-black text-[11px] font-black">
+            ${Number(msg.tip_amount || 0).toFixed(Number(msg.tip_amount) % 1 ? 2 : 0)} TIP
+          </span>
+          <span className="text-xs font-black truncate" style={{ color: colour }}>{msg.name || 'Listener'}</span>
+        </div>
+        {msg.content && <p className="text-sm text-white mt-1.5 leading-snug break-words">{msg.content}</p>}
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-start space-x-2 px-4 py-1.5 group">
-      <div className="w-6 h-6 rounded-full bg-white/[0.08] flex-shrink-0 overflow-hidden mt-0.5">
+    <div className="flex items-start gap-2.5 px-4 py-1.5">
+      <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden mt-0.5" style={{ background: colour }}>
         {msg.avatar
           ? <img src={msg.avatar} alt="" className="w-full h-full object-cover" />
-          : <div className="w-full h-full flex items-center justify-center text-[10px] text-white/40 font-bold">
+          : <div className="w-full h-full flex items-center justify-center text-[11px] text-black/70 font-black">
               {(msg.name || '?')[0].toUpperCase()}
             </div>}
       </div>
       <div className="flex-1 min-w-0">
-        <span className="text-[10px] font-semibold text-white/50 mr-1.5">{msg.name || 'Listener'}</span>
-        <span className="text-[10px] text-white/20">{timeAgo(msg.created_at)}</span>
-        <p className="text-sm text-white/80 mt-0.5 leading-snug break-words">{msg.content}</p>
+        <p className="text-sm leading-snug break-words">
+          <span className="font-black mr-1.5" style={{ color: colour }}>{msg.name || 'Listener'}</span>
+          {isHostMsg && <span className="mr-1.5 px-1.5 py-px rounded bg-gradient-to-r from-pink-500 to-violet-500 text-[9px] font-black tracking-wider align-middle">HOST</span>}
+          <span className="text-white/85">{msg.content}</span>
+        </p>
+        <span className="text-[10px] text-white/25">{timeAgo(msg.created_at)}</span>
       </div>
     </div>
   );
@@ -821,7 +852,7 @@ export default function ListeningSessionPage() {
 
   const loadSession = async () => {
     const { data: s } = await supabase
-      .from('listening_sessions').select('*, artists(id, artist_name, slug, profile_image_url, paypal_email)')
+      .from('listening_sessions').select('*, artists(id, user_id, artist_name, slug, profile_image_url, paypal_email)')
       .eq('id', sessionId).maybeSingle();
     if (!s || s.status === 'ended') { navigate('/'); return; }
     setSession(s);
@@ -1061,358 +1092,401 @@ export default function ListeningSessionPage() {
 
   const currentTrack = queue.find(q => q.track_id === session.current_track_id)?.tracks;
   const ytId = extractYouTubeId(session.youtube_url || '');
+  const host = session.artists || {};
+  const isScheduled = session.status === 'scheduled';
+  const isEnded = session.status === 'ended';
+  const floating = reactions.map(r => <FloatingReaction key={r.id} emoji={r.emoji} id={r.id} left={r.left} />);
+
+  // The strip across the top of the stage: who is live and how many watch.
+  const stageTopBar = (
+    <div className="flex items-center gap-2">
+      <button onClick={() => goBack()} aria-label="Back"
+        className="pointer-events-auto w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur hover:bg-black/60 transition">
+        <ChevronDown className="w-5 h-5 text-white" />
+      </button>
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="relative w-8 h-8 flex-shrink-0">
+          <div className="absolute inset-0 rounded-full fm-host-ring" />
+          <div className="absolute inset-[2px] rounded-full bg-black overflow-hidden">
+            {host.profile_image_url
+              ? <img src={host.profile_image_url} alt="" className="w-full h-full object-cover" />
+              : <div className="w-full h-full flex items-center justify-center text-[11px] font-bold">{(host.artist_name || '?')[0]}</div>}
+          </div>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[13px] font-bold text-white truncate leading-tight">{host.artist_name || 'Live'}</p>
+          <p className="text-[11px] text-white/60 truncate leading-tight">{session.title}</p>
+        </div>
+      </div>
+      {isScheduled ? (
+        <span className="px-2 py-1 rounded-md bg-amber-400 text-black text-[10px] font-black tracking-wider">SOON</span>
+      ) : isEnded ? (
+        <span className="px-2 py-1 rounded-md bg-white/20 text-white text-[10px] font-black tracking-wider">ENDED</span>
+      ) : (
+        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-red-500 text-white text-[10px] font-black tracking-wider">
+          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE
+        </span>
+      )}
+      <button onClick={() => setShowListeners(v => !v)}
+        className="pointer-events-auto inline-flex items-center gap-1 px-2 py-1 rounded-md bg-black/40 backdrop-blur text-white text-[11px] font-bold">
+        <Users className="w-3.5 h-3.5" /> {listenerCount}
+      </button>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col" style={{ maxHeight: '100dvh' }}>
-
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-safe pt-4 pb-3 flex-shrink-0 border-b border-white/[0.06]">
-        <button onClick={() => goBack()} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition">
-          <ChevronDown className="w-5 h-5 text-white" />
-        </button>
-        <div className="text-center">
-          <div className="flex items-center space-x-1.5 justify-center">
-            {session.status === 'scheduled' ? (
-              <><div className="w-2 h-2 rounded-full bg-yellow-500" />
-              <span className="text-xs font-semibold text-yellow-400">SCHEDULED</span></>
-            ) : (
-              <><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-xs font-semibold text-white">LIVE</span></>
-            )}
-          </div>
-          <p className="text-xs text-white/40 truncate max-w-[180px]">{session.title}</p>
-        </div>
-        <button
-          onClick={() => setShowListeners(v => !v)}
-          className="flex items-center space-x-1 text-white/40 hover:text-white/60 transition px-2 py-1 rounded-lg hover:bg-white/[0.06]">
-          <Users className="w-3.5 h-3.5" />
-          <span className="text-xs font-medium">{listenerCount}</span>
-        </button>
+    <div className="fm-live min-h-[100dvh] lg:h-[100dvh] bg-[#07060b] text-white flex flex-col lg:overflow-hidden" style={{ maxHeight: '100dvh' }}>
+      {/* Neon glow behind everything */}
+      <div className="pointer-events-none fixed inset-0 -z-0 overflow-hidden" aria-hidden="true">
+        <div className="absolute -top-32 -left-24 w-80 h-80 rounded-full bg-fuchsia-600/25 blur-[100px]" />
+        <div className="absolute top-1/3 -right-24 w-80 h-80 rounded-full bg-violet-600/20 blur-[100px]" />
+        <div className="absolute -bottom-24 left-1/4 w-72 h-72 rounded-full bg-cyan-500/10 blur-[100px]" />
       </div>
 
-      {/* Who's watching panel */}
-      {showListeners && listeners.length > 0 && (
-        <div className="flex-shrink-0 px-4 py-3 border-b border-white/[0.05] bg-white/[0.02]">
-          <p className="text-[10px] text-white/30 uppercase tracking-wider font-semibold mb-2">Watching now</p>
-          <div className="flex items-center space-x-2 overflow-x-auto pb-1">
-            {listeners.map((l, i) => (
-              <div key={l.user_id || i} className="flex flex-col items-center space-y-1 flex-shrink-0">
-                <div className="w-8 h-8 rounded-full bg-white/[0.08] overflow-hidden border border-white/[0.1]">
-                  {l.avatar
-                    ? <img src={l.avatar} alt="" className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-white/40">
-                        {(l.name || '?')[0].toUpperCase()}
-                      </div>}
-                </div>
-                <p className="text-[9px] text-white/30 truncate max-w-[48px]">{l.name || 'Guest'}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="relative z-10 flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-5 lg:p-5 lg:max-w-[1500px] lg:mx-auto lg:w-full">
 
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-
-        {/* Player / YouTube embed */}
-        <div className="flex-shrink-0 px-4 py-4 relative">
-          {!isHost && audioLocked && session.mode === 'audio' && (
-            <button
-              onClick={() => {
-                audioRef.current.play().catch(() => {});
-                setAudioLocked(false);
-              }}
-              className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm rounded-2xl z-10 space-y-2"
-            >
-              <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center">
-                <Play className="w-5 h-5 text-black ml-0.5" />
-              </div>
-              <span className="text-xs text-white/60">Tap to start audio</span>
-            </button>
-          )}
-          {session.mode === 'youtube' && ytId ? (
-            <div className="rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: '16/9' }}>
-              <iframe
-                src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&rel=0&playsinline=1`}
-                className="w-full h-full"
-                allowFullScreen
-                allow="autoplay; encrypted-media; picture-in-picture"
-                title="Live Stream"
-              />
-            </div>
-          ) : (
-            <div className="flex items-center space-x-4 p-4 rounded-2xl bg-white/[0.04] border border-white/[0.06]">
-              <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/[0.06] flex-shrink-0">
-                {currentTrack?.cover_artwork_url
-                  ? <img src={currentTrack.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                  : <Music className="w-6 h-6 text-white/20 m-auto mt-5" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-white truncate">{currentTrack?.title || 'Nothing playing'}</p>
-                <p className="text-xs text-white/40 mt-0.5">{session.artists?.artist_name}</p>
-              </div>
-              {isHost && (
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={session.is_playing ? hostPause : hostPlay}
-                    disabled={!currentTrack}
-                    className="w-10 h-10 rounded-full bg-white flex items-center justify-center disabled:opacity-30 hover:bg-white/90 transition"
-                  >
-                    {session.is_playing
-                      ? <Pause className="w-5 h-5 text-black" />
-                      : <Play className="w-5 h-5 text-black ml-0.5" />}
-                  </button>
-                  <button onClick={hostSkip} disabled={!currentTrack} className="w-9 h-9 rounded-full bg-white/[0.08] flex items-center justify-center disabled:opacity-30 hover:bg-white/[0.12] transition">
-                    <SkipForward className="w-4 h-4 text-white" />
-                  </button>
-                </div>
-              )}
-              {!isHost && (
-                <div className="flex items-center space-x-1">
-                  {session.is_playing
-                    ? <div className="flex space-x-0.5 items-end h-5">
-                        {[3,5,4,6,3].map((h,i) => <div key={i} className="w-1 rounded-full bg-green-400 animate-pulse" style={{ height: h*3, animationDelay: `${i*100}ms` }} />)}
-                      </div>
-                    : <Pause className="w-4 h-4 text-white/30" />}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Host controls */}
-        {isHost && (
-          <div className="px-4 pb-3 flex-shrink-0 space-y-3">
-            {/* Mode toggle + YouTube input
-                Four labelled buttons — Audio, YouTube Live, Save chat, End —
-                come to roughly 429px. Wrapping is right here rather than a
-                scroll strip: "End" is the one you reach for in a hurry and it
-                must never be the one hidden off the edge. */}
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => updateSession({ mode: 'audio' })}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${session.mode === 'audio' ? 'bg-white/15 text-white' : 'bg-white/[0.04] text-white/40 hover:bg-white/[0.08]'}`}
-              >
-                <Music className="w-3.5 h-3.5" /><span>Audio</span>
-              </button>
-              <button
-                onClick={() => updateSession({ mode: 'youtube' })}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${session.mode === 'youtube' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-white/[0.04] text-white/40 hover:bg-white/[0.08]'}`}
-              >
-                <Youtube className="w-3.5 h-3.5" /><span>YouTube Live</span>
-              </button>
-              <button onClick={async () => {
-                  // Export chat as JSON for replay/archive
-                  const blob = new Blob([JSON.stringify(messages, null, 2)], { type: 'application/json' });
-                  const url  = URL.createObjectURL(blob);
-                  const a    = document.createElement('a');
-                  a.href = url;
-                  a.download = `session-chat-${sessionId.slice(0,8)}.json`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }}
-                className="flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs text-white/40 bg-white/[0.04] hover:bg-white/[0.08] transition"
-                title="Export chat log">
-                <Send className="w-3.5 h-3.5 rotate-45" /><span>Save chat</span>
-              </button>
-              <button onClick={endSession} className="ml-auto flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs text-red-400 bg-red-500/10 hover:bg-red-500/20 transition">
-                <X className="w-3.5 h-3.5" /><span>End</span>
-              </button>
-            </div>
-
-            {session.mode === 'youtube' && (
-              <div className="flex space-x-2">
-                <input
-                  value={youtubeInput}
-                  onChange={e => setYoutubeInput(e.target.value)}
-                  placeholder="Paste YouTube live URL..."
-                  className="flex-1 px-3 py-2 bg-white/[0.06] border border-white/[0.08] rounded-xl text-xs text-white placeholder-white/25 focus:outline-none focus:border-red-500/40"
+        {/* ── Left: the stage and the host's tools ───────────────────────── */}
+        <div className="flex-shrink-0 lg:min-h-0 lg:overflow-y-auto no-scrollbar">
+          <div className="relative pt-safe lg:pt-0">
+            <div className="fm-stage-glow lg:rounded-3xl overflow-hidden">
+              {session.mode === 'youtube' && ytId ? (
+                <LiveStage
+                  videoId={ytId}
+                  title={session.title}
+                  hostName={host.artist_name}
+                  hostImage={host.profile_image_url}
+                  isHost={isHost}
+                  overlay={floating}
+                  topBar={stageTopBar}
                 />
-                <button onClick={setYouTube} disabled={!youtubeInput.trim()} className="px-3 py-2 rounded-xl bg-red-500/20 text-red-400 text-xs font-medium disabled:opacity-40 hover:bg-red-500/30 transition">
-                  Set
+              ) : (
+                /* Audio sessions and streams that have not started yet */
+                <div className="relative aspect-video overflow-hidden bg-black">
+                  {(currentTrack?.cover_artwork_url || host.profile_image_url) && (
+                    <img src={currentTrack?.cover_artwork_url || host.profile_image_url} alt=""
+                      className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-50" />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-black/30" />
+
+                  {!isHost && audioLocked && session.mode === 'audio' && (
+                    <button onClick={() => { audioRef.current.play().catch(() => {}); setAudioLocked(false); }}
+                      className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm gap-2">
+                      <span className="fm-sound-pill inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-black text-xs font-black tracking-wide">
+                        <Play className="w-4 h-4" /> TAP TO LISTEN
+                      </span>
+                    </button>
+                  )}
+
+                  <div className="absolute inset-0 flex items-center justify-center px-6">
+                    {session.mode === 'youtube' ? (
+                      <div className="text-center">
+                        <div className="relative w-20 h-20 mx-auto mb-3">
+                          <div className="absolute inset-0 rounded-full fm-host-ring fm-spin" />
+                          <div className="absolute inset-[3px] rounded-full bg-black overflow-hidden">
+                            {host.profile_image_url && <img src={host.profile_image_url} alt="" className="w-full h-full object-cover" />}
+                          </div>
+                        </div>
+                        <p className="text-lg font-black italic uppercase tracking-tight fm-gradient-text">
+                          {isHost ? 'Add your stream link below' : 'Starting soon'}
+                        </p>
+                        <p className="text-xs text-white/50 mt-1">
+                          {isHost ? 'Paste the YouTube live link and it plays here.' : 'Hang out in the chat. The stream shows up here.'}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-4 sm:gap-6 w-full max-w-xl">
+                        <div className="relative w-24 h-24 sm:w-36 sm:h-36 flex-shrink-0">
+                          <div className={`absolute -inset-1 rounded-2xl fm-host-ring ${session.is_playing ? 'fm-spin-slow' : ''} opacity-80 blur-[2px]`} />
+                          <div className="absolute inset-0 rounded-2xl overflow-hidden bg-white/[0.06]">
+                            {currentTrack?.cover_artwork_url
+                              ? <img src={currentTrack.cover_artwork_url} alt="" className="w-full h-full object-cover" />
+                              : <div className="w-full h-full flex items-center justify-center"><Music className="w-8 h-8 text-white/30" /></div>}
+                          </div>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-black tracking-[0.25em] text-pink-300 uppercase">Now playing</p>
+                          <p className="text-xl sm:text-3xl font-black leading-tight truncate">{currentTrack?.title || 'Nothing yet'}</p>
+                          <p className="text-sm text-white/60 truncate">{host.artist_name}</p>
+                          <div className="mt-3 flex items-center gap-2">
+                            {isHost ? (
+                              <>
+                                <button onClick={session.is_playing ? hostPause : hostPlay} disabled={!currentTrack}
+                                  className="w-11 h-11 rounded-full bg-white flex items-center justify-center disabled:opacity-30 hover:scale-105 active:scale-95 transition shadow-[0_0_24px_rgba(236,72,153,0.5)]">
+                                  {session.is_playing ? <Pause className="w-5 h-5 text-black" /> : <Play className="w-5 h-5 text-black ml-0.5" />}
+                                </button>
+                                <button onClick={hostSkip} disabled={!currentTrack}
+                                  className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center disabled:opacity-30 hover:bg-white/25 transition">
+                                  <SkipForward className="w-4 h-4 text-white" />
+                                </button>
+                              </>
+                            ) : session.is_playing ? (
+                              <div className="flex gap-1 items-end h-6">
+                                {[3, 6, 4, 7, 5, 3].map((h, i) => (
+                                  <div key={i} className="w-1.5 rounded-full fm-eq" style={{ height: h * 3, animationDelay: `${i * 120}ms` }} />
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-white/40 inline-flex items-center gap-1.5"><Pause className="w-3.5 h-3.5" /> Paused</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="absolute inset-0 pointer-events-none overflow-hidden">{floating}</div>
+                  <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent px-3 pt-3 pb-8">{stageTopBar}</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Who's watching */}
+          {showListeners && listeners.length > 0 && (
+            <div className="mx-4 lg:mx-0 mt-3 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.06]">
+              <p className="text-[10px] text-white/40 uppercase tracking-[0.2em] font-black mb-2">Watching now</p>
+              <div className="flex items-center gap-3 overflow-x-auto no-scrollbar pb-1">
+                {listeners.map((l, i) => (
+                  <div key={l.user_id || i} className="flex flex-col items-center gap-1 flex-shrink-0">
+                    <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-white/10" style={{ background: nameColour(l.name) }}>
+                      {l.avatar
+                        ? <img src={l.avatar} alt="" className="w-full h-full object-cover" />
+                        : <div className="w-full h-full flex items-center justify-center text-xs font-black text-black/70">{(l.name || '?')[0].toUpperCase()}</div>}
+                    </div>
+                    <p className="text-[10px] text-white/50 truncate max-w-[56px]">{l.name || 'Guest'}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Host strip: tip the artist, open their page */}
+          {!isHost && (
+            <div className="mx-4 lg:mx-0 mt-3 flex items-center gap-2">
+              {host.slug && (
+                <button onClick={() => navigate(`/artist/${host.slug}`)}
+                  className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-white/[0.05] border border-white/[0.07] hover:bg-white/[0.08] transition text-left">
+                  <Star className="w-4 h-4 text-amber-300 flex-shrink-0" />
+                  <span className="text-xs font-bold truncate">See {host.artist_name}'s music</span>
+                </button>
+              )}
+              {host.paypal_email && <TipButton artist={host} onTipSent={onTipSent} />}
+            </div>
+          )}
+
+          {/* Host tools */}
+          {isHost && (
+            <div className="mx-4 lg:mx-0 mt-3 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.07] space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => updateSession({ mode: 'audio' })}
+                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition ${session.mode === 'audio' ? 'bg-white text-black' : 'bg-white/[0.06] text-white/60 hover:bg-white/[0.1]'}`}>
+                  <Music className="w-3.5 h-3.5" /> Audio
+                </button>
+                <button onClick={() => updateSession({ mode: 'youtube' })}
+                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition ${session.mode === 'youtube' ? 'bg-gradient-to-r from-pink-500 to-violet-500 text-white' : 'bg-white/[0.06] text-white/60 hover:bg-white/[0.1]'}`}>
+                  <Radio className="w-3.5 h-3.5" /> Video stream
+                </button>
+                <button onClick={() => setShowPollModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-violet-500/15 text-violet-200 hover:bg-violet-500/25 transition">
+                  <BarChart2 className="w-3.5 h-3.5" /> Poll
+                </button>
+                <button onClick={() => setShowReviewQueue(v => !v)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-white/[0.06] text-white/60 hover:bg-white/[0.1] transition">
+                  <Music className="w-3.5 h-3.5" /> Review queue
+                </button>
+                <button onClick={() => {
+                    const blob = new Blob([JSON.stringify(messages, null, 2)], { type: 'application/json' });
+                    const url  = URL.createObjectURL(blob);
+                    const a    = document.createElement('a');
+                    a.href = url;
+                    a.download = `session-chat-${sessionId.slice(0, 8)}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-white/[0.06] text-white/60 hover:bg-white/[0.1] transition"
+                  title="Save the chat">
+                  <Send className="w-3.5 h-3.5 rotate-45" /> Save chat
+                </button>
+                <button onClick={endSession}
+                  className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black bg-red-500 text-white hover:bg-red-400 transition">
+                  <X className="w-3.5 h-3.5" /> End
                 </button>
               </div>
-            )}
 
-            {session.mode === 'audio' && (
-              <button onClick={() => setShowQueue(v => !v)} className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06] text-xs text-white/50 hover:bg-white/[0.07] transition">
-                <span>Manage Queue ({queue.length} tracks)</span>
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-            )}
-            <div className="flex space-x-2">
-              <button onClick={() => setShowPollModal(true)}
-                className="flex-1 flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300 hover:bg-purple-500/15 transition">
-                <BarChart2 className="w-3.5 h-3.5" />
-                <span>Create Poll</span>
-              </button>
-              <button onClick={() => setShowReviewQueue(v => !v)}
-                className="flex-1 flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl bg-white/[0.06] border border-white/[0.08] text-xs text-white/50 hover:bg-white/[0.09] transition">
-                <Music className="w-3.5 h-3.5" />
-                <span>Review Queue</span>
-              </button>
-            </div>
-
-            {showReviewQueue && (
-              <ReviewQueuePanel
-                sessionId={sessionId}
-                artistId={artist?.id}
-                onReviewTrack={(sub) => {
-                  // Pre-populate the poll modal with this track
-                  setShowPollModal(true);
-                  setShowReviewQueue(false);
-                  // Mark as reviewing
-                  supabase.from('session_review_submissions')
-                    .update({ status: 'reviewing' }).eq('id', sub.id).then(() => {});
-                }}
-              />
-            )}
-
-            {showQueue && session.mode === 'audio' && (
-              <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 space-y-3">
-                <TrackSearch artistId={artist.id} onAdd={addToQueue} existingIds={queue.map(q => q.track_id)} />
-                {queue.length > 0 && (
-                  <div className="space-y-1 pt-1 border-t border-white/[0.05]">
-                    <p className="text-[10px] text-white/25 uppercase tracking-wider font-semibold mb-2">Queue</p>
-                    {queue.map((q, i) => (
-                      <div key={q.id} className={`flex items-center space-x-2 p-2 rounded-lg ${q.track_id === session.current_track_id ? 'bg-white/[0.08]' : ''}`}>
-                        <span className="text-xs text-white/20 w-4">{i + 1}</span>
-                        <p className="text-xs text-white truncate flex-1">{q.tracks?.title}</p>
-                        {q.track_id === session.current_track_id
-                          ? <span className="text-[10px] text-green-400">playing</span>
-                          : <div className="flex items-center space-x-1 flex-shrink-0">
-                              {i > 0 && q.track_id !== session.current_track_id && (
-                                <button onClick={async () => {
-                                  // Swap positions with item above
-                                  const updated = [...queue];
-                                  [updated[i-1], updated[i]] = [updated[i], updated[i-1]];
-                                  setQueue(updated);
-                                  await supabase.from('listening_session_queue').update({ position: i-1 }).eq('id', q.id);
-                                  await supabase.from('listening_session_queue').update({ position: i }).eq('id', updated[i].id);
-                                }} className="w-5 h-5 flex items-center justify-center rounded text-white/20 hover:text-white/60 hover:bg-white/[0.08] transition text-xs">↑</button>
-                              )}
-                              <button onClick={() => removeFromQueue(q)} className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-500/20 transition">
-                                <Trash2 className="w-3 h-3 text-red-400/50 hover:text-red-400" />
-                              </button>
-                            </div>
-                        }
-                      </div>
-                    ))}
+              {session.mode === 'youtube' && (
+                <>
+                  <div className="flex gap-2">
+                    <input value={youtubeInput} onChange={e => setYoutubeInput(e.target.value)}
+                      placeholder={ytId ? 'Paste a new YouTube live link to switch' : 'Paste your YouTube live link'}
+                      className="flex-1 min-w-0 px-3 py-2.5 bg-black/40 border border-white/[0.1] rounded-xl text-xs text-white placeholder-white/30 focus:outline-none focus:border-pink-500/50" />
+                    <button onClick={setYouTube} disabled={!extractYouTubeId(youtubeInput)}
+                      className="px-4 py-2.5 rounded-xl bg-white text-black text-xs font-black disabled:opacity-30 transition">
+                      Go
+                    </button>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                  <p className="text-[11px] text-white/40 leading-relaxed">
+                    Stream from OBS to YouTube as usual. In YouTube Studio, set the stream to allow embedding and
+                    switch monetisation off for it, so no ads play here. Fans watch in Feelz Machine with this chat.
+                  </p>
+                </>
+              )}
 
-        {/* Reactions overlay — absolute so it floats over chat without stealing layout space */}
-        <div className="pointer-events-none" style={{ position: 'relative', height: 0 }}>
-          <div className="absolute bottom-0 left-4 right-4 pointer-events-none" style={{ height: '120px' }}>
-            {reactions.map(r => <FloatingReaction key={r.id} emoji={r.emoji} id={r.id} left={r.left} />)}
-          </div>
-        </div>
+              {session.mode === 'audio' && (
+                <button onClick={() => setShowQueue(v => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-black/30 border border-white/[0.08] text-xs font-bold text-white/70 hover:bg-black/50 transition">
+                  <span>Queue ({queue.length} {queue.length === 1 ? 'track' : 'tracks'})</span>
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              )}
 
-        {/* Active polls */}
-        {polls.length > 0 && (
-          <div className="flex-shrink-0 max-h-52 overflow-y-auto border-b border-white/[0.05]">
-            {polls.map(poll => (
-              <SessionPollCard key={poll.id} poll={poll} userId={user?.id} onVote={castVote} />
-            ))}
-          </div>
-        )}
+              {showReviewQueue && (
+                <ReviewQueuePanel
+                  sessionId={sessionId}
+                  artistId={artist?.id}
+                  onReviewTrack={(sub) => {
+                    setShowPollModal(true);
+                    setShowReviewQueue(false);
+                    supabase.from('session_review_submissions')
+                      .update({ status: 'reviewing' }).eq('id', sub.id).then(() => {});
+                  }}
+                />
+              )}
 
-        {/* Chat */}
-        <div className="flex-1 overflow-y-auto min-h-0">
-          <div className="py-2">
-            {/* Tip messages pinned at top — last 3 */}
-            {messages.filter(m => m.is_tip).slice(-3).map((msg, i) => (
-              <ChatMessage key={(msg.id || i) + '-tip'} msg={msg} />
-            ))}
-            {/* Regular messages */}
-            {messages.filter(m => !m.is_tip).map((msg, i) => (
-              <ChatMessage key={msg.id || i} msg={msg} />
-            ))}
-            <div ref={chatEndRef} />
-          </div>
-        </div>
-
-        {/* Reaction bar + chat input */}
-        <div className="flex-shrink-0 px-4 pb-safe pb-4 pt-2 border-t border-white/[0.06] space-y-2">
-          {/* Submit for Review button — listeners only */}
-          {!isHost && user && (
-            <button onClick={() => setShowSubmitModal(true)}
-              className="w-full flex items-center justify-center space-x-2 py-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300 font-semibold hover:bg-purple-500/15 transition mb-2">
-              <Music className="w-3.5 h-3.5" />
-              <span>Submit Track for Review</span>
-            </button>
-          )}
-          {!isHost && !user && (
-            <div className="w-full flex items-center justify-center space-x-2 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06] text-xs text-white/30 mb-2">
-              <Music className="w-3.5 h-3.5" />
-              <span>Sign in to submit your track for review</span>
-            </div>
-          )}
-
-          <div className="flex items-center space-x-2">
-            {REACTIONS.map(emoji => (
-              <button key={emoji} onClick={() => sendReaction(emoji)}
-                className="flex-1 py-1.5 text-xl rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-90 transition">
-                {emoji}
-              </button>
-            ))}
-            {!isHost && session?.artists?.paypal_email && (
-              <TipButton artist={session.artists} onTipSent={onTipSent} />
-            )}
-          </div>
-          {user && (
-            <div className="space-y-2">
-              {/* Tip with message panel */}
-              {showTipChat && (
-                <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/[0.06] p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-bold text-yellow-400">💛 Send a tip with a message</p>
-                    <button onClick={() => setShowTipChat(false)} className="text-white/30 hover:text-white/60 text-xs">✕</button>
-                  </div>
-                  <div className="flex space-x-2">
-                    {['1','2','5','10'].map(amt => (
-                      <button key={amt} onClick={() => setTipChatAmount(amt)}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${tipChatAmount === amt ? 'bg-yellow-500 text-black' : 'bg-white/[0.06] text-white/50 hover:bg-white/[0.1]'}`}>
-                        ${amt}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    value={chatInput}
-                    onChange={e => setChatInput(e.target.value)}
-                    placeholder="Add a message (optional)..."
-                    maxLength={100}
-                    className="w-full px-3 py-2 bg-white/[0.06] border border-yellow-500/20 rounded-xl text-sm text-white placeholder-white/25 focus:outline-none focus:border-yellow-500/40"
-                  />
-                  <p className="text-[10px] text-white/30">Tip is sent via PayPal. Message appears in chat immediately.</p>
+              {showQueue && session.mode === 'audio' && (
+                <div className="bg-black/30 border border-white/[0.06] rounded-xl p-3 space-y-3">
+                  <TrackSearch artistId={artist.id} onAdd={addToQueue} existingIds={queue.map(q => q.track_id)} />
+                  {queue.length > 0 && (
+                    <div className="space-y-1 pt-1 border-t border-white/[0.05]">
+                      {queue.map((q, i) => (
+                        <div key={q.id} className={`flex items-center gap-2 p-2 rounded-lg ${q.track_id === session.current_track_id ? 'bg-white/[0.08]' : ''}`}>
+                          <span className="text-xs text-white/25 w-4">{i + 1}</span>
+                          <p className="text-xs text-white truncate flex-1">{q.tracks?.title}</p>
+                          {q.track_id === session.current_track_id
+                            ? <span className="text-[10px] font-bold text-pink-300">playing</span>
+                            : <div className="flex items-center gap-1 flex-shrink-0">
+                                {i > 0 && (
+                                  <button onClick={async () => {
+                                    const updated = [...queue];
+                                    [updated[i - 1], updated[i]] = [updated[i], updated[i - 1]];
+                                    setQueue(updated);
+                                    await supabase.from('listening_session_queue').update({ position: i - 1 }).eq('id', q.id);
+                                    await supabase.from('listening_session_queue').update({ position: i }).eq('id', updated[i].id);
+                                  }} aria-label="Move up"
+                                    className="w-6 h-6 flex items-center justify-center rounded text-white/30 hover:text-white hover:bg-white/[0.08] transition">
+                                    <ChevronDown className="w-3.5 h-3.5 rotate-180" />
+                                  </button>
+                                )}
+                                <button onClick={() => removeFromQueue(q)} aria-label="Remove"
+                                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-red-500/20 transition">
+                                  <Trash2 className="w-3 h-3 text-red-400/60" />
+                                </button>
+                              </div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-              <form onSubmit={sendMessage} className="flex space-x-2">
-                {!isHost && session?.artists?.paypal_email && (
-                  <button type="button" onClick={() => setShowTipChat(p => !p)}
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition ${showTipChat ? 'bg-yellow-500/30 text-yellow-400' : 'bg-white/[0.06] text-white/40 hover:bg-white/[0.1]'}`}
-                    title="Send tip with message">
-                    <span className="text-base">💛</span>
-                  </button>
-                )}
-                <input
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value)}
-                  placeholder={showTipChat ? "Add a message to your tip..." : "Say something..."}
-                  maxLength={200}
-                  className="flex-1 px-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/20"
-                />
-                <button type="submit" disabled={(!chatInput.trim() && !showTipChat) || sending}
-                  className="w-10 h-10 rounded-xl bg-white/[0.08] flex items-center justify-center disabled:opacity-30 hover:bg-white/[0.12] transition flex-shrink-0">
-                  <Send className="w-4 h-4 text-white" />
-                </button>
-              </form>
             </div>
           )}
+
+          {/* Polls (under the stage on big screens) */}
+          {polls.length > 0 && (
+            <div className="hidden lg:block mt-3 space-y-2">
+              {polls.map(poll => <SessionPollCard key={poll.id} poll={poll} userId={user?.id} onVote={castVote} />)}
+            </div>
+          )}
+        </div>
+
+        {/* ── Right: chat ────────────────────────────────────────────────── */}
+        <div className="flex-1 min-h-0 flex flex-col mt-3 lg:mt-0 lg:rounded-3xl lg:bg-white/[0.03] lg:border lg:border-white/[0.07] lg:overflow-hidden">
+          <div className="hidden lg:flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+            <p className="text-xs font-black tracking-[0.2em] uppercase text-white/60">Live chat</p>
+            <span className="inline-flex items-center gap-1 text-[11px] text-white/40"><Users className="w-3.5 h-3.5" /> {listenerCount}</span>
+          </div>
+
+          {polls.length > 0 && (
+            <div className="lg:hidden flex-shrink-0 max-h-52 overflow-y-auto border-b border-white/[0.05]">
+              {polls.map(poll => <SessionPollCard key={poll.id} poll={poll} userId={user?.id} onVote={castVote} />)}
+            </div>
+          )}
+
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="py-2">
+              {messages.filter(m => m.is_tip).slice(-3).map((msg, i) => (
+                <ChatMessage key={(msg.id || i) + '-tip'} msg={msg} hostUserId={host.user_id} />
+              ))}
+              {messages.filter(m => !m.is_tip).length === 0 && (
+                <p className="text-center text-xs text-white/30 py-8">Say hi. You are first.</p>
+              )}
+              {messages.filter(m => !m.is_tip).map((msg, i) => (
+                <ChatMessage key={msg.id || i} msg={msg} hostUserId={host.user_id} />
+              ))}
+              <div ref={chatEndRef} />
+            </div>
+          </div>
+
+          {/* Reactions and the message box */}
+          <div className="flex-shrink-0 px-3 pb-safe pb-3 pt-2 border-t border-white/[0.06] space-y-2 bg-[#07060b]/80 backdrop-blur lg:bg-transparent">
+            <div className="flex items-center gap-2">
+              {REACTIONS.map(emoji => (
+                <button key={emoji} onClick={() => sendReaction(emoji)} aria-label={`React ${emoji}`}
+                  className="flex-1 h-10 text-xl rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] hover:-translate-y-0.5 active:scale-90 transition">
+                  {emoji}
+                </button>
+              ))}
+            </div>
+
+            {!isHost && user && (
+              <button onClick={() => setShowSubmitModal(true)}
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-2xl bg-gradient-to-r from-violet-500/20 to-pink-500/20 border border-pink-500/25 text-xs text-pink-100 font-bold hover:from-violet-500/30 hover:to-pink-500/30 transition">
+                <Music className="w-3.5 h-3.5" /> Send your track in for review
+              </button>
+            )}
+
+            {user ? (
+              <div className="space-y-2">
+                {showTipChat && (
+                  <div className="rounded-2xl border border-amber-400/30 bg-amber-400/[0.07] p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-black text-amber-300 inline-flex items-center gap-1.5"><Gift className="w-3.5 h-3.5" /> Tip with a message</p>
+                      <button onClick={() => setShowTipChat(false)} aria-label="Close" className="text-white/40 hover:text-white"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                    <div className="flex gap-2">
+                      {['1', '2', '5', '10'].map(amt => (
+                        <button key={amt} onClick={() => setTipChatAmount(amt)}
+                          className={`flex-1 py-1.5 rounded-xl text-xs font-black transition ${tipChatAmount === amt ? 'bg-amber-400 text-black' : 'bg-white/[0.06] text-white/60 hover:bg-white/[0.1]'}`}>
+                          ${amt}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-white/40">Tips go to the artist through PayPal. Your message shows in the chat straight away.</p>
+                  </div>
+                )}
+                <form onSubmit={sendMessage} className="flex gap-2">
+                  {!isHost && host.paypal_email && (
+                    <button type="button" onClick={() => setShowTipChat(p => !p)} aria-label="Tip with a message"
+                      className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 transition ${showTipChat ? 'bg-amber-400 text-black' : 'bg-white/[0.06] text-amber-300 hover:bg-white/[0.1]'}`}>
+                      <Gift className="w-4 h-4" />
+                    </button>
+                  )}
+                  <input value={chatInput} onChange={e => setChatInput(e.target.value)}
+                    placeholder={showTipChat ? 'Add a message to your tip' : 'Say something'}
+                    maxLength={200}
+                    className="flex-1 min-w-0 px-4 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-2xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-pink-500/50" />
+                  <button type="submit" disabled={(!chatInput.trim() && !showTipChat) || sending} aria-label="Send"
+                    className="w-11 h-11 rounded-2xl bg-gradient-to-br from-pink-500 to-violet-500 flex items-center justify-center disabled:opacity-30 hover:brightness-110 active:scale-95 transition flex-shrink-0">
+                    <Send className="w-4 h-4 text-white" />
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <button onClick={() => navigate(`/login?next=/session/${sessionId}`)}
+                className="w-full py-3 rounded-2xl bg-white text-black text-sm font-black">
+                Sign in to chat
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1437,10 +1511,21 @@ export default function ListeningSessionPage() {
       <style>{`
         @keyframes float-up {
           0%   { transform: translateY(0) scale(1); opacity: 1; }
-          100% { transform: translateY(-80px) scale(1.4); opacity: 0; }
+          100% { transform: translateY(-160px) scale(1.6); opacity: 0; }
         }
-        .animate-float-up { animation: float-up 2s ease-out forwards; }
+        .animate-float-up { animation: float-up 2.2s ease-out forwards; }
+        .fm-host-ring { background: conic-gradient(from 0deg, #ec4899, #8b5cf6, #22d3ee, #f59e0b, #ec4899); }
+        .fm-spin { animation: fm-spin 3s linear infinite; }
+        .fm-spin-slow { animation: fm-spin 8s linear infinite; }
+        .fm-gradient-text { background: linear-gradient(90deg, #f472b6, #a78bfa, #67e8f9); -webkit-background-clip: text; background-clip: text; color: transparent; }
+        .fm-stage-glow { box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 20px 80px -20px rgba(236,72,153,0.45); }
+        .fm-eq { background: linear-gradient(to top, #ec4899, #a78bfa); animation: fm-eq 0.9s ease-in-out infinite alternate; transform-origin: bottom; }
+        .fm-sound-pill { animation: fm-bob 1.6s ease-in-out infinite; }
+        @keyframes fm-spin { to { transform: rotate(360deg); } }
+        @keyframes fm-eq { from { transform: scaleY(0.35); } to { transform: scaleY(1); } }
+        @keyframes fm-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+        @media (prefers-reduced-motion: reduce) { .fm-spin, .fm-spin-slow, .fm-eq, .fm-sound-pill, .animate-float-up { animation: none; } }
       `}</style>
     </div>
   );
-}
+}
