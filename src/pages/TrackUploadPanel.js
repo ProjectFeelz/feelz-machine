@@ -1939,7 +1939,13 @@ export default function TrackUploadPanel() {
         try {
           const { data: ssConfig } = await supabase
             .from('school_sessions_config')
-            .select('competition_id')
+            // The competition row, not just its id. entriesAreOpen below
+            // reads the dates off it, and with only the id selected it was
+            // handed undefined every time. undefined means "no opening date
+            // set, so there is nothing to be early for", which it waves
+            // through, so the closing date was never enforced where the row
+            // is actually written.
+            .select('competition_id, competition:competitions!school_sessions_config_competition_id_fkey(id, entries_open_at, entries_close_at, voting_open_at, voting_close_at)')
             .eq('id', '00000000-0000-0000-0000-000000000001')
             .maybeSingle();
 
@@ -3074,10 +3080,20 @@ export default function TrackUploadPanel() {
                       </label>
                     </TierGate>
                   ) : (
-                    <label key={key} className="flex items-center space-x-2 cursor-pointer">
+                    <label key={key} className={`flex items-center space-x-2 ${
+                      key === 'is_published' && schoolSessionsEnabled ? 'cursor-default' : 'cursor-pointer'}`}>
                       <Toggle value={trackForm[key]}
-                        onChange={() => setTrackForm({ ...trackForm, [key]: !trackForm[key] })} />
-                      <span className="text-xs text-white/50">{label}</span>
+                        onChange={() => {
+                          // Held on while the Sessions toggle is on. Switching
+                          // it off there is what produced drafted entries that
+                          // nobody could see and that were never written, so
+                          // the one setting an entry cannot have is off.
+                          if (key === 'is_published' && schoolSessionsEnabled) return;
+                          setTrackForm({ ...trackForm, [key]: !trackForm[key] });
+                        }} />
+                      <span className="text-xs text-white/50">
+                        {label}{key === 'is_published' && schoolSessionsEnabled ? ' (needed to enter)' : ''}
+                      </span>
                     </label>
                   )
                 ))}
@@ -3124,7 +3140,21 @@ export default function TrackUploadPanel() {
               </TierGate>
 
               <SchoolSessionsEntry
-                enabled={schoolSessionsEnabled} setEnabled={setSchoolSessionsEnabled}
+                enabled={schoolSessionsEnabled}
+                // Entering switches Published on.
+                //
+                // It used to be the other way round: you could fill in the
+                // entire entry, parent's details and all, and be told at the
+                // very end that Sessions only takes live songs, by which time
+                // the entry had not been written and nothing you typed was
+                // kept. People left with a drafted track they believed was
+                // entered. A Sessions entry has to be live for the judges and
+                // the public to hear it, so it is the only setting it can
+                // have, and the form now just sets it.
+                setEnabled={(next) => {
+                  setSchoolSessionsEnabled(next);
+                  if (next) setTrackForm(f => ({ ...f, is_published: true }));
+                }}
                 form={schoolSessionsForm} setForm={setSchoolSessionsForm} />
 
               <button type="submit" disabled={isWorking}
