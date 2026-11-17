@@ -4,7 +4,7 @@
  * Route: /admin/growth
  */
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import AdminBroadcast from './AdminBroadcast';
 import AdminAffiliates from './AdminAffiliates';
 import { useAuth } from '../contexts/AuthContext';
@@ -24,9 +24,22 @@ function Tab({ active, onClick, children }) {
 export default function AdminGrowth() {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
-  const [tab, setTab] = useState('broadcast');
+  // Honour ?tab= the way AdminContent already does, so the admin nav can link
+  // straight to Affiliates instead of landing on Broadcasts and making you
+  // click again.
+  //
+  // The value is checked against the tabs that exist rather than trusted.
+  // It arrives from the URL, anybody can type anything into it, and an
+  // unrecognised value would otherwise set `tab` to a string no panel matches
+  // and render a page with nothing on it.
+  const [searchParams] = useSearchParams();
+  const TABS = ['broadcast', 'affiliates'];
+  const asked = searchParams.get('tab');
+  const initialTab = TABS.includes(asked) ? asked : 'broadcast';
+
+  const [tab, setTab] = useState(initialTab);
   // Track which tabs have been mounted (lazy mount — avoids all useEffects firing at once)
-  const [mounted, setMounted] = useState({ broadcast: true });
+  const [mounted, setMounted] = useState({ [initialTab]: true });
 
   const switchTab = (t) => {
     setTab(t);

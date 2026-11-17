@@ -29,7 +29,12 @@ export default function AdminContent() {
   // Honour ?tab= so links from elsewhere (the retail player's admin bar)
   // land on the right tab instead of always defaulting to Boost.
   const [searchParams] = useSearchParams();
-  const initialTab = searchParams.get('tab') || 'boost';
+  // Checked against the tabs that exist rather than trusted. It comes from the
+  // URL, so an unrecognised value would set `tab` to a string no panel matches
+  // and render a header above nothing at all.
+  const TABS = ['boost', 'competitions', 'schoolsessions', 'moderation'];
+  const asked = searchParams.get('tab');
+  const initialTab = TABS.includes(asked) ? asked : 'boost';
   const [tab, setTab] = useState(initialTab);
   const [mounted, setMounted] = useState({ [initialTab]: true });
 

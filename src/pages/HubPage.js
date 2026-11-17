@@ -17,7 +17,7 @@ import {
   ChevronRight, Crown, Zap, Star, LayoutDashboard,
   User, LogOut, DollarSign, Radio, Mic2,
   Loader, X, Youtube, Info, Search,
-  Plus, MessageSquare, Check, Send, Store, Trophy, Sparkles, EyeOff, Bug, Newspaper, MailCheck,
+  Plus, MessageSquare, Check, Send, Store, Trophy, EyeOff, Bug, Newspaper, MailCheck,
   SlidersHorizontal} from 'lucide-react';
 import { sendNotification } from '../utils/notify';
 
@@ -305,16 +305,26 @@ export default function HubPage() {
           {/* Admin */}
           {isAdmin && (
             <>
+            {/* NINE CARDS DOWN TO TWO.
+                
+                Every admin page now carries a grouped nav bar across the top
+                (src/components/AdminNav.js), so the seven cards that pointed
+                at individual admin screens were a second menu for a menu that
+                already exists, sitting in the middle of the page an artist
+                uses to run their own music.
+                
+                What stays: the one door in, and Newsletter. Newsletter is not
+                an admin screen at all, it is /newsletter/compose, and it is
+                the one thing here somebody opens to do a job rather than to
+                go looking for a setting.
+                
+                Nothing was removed from the app. Home Hero, What's New, Cold
+                Start, Feed Weights, Guardian Consents, Seed Personas and
+                Creator Deals are all one click from the bar, under Content
+                and People, and every old path still works. */}
             <Section title="Platform Admin" icon={Shield}>
-              <LinkCard icon={Shield} label="Admin Panel" description="Broadcast · Analytics · Moderation · Users" path="/admin" color="bg-yellow-500/20" />
-              <LinkCard icon={Sparkles} label="Home Hero" description="Control the big slot at the top of Home" path="/admin/home-hero" color="bg-yellow-500/20" />
-              <LinkCard icon={Star} label="What's New" description="Posts and podcast for the home card, and the featured board" path="/admin/news" color="bg-yellow-500/20" />
-              <LinkCard icon={Star} label="Cold Start Picks" description="What a brand new listener hears first" path="/admin/cold-start" color="bg-yellow-500/20" />
-              <LinkCard icon={SlidersHorizontal} label="Feed Weights" description="What a play is worth, and whether changing it helped" path="/admin/feed" color="bg-yellow-500/20" />
+              <LinkCard icon={Shield} label="Admin Panel" description="Everything, grouped. Money · People · Content · Platform · Sessions" path="/admin" color="bg-yellow-500/20" />
               <LinkCard icon={Send} label="Newsletter" description="Compose updates for the app or retail venues" path="/newsletter/compose" color="bg-yellow-500/20" />
-              <LinkCard icon={Shield} label="Guardian Consents" description="Under 18 artists waiting on a parent to be confirmed" path="/admin/guardian-consents" color="bg-yellow-500/20" />
-              <LinkCard icon={Users} label="Seed Personas" description="Platform artists that fill the catalogue and earn nothing" path="/admin/personas" color="bg-yellow-500/20" />
-              <LinkCard icon={Sparkles} label="Creator Deals and Instagram" description="Deals, and the Instagram add-on switch" path="/admin/deals" color="bg-yellow-500/20" />
             </Section>
 
             {/* Two cards, deliberately. Venue Invites, Retail Playlists and

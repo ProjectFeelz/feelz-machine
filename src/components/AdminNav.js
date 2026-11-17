@@ -50,16 +50,30 @@ import {
 // Every entry here is a route that exists in AppRouter today. A nav that
 // offers a dead link is worse than a nav that is missing one, so nothing
 // speculative goes in this list.
+// WHY SOME OF THESE POINT AT A WRAPPER AND SOME DO NOT
+//
+// Three of these pages are not pages. AdminContent, AdminGrowth and
+// AdminIntelligence query nothing at all: they are tab shells that render
+// other admin pages with an `embedded` prop. Content holds Boost,
+// Competitions, Sessions and Moderation. Growth holds Broadcasts and
+// Affiliates. Intelligence holds Analytics.
+//
+// Every one of those children is ALSO routed on its own, so most of admin
+// currently has two doors. The first version of this nav pointed at the
+// children, which would have made that worse by advertising both.
+//
+// So where a wrapper exists, the nav sends you to the wrapper and names the
+// tab. Content reads ?tab= already. Growth and Intelligence now do too, which
+// is why those links carry one. One door each.
 const GROUPS = [
   {
     name: 'Money',
     icon: Banknote,
     items: [
-      ['Analytics',        '/admin/analytics'],
-      ['Affiliates',       '/admin/affiliates'],
+      ['Platform stats',   '/admin/intelligence'],          // wraps Analytics
+      ['Affiliates',       '/admin/growth?tab=affiliates'],  // wraps Affiliates
       ['Deals',            '/admin/deals'],
       ['Retail',           '/admin/retail'],
-      ['Retail staff',     '/admin/retail-staff'],
     ],
   },
   {
@@ -69,41 +83,41 @@ const GROUPS = [
       ['Everyone',          '/admin/people'],
       ['Artists',           '/admin/artists'],
       ['Behaviour',         '/admin/behavior'],
+      ['Duplicates',        '/admin/duplicates'],
       ['Personas',          '/admin/personas'],
       ['Guardian consents', '/admin/guardian-consents'],
-      ['Moderation',        '/admin/moderation'],
+      ['Moderation',        '/admin/content?tab=moderation'],
     ],
   },
   {
     name: 'Content',
     icon: LayoutGrid,
     items: [
-      ['Content',     '/admin/content'],
+      ['Boost',       '/admin/content?tab=boost'],
       ['Feed',        '/admin/feed'],
       ['News',        '/admin/news'],
       ['Home hero',   '/admin/home-hero'],
       ['Cold start',  '/admin/cold-start'],
-      ['Duplicates',  '/admin/duplicates'],
-      ['Boost',       '/admin/boost'],
-      ['Broadcast',   '/admin/broadcast'],
+      ['Broadcast',   '/admin/growth?tab=broadcast'],
     ],
   },
   {
     name: 'Platform',
     icon: Activity,
     items: [
-      ['Intelligence', '/admin/intelligence'],
-      ['Growth',       '/admin/growth'],
       ['How it is used', '/admin/app-usage'],
-      ['Engagement',   '/admin/engagement'],
+      ['Engagement',     '/admin/engagement'],
     ],
   },
   {
-    name: 'Competitions',
+    // Not "Competitions". Collab Roulette moved to Plugin Gallery and both of
+    // its crons are commented out in netlify.toml, so the only competition
+    // this platform still runs is Sessions. The wheel screens are still
+    // routed and still reachable by URL, they are just not advertised here.
+    name: 'Sessions',
     icon: Trophy,
     items: [
-      ['Competitions', '/admin/competitions'],
-      ['Sessions',     '/admin/school-sessions'],
+      ['Run the competition', '/admin/school-sessions'],
     ],
   },
 ];
@@ -121,7 +135,9 @@ export default function AdminNav() {
   if (!isAdminPath || isPrint || !isAdmin) return null;
 
   const go = (to) => { setOpenGroup(null); navigate(to); };
-  const here = (to) => pathname === to;
+  // Links now carry ?tab=, and pathname never does, so the comparison has to
+  // drop the query before matching or nothing would ever highlight.
+  const here = (to) => pathname === to.split('?')[0];
 
   // Which group holds the page you are on, so the bar can say where you are
   // without you having to work it out from the heading.

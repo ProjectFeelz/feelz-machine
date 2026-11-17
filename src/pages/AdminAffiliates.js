@@ -1,11 +1,31 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
+import { useAuth } from '../contexts/AuthContext';
 import {
   Users, DollarSign, TrendingUp, Plus, Check, X,
   Loader, Zap, Clock, BarChart2, Gift, AlertCircle
 } from 'lucide-react';
 
 export default function AdminAffiliates({ embedded = false }) {
+  // ── The only admin page with no guard of its own ──────────────────────────
+  //
+  // Every other page under /admin checks isAdmin and sends a non-admin away.
+  // This one had no reference to auth at all, and there is no route-level
+  // guard in AppRouter: each page is responsible for itself. So /admin/affiliates
+  // was the one door with nobody on it.
+  //
+  // The data was never actually exposed. Every function this page calls
+  // (admin_settle_affiliate_payout, admin_approve_affiliate,
+  // admin_fulfill_redemption) is security definer and checks the admins table
+  // itself, and the tables are behind row level security. A non-admin who
+  // typed the URL got an empty page, not a payout button that worked.
+  //
+  // It is still wrong. An empty admin screen tells somebody the screen exists,
+  // and defence that rests entirely on the last layer is one migration away
+  // from being no defence. The guard runs even when embedded, where the
+  // wrapper has already checked, because a redundant check costs nothing and
+  // an assumed one costs everything.
+  const { isAdmin, loading: authLoading } = useAuth();
   const [affiliates, setAffiliates]   = useState([]);
   const [pendingRedemptions, setPendingRedemptions] = useState([]);
   const [campaigns, setCampaigns]     = useState([]);
@@ -86,7 +106,7 @@ export default function AdminAffiliates({ embedded = false }) {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { if (isAdmin) fetchData(); }, [fetchData, isAdmin]);
 
   // Both of these used to pass `supabase.rpc('increment_decimal', ...)` as a
   // COLUMN VALUE. That is a query builder object, not a number, and neither
@@ -143,6 +163,9 @@ export default function AdminAffiliates({ embedded = false }) {
     await supabase.from('affiliate_campaigns').update({ is_active: !current }).eq('id', id);
     fetchData();
   };
+
+  if (authLoading) return null;
+  if (!isAdmin) return null;
 
   if (loading) return <div className="flex justify-center py-16"><Loader className="w-5 h-5 animate-spin text-white/30" /></div>;
 
