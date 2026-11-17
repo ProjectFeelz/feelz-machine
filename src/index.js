@@ -78,6 +78,45 @@ if ('serviceWorker' in navigator) {
 }
 
 
+// ── Where did they come from ─────────────────────────────────────────────────
+//
+// projectfeelz.com puts ?ref=plugin-gallery on every link it sends here, and
+// that is the whole mechanism. The gallery does not have to call us, there is
+// no cross-site request and no CORS: the visitor arrives holding the receipt.
+//
+// Recorded ONCE per browser session. Somebody who opens four plugin pages and
+// clicks through from each is one arrival, which is the number worth having.
+// sessionStorage rather than localStorage on purpose, so coming back next week
+// counts again.
+//
+// Deliberately in index.js and not in the router. It has to run on the very
+// first paint whatever page they land on, and this file is the only thing that
+// always does.
+//
+// The source is allow-listed. ?ref= is a public query parameter that anybody
+// can put anything into, and an open one would let a stranger write arbitrary
+// rows into app_events just by sending people a link.
+if (typeof window !== 'undefined') {
+  const KNOWN_SOURCES = ['plugin-gallery', 'studio-assistant', 'pjf-blog', 'pjf-store'];
+  try {
+    const ref = new URLSearchParams(window.location.search).get('ref');
+    if (ref && KNOWN_SOURCES.includes(ref)) {
+      const seenKey = `fm_ref_${ref}`;
+      if (!sessionStorage.getItem(seenKey)) {
+        sessionStorage.setItem(seenKey, '1');
+        // Imported lazily so analytics is never on the critical path of the
+        // first render, and a failure to load it cannot stop the app booting.
+        import('./utils/track')
+          .then(({ referral }) => referral(ref, window.location.pathname))
+          .catch(() => {});
+      }
+    }
+  } catch {
+    // Private mode, blocked storage, a malformed URL. None of it is worth a
+    // broken page.
+  }
+}
+
 // ── Horizontal rows scroll with a normal mouse wheel ─────────────────────────
 //
 // Scrollbars are hidden site-wide, which is right on touch and wrong on a

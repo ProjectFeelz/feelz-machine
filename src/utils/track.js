@@ -124,5 +124,25 @@ export function step(name, target = null, meta = {}) {
   enqueue({ kind: 'step', name, target: target ? String(target).slice(0, 200) : null, meta });
 }
 
-const tracking = { screen, tap, step };
+/**
+ * Somebody arrived here from somewhere else.
+ *
+ * Called once per browser session from src/index.js, off the ?ref= on the URL.
+ * Once per session, not once per page, so a reader who opens four plugin pages
+ * is one arrival rather than four.
+ *
+ * `landing` is the path they came in on, never the full URL: a query string
+ * can carry anything, including things that have no business in an analytics
+ * table.
+ */
+export function referral(source, landing = null) {
+  enqueue({
+    kind: 'referral',
+    name: String(source).slice(0, 60),
+    target: landing ? String(landing).slice(0, 200) : null,
+    meta: {},
+  });
+}
+
+const tracking = { screen, tap, step, referral };
 export default tracking;

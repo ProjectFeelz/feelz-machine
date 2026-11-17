@@ -2047,7 +2047,16 @@ export default function TrackUploadPanel() {
         }
       }
 
-      if (trackForm.is_published && !isAlbumRelease) {
+      // A Sessions entry does not push every follower.
+      //
+      // It is a competition entry, not a release, which is the same reason it
+      // is kept out of the feed and the browse pages. Fifteen entrants all
+      // posting the same backing track would put fifteen "released a new
+      // track!" pushes on the same phones in a fortnight, and the fastest way
+      // to lose a notification permission is to spend it on that. The track is
+      // still on their profile, still on /sessions, and the winner is
+      // announced properly when there is one.
+      if (trackForm.is_published && !isAlbumRelease && !schoolSessionsEnabled) {
         try {
           const { data: { session: authSession } } = await supabase.auth.getSession();
           fetch('/.netlify/functions/notify-new-track', {
