@@ -52,6 +52,7 @@ const PlaylistsPage = React.lazy(() => import('./pages/PlaylistsPage'));
 const PlaylistDetailPage = React.lazy(() => import('./pages/PlaylistDetailPage'));
 const PlaylistJoinPage = React.lazy(() => import('./pages/PlaylistJoinPage'));
 const ListeningSessionPage = React.lazy(() => import('./pages/ListeningSessionPage'));
+const LivePage = React.lazy(() => import('./pages/LivePage'));
 const ProfilePage = React.lazy(() => import('./pages/ProfilePage'));
 const FeedPage = React.lazy(() => import('./pages/FeedPage'));
 const ArtistDashboard = React.lazy(() => import('./pages/ArtistDashboard'));
@@ -601,6 +602,7 @@ export default function AppRouter() {
                 <Route path="/schoolsessions/judge" element={<SchoolSessionsJudgePanel />} />
                 <Route path="/for-you" element={<Navigate to="/" replace />} />
                 <Route path="/browse" element={<BrowsePage />} />
+                <Route path="/live" element={<LivePage />} />
                 <Route path="/artists" element={<ArtistsIndexPage />} />
                 <Route path="/genres/:slug" element={<GenrePage />} />
                 <Route path="/wheel" element={<WheelRevealPage />} />

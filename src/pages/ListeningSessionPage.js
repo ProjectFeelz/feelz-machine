@@ -25,7 +25,7 @@ import {
   Play, Pause, SkipForward, X, Users, Music, Radio,
   Plus, Search, Loader, Send,
   ChevronDown, Star, Trash2, BarChart2,
-  Pin, Shield, Ban, Clock, AtSign, Check, ArrowDown, Timer
+  Pin, Shield, Ban, Clock, AtSign, Check, ArrowDown, Timer, Bell, CalendarPlus
 } from 'lucide-react';
 
 const YOUTUBE_REGEX = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
@@ -107,6 +107,27 @@ function TrackSearch({ artistId, onAdd, existingIds = [] }) {
           <Plus className="w-4 h-4 text-white/40 flex-shrink-0" />
         </button>
       ))}
+    </div>
+  );
+}
+
+// Counts down to a scheduled start, updating every second.
+function Countdown({ to }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  if (!to) return null;
+  const ms = new Date(to).getTime() - now;
+  if (ms <= 0) return <p className="relative mt-3 text-2xl font-black fm-gradient-text">Any minute now</p>;
+  const d = Math.floor(ms / 86400000), h = Math.floor(ms / 3600000) % 24, m = Math.floor(ms / 60000) % 60, sec = Math.floor(ms / 1000) % 60;
+  const cell = (v, l) => (
+    <div className="flex flex-col items-center min-w-[52px]">
+      <span className="text-3xl sm:text-4xl font-black tabular-nums text-white">{String(v).padStart(2, '0')}</span>
+      <span className="text-[9px] font-black tracking-[0.2em] text-white/40">{l}</span>
+    </div>
+  );
+  return (
+    <div className="relative mt-3 flex items-end gap-2">
+      {d > 0 && cell(d, 'DAYS')}{cell(h, 'HRS')}{cell(m, 'MIN')}{d === 0 && cell(sec, 'SEC')}
     </div>
   );
 }
@@ -238,29 +259,29 @@ function SubmitForReviewModal({ sessionId, user, onClose, onSubmitted }) {
   const [alreadyBoosted, setAlreadyBoosted] = useState(false);
   const [usePriority, setUsePriority] = useState(false);
 
+  const [isArtist, setIsArtist] = useState(true);
   useEffect(() => {
     if (!user?.id) return;
-    Promise.all([
-      supabase.from('tracks')
-        .select('id, title, cover_artwork_url, duration, artists(id, artist_name)')
-        .eq('is_published', true)
-        .eq('artists.user_id', user.id)
-        .limit(30),
-      supabase.from('artists')
-        .select('tier')
-        .eq('user_id', user.id)
-        .maybeSingle(),
-      supabase.from('session_priority_boosts')
-        .select('id')
-        .eq('session_id', sessionId)
-        .eq('user_id', user.id)
-        .maybeSingle(),
-    ]).then(([tracksRes, artistRes, boostRes]) => {
-      setTracks(tracksRes.data || []);
-      setArtistTier(artistRes.data?.tier || 'free');
+    (async () => {
+      // Your artist profile first, then only your own published tracks.
+      const { data: me } = await supabase.from('artists')
+        .select('id, artist_name, tier').eq('user_id', user.id).maybeSingle();
+      if (!me) { setIsArtist(false); setLoading(false); return; }
+      const [tracksRes, boostRes] = await Promise.all([
+        supabase.from('tracks')
+          .select('id, title, cover_artwork_url, duration')
+          .eq('artist_id', me.id)
+          .eq('is_published', true)
+          .order('created_at', { ascending: false })
+          .limit(40),
+        supabase.from('session_priority_boosts')
+          .select('id').eq('session_id', sessionId).eq('user_id', user.id).maybeSingle(),
+      ]);
+      setTracks((tracksRes.data || []).map(t => ({ ...t, artists: { id: me.id, artist_name: me.artist_name } })));
+      setArtistTier(me.tier || 'free');
       setAlreadyBoosted(!!boostRes.data);
       setLoading(false);
-    });
+    })();
   }, [user?.id, sessionId]); // eslint-disable-line
 
   const submit = async (track) => {
@@ -281,6 +302,7 @@ function SubmitForReviewModal({ sessionId, user, onClose, onSubmitted }) {
       });
       if (err) {
         if (err.code === '23505') throw new Error('This track is already in the review queue');
+        if (err.code === '42501') throw new Error('You already have two tracks waiting, or the host has paused submissions.');
         throw err;
       }
 
@@ -311,19 +333,27 @@ function SubmitForReviewModal({ sessionId, user, onClose, onSubmitted }) {
           <h3 className="text-sm font-bold text-white">Submit for Review</h3>
           <button onClick={onClose}><X className="w-4 h-4 text-white/30" /></button>
         </div>
-        <p className="text-[11px] text-white/30 mb-4 flex-shrink-0">Pick one of your tracks — the host will see it in their review queue</p>
+        <p className="text-[11px] text-white/40 mb-4 flex-shrink-0">Pick one of your tracks. It joins the queue and gets rated live by everyone watching. Up to two at a time.</p>
 
         {submitted ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
-              <div className="text-4xl mb-3">🎵</div>
-              <p className="text-sm font-bold text-white mb-1">Submitted!</p>
-              <p className="text-xs text-white/40">"{submitted.title}" is in the queue</p>
+              <Check className="w-10 h-10 text-pink-300 mx-auto mb-3" />
+              <p className="text-sm font-bold text-white mb-1">You're in the queue</p>
+              <p className="text-xs text-white/40">"{submitted.title}" will be rated live. Stay close, we'll tell you when it's on.</p>
             </div>
           </div>
         ) : loading ? (
           <div className="flex-1 flex items-center justify-center">
             <Loader className="w-5 h-5 animate-spin text-white/30" />
+          </div>
+        ) : !isArtist ? (
+          <div className="flex-1 flex items-center justify-center text-center px-4">
+            <div>
+              <Music className="w-8 h-8 text-white/20 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-white mb-1">Live reviews are for artists</p>
+              <p className="text-xs text-white/40">Set up an artist profile and publish a track to send it in.</p>
+            </div>
           </div>
         ) : tracks.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-center px-4">
@@ -388,83 +418,125 @@ function SubmitForReviewModal({ sessionId, user, onClose, onSubmitted }) {
   );
 }
 
-// Host: review queue panel
-function ReviewQueuePanel({ sessionId, artistId, onReviewTrack }) {
-  const [submissions, setSubmissions] = useState([]);
-  const [loading, setLoading]         = useState(true);
+// Host and moderators: the review queue. "Review live" puts a track on stage
+// with a rating poll for everyone; "Finish" closes it and sends the artist the
+// result. "Preview" plays it on this device only, for OBS to pick up.
+function ReviewQueuePanel({ queue, reviewsOpen, onToggleOpen, onChanged, flash, isAudioMode, onQueueForEveryone }) {
+  const [busy, setBusy] = useState(null);
+  const [previewId, setPreviewId] = useState(null);
+  const previewRef = useRef(null);
 
-  const load = useCallback(async () => {
-    const { data } = await supabase.from('session_review_submissions')
-      .select('*, tracks(id, title, cover_artwork_url, duration), artists(artist_name, slug, profile_image_url)')
-      .eq('session_id', sessionId)
-      .eq('status', 'pending')
-      .order('is_priority', { ascending: false })   // priority first
-      .order('boosted_at',  { ascending: true })     // earliest boost first among priority
-      .order('submitted_at', { ascending: true });   // FIFO for everyone else
-    setSubmissions(data || []);
-    setLoading(false);
-  }, [sessionId]);
+  useEffect(() => () => { try { previewRef.current?.pause(); } catch { /* gone */ } }, []);
 
-  useEffect(() => {
-    load();
-    const sub = supabase.channel(`review-queue-${sessionId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'session_review_submissions', filter: `session_id=eq.${sessionId}` }, load)
-      .subscribe();
-    return () => supabase.removeChannel(sub);
-  }, [sessionId, load]);
-
-  const dismiss = async (id) => {
-    await supabase.from('session_review_submissions').update({ status: 'dismissed' }).eq('id', id);
-    setSubmissions(prev => prev.filter(s => s.id !== id));
+  const start = async (item) => {
+    setBusy(item.id);
+    const { error } = await supabase.rpc('session_start_review', { p_submission: item.id });
+    setBusy(null);
+    if (error) { flash('Could not start that review.'); return; }
+    flash(`"${item.track_title}" is on stage. Everyone can rate it now.`);
+    onChanged();
+  };
+  const finish = async (item) => {
+    setBusy(item.id);
+    const { data, error } = await supabase.rpc('session_finish_review', { p_submission: item.id });
+    setBusy(null);
+    if (error) { flash('Could not finish that review.'); return; }
+    flash(data?.total ? `${data.good_pct}% said Fire or Solid, from ${data.total} votes. Sent to the artist.` : 'Review finished and sent to the artist.');
+    if (previewId === item.id) { previewRef.current?.pause(); setPreviewId(null); }
+    onChanged();
+  };
+  const dismiss = async (item) => {
+    await supabase.from('session_review_submissions').update({ status: 'dismissed' }).eq('id', item.id);
+    onChanged();
+  };
+  const preview = async (item) => {
+    if (previewId === item.id) { previewRef.current?.pause(); setPreviewId(null); return; }
+    const { data: t } = await supabase.from('tracks').select('id, file_url').eq('id', item.track_id).maybeSingle();
+    if (!t) return;
+    const src = (await resolveStreamSrc(t)) || playableFallback(t.file_url) || '';
+    if (!src) { flash('That track cannot play here.'); return; }
+    if (!previewRef.current) previewRef.current = new Audio();
+    previewRef.current.src = src;
+    previewRef.current.play().catch(() => {});
+    setPreviewId(item.id);
   };
 
-  const fmt = (s) => { if (!s) return ''; const m = Math.floor(s/60); return `${m}:${String(Math.floor(s%60)).padStart(2,'0')}`; };
-
-  if (loading) return <div className="p-3 text-center"><Loader className="w-4 h-4 animate-spin text-white/30 mx-auto" /></div>;
+  const onStage = queue.find(q => q.status === 'reviewing');
+  const waiting = queue.filter(q => q.status === 'pending');
 
   return (
-    <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 space-y-2">
+    <div className="bg-black/30 border border-white/[0.06] rounded-xl p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <p className="text-[10px] text-white/30 uppercase tracking-widest font-semibold">
-          Review Queue {submissions.length > 0 && <span className="ml-1 text-purple-400">({submissions.length})</span>}
+        <p className="text-[10px] text-white/50 uppercase tracking-[0.2em] font-black">
+          Live reviews <span className="text-pink-300">({waiting.length} waiting)</span>
         </p>
+        <button onClick={onToggleOpen}
+          className={`px-2.5 py-1 rounded-lg text-[10px] font-black ${reviewsOpen ? 'bg-emerald-400 text-black' : 'bg-white/10 text-white/60'}`}>
+          {reviewsOpen ? 'TAKING TRACKS' : 'PAUSED'}
+        </button>
       </div>
-      {submissions.length === 0 ? (
-        <p className="text-xs text-white/20 text-center py-2">No submissions yet</p>
-      ) : (
-        submissions.map(sub => (
-          <div key={sub.id} className="flex items-center space-x-2 p-2 rounded-xl bg-white/[0.04] border border-white/[0.05]">
-            <div className="w-9 h-9 rounded-lg bg-white/[0.06] flex-shrink-0 overflow-hidden">
-              {sub.tracks?.cover_artwork_url
-                ? <img src={sub.tracks.cover_artwork_url} alt="" className="w-full h-full object-cover" />
-                : <Music className="w-4 h-4 text-white/20 m-auto mt-2.5" />}
+
+      {onStage && (
+        <div className="p-2.5 rounded-xl bg-gradient-to-r from-pink-500/20 to-violet-500/20 border border-pink-400/30">
+          <p className="text-[9px] font-black tracking-[0.2em] text-pink-200 mb-1.5">ON STAGE</p>
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-lg bg-white/[0.06] flex-shrink-0 overflow-hidden">
+              {onStage.cover_url ? <img src={onStage.cover_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-4 h-4 text-white/30 m-auto mt-3" />}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center space-x-1.5 min-w-0">
-                <p className="text-xs font-semibold text-white truncate">{sub.tracks?.title}</p>
-                {sub.is_priority && (
-                  <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/25">⚡</span>
-                )}
-              </div>
-              <p className="text-[10px] text-white/30 truncate">
-                {sub.artists?.artist_name}{sub.tracks?.duration ? ` · ${fmt(sub.tracks.duration)}` : ''}
-              </p>
+              <p className="text-xs font-black text-white truncate">{onStage.track_title}</p>
+              <p className="text-[10px] text-white/50 truncate">{onStage.artist_name}</p>
             </div>
-            <button onClick={() => onReviewTrack(sub)}
-              className="flex-shrink-0 px-2.5 py-1.5 rounded-lg bg-purple-500/20 text-purple-300 text-[10px] font-bold hover:bg-purple-500/30 transition">
-              Review
+            <button onClick={() => preview(onStage)} className="px-2.5 py-1.5 rounded-lg bg-white/10 text-[10px] font-black text-white">
+              {previewId === onStage.id ? 'Stop' : 'Preview'}
             </button>
-            <button onClick={() => dismiss(sub.id)}
-              className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-lg hover:bg-red-500/20 transition">
-              <X className="w-3 h-3 text-white/20 hover:text-red-400" />
+            <button onClick={() => finish(onStage)} disabled={busy === onStage.id}
+              className="px-2.5 py-1.5 rounded-lg bg-white text-black text-[10px] font-black disabled:opacity-40">
+              Finish
+            </button>
+          </div>
+        </div>
+      )}
+
+      {waiting.length === 0 ? (
+        <p className="text-xs text-white/30 text-center py-2">No tracks waiting. Artists send theirs from the chat.</p>
+      ) : (
+        waiting.map(item => (
+          <div key={item.id} className="flex items-center gap-2 p-2 rounded-xl bg-white/[0.04] border border-white/[0.05]">
+            <span className="w-5 text-center text-[11px] font-black text-white/40">{item.place}</span>
+            <div className="w-9 h-9 rounded-lg bg-white/[0.06] flex-shrink-0 overflow-hidden">
+              {item.cover_url ? <img src={item.cover_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-4 h-4 text-white/20 m-auto mt-2.5" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-white truncate">
+                {item.track_title}
+                {item.is_priority && <span className="ml-1.5 text-[9px] font-black px-1.5 py-px rounded bg-violet-500/30 text-violet-200">BOOST</span>}
+              </p>
+              <p className="text-[10px] text-white/40 truncate">{item.artist_name}</p>
+            </div>
+            <button onClick={() => preview(item)} className="px-2 py-1.5 rounded-lg bg-white/[0.06] text-[10px] font-bold text-white/70">
+              {previewId === item.id ? 'Stop' : 'Preview'}
+            </button>
+            {isAudioMode && onQueueForEveryone && (
+              <button onClick={() => onQueueForEveryone(item)} className="px-2 py-1.5 rounded-lg bg-white/[0.06] text-[10px] font-bold text-white/70">Queue</button>
+            )}
+            <button onClick={() => start(item)} disabled={busy === item.id}
+              className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-pink-500 to-violet-500 text-white text-[10px] font-black disabled:opacity-40">
+              Review live
+            </button>
+            <button onClick={() => dismiss(item)} aria-label="Remove from queue"
+              className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-red-500/20 transition">
+              <X className="w-3 h-3 text-white/30" />
             </button>
           </div>
         ))
       )}
+      <p className="text-[10px] text-white/30 leading-relaxed">
+        Preview plays on this device only, so your stream software can pick it up.
+      </p>
     </div>
   );
 }
-
 
 // ── Session Poll components ───────────────────────────────────────────────────
 
@@ -843,6 +915,44 @@ export default function ListeningSessionPage() {
     setChatInput(v => (v ? v.replace(/\s*$/, ' ') : '') + '@' + m.name.replace(/\s+/g, '') + ' ');
   };
 
+  // The live review queue as everyone sees it (session_review_queue).
+  const [reviewQueue, setReviewQueue] = useState([]);
+  const loadReviewQueue = useCallback(async () => {
+    if (!sessionId) return;
+    const { data, error } = await supabase.rpc('session_review_queue', { p_session: sessionId });
+    if (!error) setReviewQueue(data || []);
+  }, [sessionId]);
+  useEffect(() => {
+    loadReviewQueue();
+    const t = setInterval(loadReviewQueue, 15000);
+    return () => clearInterval(t);
+  }, [loadReviewQueue]);
+
+  // Scheduled streams: "Remind me" and how many are coming.
+  const [reminded, setReminded]       = useState(false);
+  const [reminderCount, setReminderCount] = useState(0);
+  const loadReminders = useCallback(async () => {
+    if (!sessionId) return;
+    const { data: n } = await supabase.rpc('session_reminder_count', { p_session: sessionId });
+    if (typeof n === 'number') setReminderCount(n);
+    if (user?.id) {
+      const { data } = await supabase.from('session_reminders').select('session_id')
+        .eq('session_id', sessionId).eq('user_id', user.id).maybeSingle();
+      setReminded(!!data);
+    }
+  }, [sessionId, user?.id]);
+  useEffect(() => { loadReminders(); }, [loadReminders]);
+  const toggleReminder = async () => {
+    if (!user?.id) { navigate(`/login?next=/session/${sessionId}`); return; }
+    if (reminded) {
+      await supabase.from('session_reminders').delete().eq('session_id', sessionId).eq('user_id', user.id);
+      setReminded(false); setReminderCount(c => Math.max(0, c - 1));
+    } else {
+      const { error } = await supabase.from('session_reminders').insert({ session_id: sessionId, user_id: user.id });
+      if (!error || error.code === '23505') { setReminded(true); setReminderCount(c => c + 1); flash("We'll remind you 15 minutes before"); }
+    }
+  };
+
   const [polls, setPolls]           = useState([]);
   const [pollFolded, setPollFolded] = useState(null);
   const firstPollId = polls[0]?.id;
@@ -900,6 +1010,7 @@ export default function ListeningSessionPage() {
         filter: `id=eq.${sessionId}`,
       }, (payload) => {
         setSession(prev => ({ ...prev, ...payload.new }));
+        loadReviewQueue();
         // The host drives playback; everyone else, artists included, follows.
         const amHost = !!artist && payload.new.artist_id === artist.id;
         if (!amHost && payload.new.mode === 'audio') {
@@ -1059,7 +1170,9 @@ export default function ListeningSessionPage() {
     const { data: s } = await supabase
       .from('listening_sessions').select('*, artists(id, user_id, artist_name, slug, profile_image_url, paypal_email)')
       .eq('id', sessionId).maybeSingle();
-    if (!s || s.status === 'ended') { navigate('/'); return; }
+    // An ended stream stays up as a replay while its video is there, unless
+    // the host hid it.
+    if (!s || (s.status === 'ended' && (!extractYouTubeId(s.youtube_url || '') || s.replay_hidden))) { navigate('/'); return; }
     setSession(s);
     loadMods(s.artist_id);
     const amHost = !!artist && s.artist_id === artist.id;
@@ -1323,9 +1436,56 @@ export default function ListeningSessionPage() {
   const host = session.artists || {};
   const isScheduled = session.status === 'scheduled';
   const isEnded = session.status === 'ended';
+  const isReplay = isEnded && !!ytId && !session.replay_hidden;
+  const onStage = reviewQueue.find(q => q.status === 'reviewing');
+  const waitingReviews = reviewQueue.filter(q => q.status === 'pending');
+  const myPlace = waitingReviews.find(q => q.is_mine)?.place || null;
+  const reviewedHere = reviewQueue.filter(q => q.status === 'reviewed');
+
+  const goLiveNow = async () => {
+    await updateSession({ status: 'live', started_at: new Date().toISOString() });
+    const { data: { session: auth } } = await supabase.auth.getSession();
+    fetch('/.netlify/functions/notify-session-live', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, artist_id: session.artist_id, token: auth?.access_token }),
+    }).catch(() => {});
+    flash("You're live. Everyone waiting has been told.");
+  };
+  const toggleReviewsOpen = async () => {
+    if (!isHost) { flash('Only the host can pause submissions.'); return; }
+    await updateSession({ reviews_open: !session.reviews_open });
+  };
+  const hideReplay = async () => {
+    await updateSession({ replay_hidden: !session.replay_hidden });
+    flash(session.replay_hidden ? 'The replay is showing again' : 'The replay is hidden from fans');
+  };
+  const calendarHref = () => {
+    if (!session.scheduled_at) return null;
+    const start = new Date(session.scheduled_at);
+    const end = new Date(start.getTime() + 60 * 60000);
+    const f = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const url = `${window.location.origin}/session/${sessionId}`;
+    const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Feelz Machine//Live//EN', 'BEGIN:VEVENT',
+      `UID:${sessionId}@feelzmachine.com`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(start)}`, `DTEND:${f(end)}`,
+      `SUMMARY:${(host.artist_name || 'Live')}: ${(session.title || 'Live stream').replace(/[,;]/g, ' ')}`,
+      `DESCRIPTION:Watch live on Feelz Machine ${url}`, `URL:${url}`, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+    return 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+  };
   const floating = (
     <>
       {reactions.map(r => <FloatingReaction key={r.id} emoji={r.emoji} id={r.id} left={r.left} />)}
+      {onStage && !isEnded && (
+        <div className="absolute left-3 bottom-16 max-w-[70%] flex items-center gap-2.5 p-2 pr-3 rounded-2xl bg-black/70 backdrop-blur border border-pink-400/40 shadow-[0_0_30px_rgba(236,72,153,0.35)]">
+          <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/10 flex-shrink-0">
+            {onStage.cover_url ? <img src={onStage.cover_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-4 h-4 text-white/40 m-auto mt-3" />}
+          </div>
+          <div className="min-w-0">
+            <p className="text-[9px] font-black tracking-[0.2em] text-pink-300">NOW REVIEWING</p>
+            <p className="text-xs font-black text-white truncate">{onStage.track_title}</p>
+            <p className="text-[10px] text-white/60 truncate">{onStage.artist_name}</p>
+          </div>
+        </div>
+      )}
       {combo >= 5 && (
         <div key={combo} className="fm-combo absolute right-3 bottom-16 px-3 py-1.5 rounded-full bg-gradient-to-r from-pink-500 to-amber-400 text-black text-sm font-black shadow-[0_0_30px_rgba(236,72,153,0.6)]">
           x{combo} HYPE
@@ -1385,7 +1545,7 @@ export default function ListeningSessionPage() {
       {isScheduled ? (
         <span className="px-2 py-1 rounded-md bg-amber-400 text-black text-[10px] font-black tracking-wider">SOON</span>
       ) : isEnded ? (
-        <span className="px-2 py-1 rounded-md bg-white/20 text-white text-[10px] font-black tracking-wider">ENDED</span>
+        <span className="px-2 py-1 rounded-md bg-white/20 text-white text-[10px] font-black tracking-wider">{isReplay ? 'REPLAY' : 'ENDED'}</span>
       ) : (
         <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-red-500 text-white text-[10px] font-black tracking-wider">
           <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE
@@ -1413,7 +1573,43 @@ export default function ListeningSessionPage() {
         <div className="flex-shrink-0 lg:min-h-0 lg:overflow-y-auto no-scrollbar">
           <div className="relative pt-safe lg:pt-0">
             <div className="fm-stage-glow lg:rounded-3xl overflow-hidden">
-              {isEnded ? (
+              {isReplay ? (
+                <LiveStage
+                  videoId={ytId}
+                  title={session.title}
+                  hostName={host.artist_name}
+                  hostImage={host.profile_image_url}
+                  isHost={isHost}
+                  replay
+                  topBar={stageTopBar}
+                />
+              ) : isScheduled ? (
+                <div className="relative aspect-video overflow-hidden bg-black flex flex-col items-center justify-center text-center px-6">
+                  {host.profile_image_url && <img src={host.profile_image_url} alt="" className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-40" />}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-black/30" />
+                  <p className="relative text-[10px] font-black tracking-[0.3em] text-amber-300 uppercase">Going live</p>
+                  <p className="relative mt-1 text-sm sm:text-base font-bold text-white/80">
+                    {session.scheduled_at ? new Date(session.scheduled_at).toLocaleString([], { weekday: 'long', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Soon'}
+                  </p>
+                  <Countdown to={session.scheduled_at} />
+                  <div className="relative mt-4 flex flex-wrap justify-center gap-2">
+                    {!isHost && (
+                      <button onClick={toggleReminder}
+                        className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black transition ${reminded ? 'bg-white/15 text-white' : 'bg-white text-black'}`}>
+                        <Bell className="w-3.5 h-3.5" /> {reminded ? 'Reminder set' : 'Remind me'}
+                      </button>
+                    )}
+                    {session.scheduled_at && (
+                      <a href={calendarHref()} download="feelz-machine-live.ics"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/15 text-white text-xs font-black">
+                        <CalendarPlus className="w-3.5 h-3.5" /> Add to calendar
+                      </a>
+                    )}
+                  </div>
+                  {reminderCount > 0 && <p className="relative mt-3 text-[11px] text-white/50">{reminderCount} {reminderCount === 1 ? 'person is' : 'people are'} coming</p>}
+                  <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent px-3 pt-3 pb-8 text-left">{stageTopBar}</div>
+                </div>
+              ) : isEnded ? (
                 <div className="relative aspect-video overflow-hidden bg-black flex flex-col items-center justify-center text-center px-6">
                   {host.profile_image_url && <img src={host.profile_image_url} alt="" className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-40" />}
                   <p className="relative text-3xl font-black italic uppercase tracking-tight fm-gradient-text">That's a wrap</p>
@@ -1550,7 +1746,24 @@ export default function ListeningSessionPage() {
           )}
 
           {/* Host tools */}
-          {isHost && (
+          {isHost && isScheduled && (
+            <button onClick={goLiveNow}
+              className="mx-4 lg:mx-0 mt-3 w-[calc(100%-2rem)] lg:w-full py-3 rounded-2xl bg-red-500 hover:bg-red-400 text-white text-sm font-black inline-flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(239,68,68,0.45)]">
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" /> Go live now
+            </button>
+          )}
+          {isHost && isEnded && (
+            <div className="mx-4 lg:mx-0 mt-3 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.07] flex items-center gap-3">
+              <p className="text-xs text-white/60 flex-1">
+                {session.replay_hidden ? 'This replay is hidden from fans.' : 'Fans can watch this replay from your streams.'}
+              </p>
+              <button onClick={hideReplay} className="px-3 py-2 rounded-xl bg-white/10 text-xs font-black">
+                {session.replay_hidden ? 'Show replay' : 'Hide replay'}
+              </button>
+            </div>
+          )}
+
+          {isHost && !isEnded && (
             <div className="mx-4 lg:mx-0 mt-3 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.07] space-y-3">
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => updateSession({ mode: 'audio' })}
@@ -1567,7 +1780,7 @@ export default function ListeningSessionPage() {
                 </button>
                 <button onClick={() => setShowReviewQueue(v => !v)}
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-white/[0.06] text-white/60 hover:bg-white/[0.1] transition">
-                  <Music className="w-3.5 h-3.5" /> Review queue
+                  <Music className="w-3.5 h-3.5" /> Live reviews{waitingReviews.length ? ` (${waitingReviews.length})` : ''}
                 </button>
                 <button onClick={() => {
                     const blob = new Blob([JSON.stringify(messages, null, 2)], { type: 'application/json' });
@@ -1642,12 +1855,15 @@ export default function ListeningSessionPage() {
               {showReviewQueue && (
                 <ReviewQueuePanel
                   sessionId={sessionId}
-                  artistId={artist?.id}
-                  onReviewTrack={(sub) => {
-                    setShowPollModal(true);
-                    setShowReviewQueue(false);
-                    supabase.from('session_review_submissions')
-                      .update({ status: 'reviewing' }).eq('id', sub.id).then(() => {});
+                  queue={reviewQueue}
+                  reviewsOpen={session.reviews_open !== false}
+                  onToggleOpen={toggleReviewsOpen}
+                  onChanged={() => { loadReviewQueue(); loadPolls(); }}
+                  flash={flash}
+                  isAudioMode={session.mode === 'audio'}
+                  onQueueForEveryone={async (item) => {
+                    const { data: t } = await supabase.from('tracks').select('id, title, cover_artwork_url, file_url, duration').eq('id', item.track_id).maybeSingle();
+                    if (t) { await addToQueue(t); flash(`"${t.title}" added to the queue`); }
                   }}
                 />
               )}
@@ -1702,6 +1918,59 @@ export default function ListeningSessionPage() {
                 </button>
               </div>
               {slowModeChips}
+              <ReviewQueuePanel
+                sessionId={sessionId}
+                queue={reviewQueue}
+                reviewsOpen={session.reviews_open !== false}
+                onToggleOpen={toggleReviewsOpen}
+                onChanged={() => { loadReviewQueue(); loadPolls(); }}
+                flash={flash}
+                isAudioMode={false}
+              />
+            </div>
+          )}
+
+          {/* Live reviews, as fans see them */}
+          {!isHost && !isEnded && (waitingReviews.length > 0 || session.reviews_open !== false) && (
+            <div className="mx-4 lg:mx-0 mt-3 p-3 rounded-2xl bg-gradient-to-r from-violet-500/15 via-white/[0.03] to-pink-500/15 border border-violet-400/20 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-pink-500 to-violet-500 flex items-center justify-center flex-shrink-0">
+                <Music className="w-4 h-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-black text-white">Live reviews</p>
+                <p className="text-[11px] text-white/60 truncate">
+                  {myPlace ? `You're number ${myPlace} in the queue. Stay close.`
+                    : waitingReviews.length ? `${waitingReviews.length} ${waitingReviews.length === 1 ? 'track' : 'tracks'} waiting. Get yours rated live.`
+                    : 'Send a track and the room rates it live.'}
+                </p>
+              </div>
+              {user && session.reviews_open !== false && (
+                <button onClick={() => setShowSubmitModal(true)}
+                  className="px-3 py-2 rounded-xl bg-white text-black text-xs font-black flex-shrink-0">Send yours</button>
+              )}
+            </div>
+          )}
+
+          {/* What was reviewed on this stream */}
+          {reviewedHere.length > 0 && (
+            <div className="mx-4 lg:mx-0 mt-3 p-3 rounded-2xl bg-white/[0.03] border border-white/[0.07]">
+              <p className="text-[10px] font-black tracking-[0.2em] uppercase text-white/50 mb-2">Reviewed on this stream</p>
+              <div className="space-y-2">
+                {reviewedHere.map(r => (
+                  <div key={r.id} className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-lg overflow-hidden bg-white/10 flex-shrink-0">
+                      {r.cover_url ? <img src={r.cover_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-4 h-4 text-white/30 m-auto mt-2.5" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold truncate">{r.track_title}</p>
+                      <p className="text-[10px] text-white/40 truncate">{r.artist_name}</p>
+                    </div>
+                    {r.verdict?.good_pct != null && (
+                      <span className="px-2 py-1 rounded-lg bg-gradient-to-r from-pink-500/30 to-violet-500/30 text-[11px] font-black">{r.verdict.good_pct}% fire</span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -1797,16 +2066,16 @@ export default function ListeningSessionPage() {
               ))}
             </div>
 
-            {!isHost && user && !isEnded && (
+            {!isHost && user && !isEnded && session.reviews_open !== false && (
               <button onClick={() => setShowSubmitModal(true)}
                 className="w-full flex items-center justify-center gap-2 py-2 rounded-2xl bg-gradient-to-r from-violet-500/20 to-pink-500/20 border border-pink-500/25 text-xs text-pink-100 font-bold hover:from-violet-500/30 hover:to-pink-500/30 transition">
-                <Music className="w-3.5 h-3.5" /> Send your track in for review
+                <Music className="w-3.5 h-3.5" /> {myPlace ? `Your track is number ${myPlace}` : 'Get your track reviewed live'}
               </button>
             )}
 
             {user ? (
               isEnded ? (
-                <p className="text-center text-xs text-white/40 py-2">The stream has ended.</p>
+                <p className="text-center text-xs text-white/40 py-2">{isReplay ? 'Chat from the live stream' : 'The stream has ended.'}</p>
               ) : myBan ? (
                 <p className="text-center text-xs text-white/50 py-2.5 rounded-2xl bg-white/[0.04]">
                   {myBan.until ? `You can chat again at ${new Date(myBan.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` : "You can't chat in this stream."}
@@ -1863,7 +2132,7 @@ export default function ListeningSessionPage() {
           sessionId={sessionId}
           user={user}
           onClose={() => setShowSubmitModal(false)}
-          onSubmitted={() => setShowSubmitModal(false)}
+          onSubmitted={() => { setShowSubmitModal(false); loadReviewQueue(); }}
         />
       )}
 

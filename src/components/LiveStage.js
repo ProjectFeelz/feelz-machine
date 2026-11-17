@@ -25,6 +25,7 @@
  *   isHost      shows setup hints on error instead of a plain message
  *   overlay     anything to float over the video (reactions)
  *   topBar      the bar across the top of the stage (LIVE pill, viewers)
+ *   replay      a past stream: starts paused, plays from the start, no live edge
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -55,7 +56,7 @@ const canFullscreen = () =>
   typeof document !== 'undefined' &&
   !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
 
-export default function LiveStage({ videoId, title, hostName, hostImage, isHost = false, overlay = null, topBar = null }) {
+export default function LiveStage({ videoId, title, hostName, hostImage, isHost = false, overlay = null, topBar = null, replay = false }) {
   const wrapRef   = useRef(null);
   const mountRef  = useRef(null);
   const playerRef = useRef(null);
@@ -87,8 +88,8 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
         width: '100%',
         height: '100%',
         playerVars: {
-          autoplay: 1,
-          mute: 1,
+          autoplay: replay ? 0 : 1,
+          mute: replay ? 0 : 1,
           controls: 0,
           disablekb: 1,
           fs: 0,
@@ -102,8 +103,9 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
         events: {
           onReady: (e) => {
             if (cancelled) return;
-            e.target.mute();
             e.target.setVolume(80);
+            if (replay) { setMuted(false); setPhase('paused'); return; }
+            e.target.mute();
             e.target.playVideo();
           },
           onStateChange: (e) => {
@@ -113,7 +115,7 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
             else if (e.data === S.PAUSED) setPhase('paused');
             else if (e.data === S.ENDED) {
               setPhase('ended');
-              // Remove the player outright so the end screen never shows.
+              // Stop the player so YouTube's end screen never shows.
               try { playerRef.current?.stopVideo(); } catch { /* gone already */ }
             }
           },
@@ -131,7 +133,7 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
       try { playerRef.current?.destroy(); } catch { /* already gone */ }
       playerRef.current = null;
     };
-  }, [videoId]);
+  }, [videoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fullscreen state follows the browser, so Esc works too.
   useEffect(() => {
@@ -162,8 +164,8 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
     if (!p()) return;
     if (phase === 'playing') p().pauseVideo();
     else {
-      // Back to the live edge, not where they paused.
-      try { const d = p().getDuration(); if (d) p().seekTo(d, true); } catch { /* fine */ }
+      // Back to the live edge, not where they paused. Replays carry on.
+      if (!replay) { try { const d = p().getDuration(); if (d) p().seekTo(d, true); } catch { /* fine */ } }
       p().playVideo();
     }
   };
@@ -237,7 +239,7 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
           <span className="relative w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-[0_0_40px_rgba(236,72,153,0.5)]">
             <Play className="w-7 h-7 text-black ml-1" />
           </span>
-          <span className="relative mt-3 text-sm font-bold text-white">Back to live</span>
+          <span className="relative mt-3 text-sm font-bold text-white">{replay ? 'Watch the replay' : 'Back to live'}</span>
           {title && <span className="relative mt-1 text-xs text-white/50 max-w-[80%] truncate">{title}</span>}
         </button>
       )}
@@ -247,8 +249,15 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black text-center px-6">
           {backdrop}
           <p className="relative text-2xl font-black italic uppercase tracking-tight fm-live-gradient-text">That's a wrap</p>
-          <p className="relative mt-2 text-sm text-white/60">{hostName ? `${hostName} has ended the stream.` : 'The stream has ended.'}</p>
-          <p className="relative mt-1 text-xs text-white/40">The chat stays open for a bit. Say thanks.</p>
+          {replay ? (
+            <button type="button" onClick={() => { try { p().seekTo(0, true); p().playVideo(); } catch { /* gone */ } }}
+              className="relative mt-3 px-4 py-2 rounded-full bg-white text-black text-xs font-black">Watch again</button>
+          ) : (
+            <>
+              <p className="relative mt-2 text-sm text-white/60">{hostName ? `${hostName} has ended the stream.` : 'The stream has ended.'}</p>
+              <p className="relative mt-1 text-xs text-white/40">The chat stays open for a bit. Say thanks.</p>
+            </>
+          )}
         </div>
       )}
 
@@ -286,7 +295,7 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
       )}
 
       {/* Tap for sound */}
-      {phase === 'playing' && muted && (
+      {phase === 'playing' && muted && !replay && (
         <button type="button" onClick={toggleMute}
           className="fm-live-sound absolute left-1/2 -translate-x-1/2 bottom-14 sm:bottom-16 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white text-black text-xs font-black tracking-wide shadow-[0_0_30px_rgba(236,72,153,0.55)]">
           <VolumeX className="w-4 h-4" /> TAP FOR SOUND

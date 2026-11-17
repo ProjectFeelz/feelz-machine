@@ -431,11 +431,14 @@ export default function HomePage() {
 
   const fetchLiveSessions = async () => {
     try {
+      // Live now first, then streams scheduled in the next week.
       const { data: sessions, error: sessErr } = await supabase
         .from('listening_sessions')
-        .select('id, title, artist_id')
-        .eq('status', 'live')
-        .limit(8);
+        .select('id, title, artist_id, status, scheduled_at, youtube_url')
+        .or(`status.eq.live,and(status.eq.scheduled,scheduled_at.gte.${new Date(Date.now() - 3600e3).toISOString()},scheduled_at.lte.${new Date(Date.now() + 7 * 86400e3).toISOString()})`)
+        .order('status', { ascending: true })
+        .order('scheduled_at', { ascending: true, nullsFirst: true })
+        .limit(10);
 
       // RLS policy may block the query, fail silently so the rest of the page loads
       if (sessErr) {
@@ -1174,8 +1177,11 @@ export default function HomePage() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
               </span>
-              <span className="section-label text-red-400">Live Now</span>
+              <span className="section-label text-red-400">
+                {liveSessions.some(s => s.status === 'live') ? 'Live now' : 'Coming up live'}
+              </span>
             </div>
+            <button onClick={() => navigate('/live')} className="text-xs text-white/40 hover:text-white/70 transition">See all</button>
           </div>
           <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
             {liveSessions.map(session => (
@@ -1189,15 +1195,22 @@ export default function HomePage() {
                     ? <img src={coverUrl(session.artist_image, 400)} alt={session.artist_name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     : <div className="w-full h-full flex items-center justify-center"><Radio className="w-8 h-8 text-white/20" /></div>
                   }
-                  {/* Red live badge overlay */}
-                  <div className="absolute inset-0 bg-red-500/10 rounded-xl" />
-                  <div className="absolute top-2 left-2 flex items-center space-x-1 px-2 py-0.5 rounded-full bg-red-500/90 backdrop-blur">
-                    <span className="relative flex h-1.5 w-1.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
-                    </span>
-                    <span className="text-[9px] font-bold text-white uppercase tracking-widest">Live</span>
-                  </div>
+                  {session.status === 'live' ? (
+                    <>
+                      <div className="absolute inset-0 bg-red-500/10 rounded-xl" />
+                      <div className="absolute top-2 left-2 flex items-center space-x-1 px-2 py-0.5 rounded-full bg-red-500/90 backdrop-blur">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
+                        </span>
+                        <span className="text-[9px] font-bold text-white uppercase tracking-widest">Live</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-amber-400 text-black text-[9px] font-black">
+                      {new Date(session.scheduled_at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  )}
                 </div>
                 <p className="text-sm font-medium text-white truncate">{session.artist_name}</p>
                 {session.title && (

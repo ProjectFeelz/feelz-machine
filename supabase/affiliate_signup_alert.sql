@@ -16,10 +16,10 @@ begin
 
   insert into notifications (user_id, type, title, message, metadata, email_requested)
   select a.user_id,
-         'affiliate_signup',
+         'admin_message',
          'New affiliate sign-up: ' || v_name,
          v_name || ' signed up for the Affiliate Programme and is waiting for approval.',
-         jsonb_build_object('url', '/admin/affiliates', 'affiliate_user_id', new.user_id),
+         jsonb_build_object('url', '/admin/affiliates', 'affiliate_user_id', new.user_id, 'kind', 'affiliate_signup'),
          true
     from admins a;
   return new;

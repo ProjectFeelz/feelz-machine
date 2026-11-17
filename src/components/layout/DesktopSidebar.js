@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Library, LayoutDashboard, User, Info, Sparkles, Gamepad2 } from 'lucide-react';
+import { Home, Search, Library, LayoutDashboard, User, Info, Sparkles, Gamepad2, Radio } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Bell } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
@@ -60,6 +60,7 @@ export default function DesktopSidebar() {
       ? [{ path: '/hub', icon: LayoutDashboard, label: isBeatmaker ? 'Studio' : 'Hub' }]
       : []),
     { path: '/profile',      icon: User,            label: 'Profile' },
+    { path: '/live',         icon: Radio,           label: 'Live' },
     { path: '/games',        icon: Gamepad2,        label: 'Games' },
   ];
 

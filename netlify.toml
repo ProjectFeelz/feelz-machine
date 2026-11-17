@@ -367,6 +367,11 @@
 [functions."email-new-updates"]
   schedule = "*/5 * * * *"
 
+# Every 5 minutes, reminds people about scheduled live streams starting in
+# the next 15 minutes. Each stream is reminded once.
+[functions."session-reminders"]
+  schedule = "*/5 * * * *"
+
 # Mon and Thu 08:00, the engagement drip.
 #
 # This schedules the CRON GATEWAY, not the background function it drives.
