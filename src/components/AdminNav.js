@@ -143,8 +143,18 @@ export default function AdminNav() {
   // without you having to work it out from the heading.
   const currentGroup = GROUPS.find(g => g.items.some(([, to]) => here(to)));
 
+  // pt-14 md:pt-0, and sticky only from md up.
+  //
+  // On a phone this app has a fixed header strip at z-[60] holding the streak
+  // badge, the bell and the avatar, and <main> starts underneath it at y=0.
+  // Every page in here clears it with pt-14, and this bar was not, which is
+  // why it rendered behind those icons.
+  //
+  // Pinned on desktop, where there is no floating header to collide with. On a
+  // phone it scrolls away with the page, which costs nothing and removes any
+  // question of what overlaps what on the way down.
   return (
-    <div className="sticky top-0 z-40 bg-black/95 backdrop-blur border-b border-white/[0.08]">
+    <div className="pt-14 md:pt-0 md:sticky md:top-0 z-40 bg-black/95 backdrop-blur border-b border-white/[0.08]">
       <div className="max-w-[1600px] mx-auto px-4">
 
         {/* The bar. Horizontal and scrollable so it behaves the same on a

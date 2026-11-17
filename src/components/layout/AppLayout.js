@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import MobileNav from './MobileNav';
 import WindowControlsOverlay from './WindowControlsOverlay';
 import DesktopSidebar from './DesktopSidebar';
+import AdminNav from '../AdminNav';
 import DesktopPlayer from './DesktopPlayer';
 import MiniPlayer from './MiniPlayer';
 import FullPlayer from './FullPlayer';
@@ -314,6 +315,20 @@ export default function AppLayout() {
           {/* Waits for the welcome tour to finish, then offers the course
               once. Dismissed for good on the X. See src/components/CoursePrompt.js */}
           <CoursePrompt userId={user?.id} />
+
+          {/* The admin bar belongs INSIDE this column, not above the app.
+              
+              It was rendered in AppRouter above <Routes>, which put it outside
+              AppLayout entirely. Out there it knew nothing about the layout:
+              on desktop it started at x=0 and the first third of it rendered
+              underneath the fixed 256px sidebar, and on mobile it sat above
+              the app header and covered the streak badge, the bell and the
+              avatar.
+              
+              In here it inherits md:ml-64 from <main>, so it clears the
+              sidebar without needing a number of its own, and it sits below
+              the header on a phone like any other page content. */}
+          <AdminNav />
 
           <div className="md:px-8 md:pt-8 w-full">
             <ErrorBoundary>
