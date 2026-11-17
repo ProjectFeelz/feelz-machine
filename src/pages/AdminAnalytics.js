@@ -1280,6 +1280,19 @@ export default function AdminAnalytics({ embedded = false }) {
               {sourceSplit.length > 0 && (
                 <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
                   <SectionTitle icon={TrendingUp} title="Where Listeners Discover Music" color="text-cyan-400" />
+                  {/* THESE TWO PANELS ARE NOT THE SAME PANEL, AND THAT IS THE POINT.
+
+                      This one counts STREAMS, from admin_behavior_summary.
+                      "Where plays came from" on the Listeners tab counts
+                      LISTENING EVENTS, from get_platform_listener_stats, off a
+                      different table with a different total: roughly 2,100
+                      events against 1,270 streams over the same seven days.
+
+                      They look like duplicates and are not, which is worse than
+                      being duplicates: two different numbers under two similar
+                      headings is how the wrong one ends up being quoted. Both
+                      now say what they count. */}
+                  <p className="text-[11px] text-white/30 -mt-1 mb-2">Counted as streams</p>
                   <div className="space-y-2">
                     {sourceSplit.map(s => (
                       <div key={s.name}>
@@ -1296,34 +1309,13 @@ export default function AdminAnalytics({ embedded = false }) {
                 </div>
               )}
 
-              {/* Device breakdown */}
-              {deviceSplit.length > 0 && (
-                <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
-                  <SectionTitle icon={Activity} title="Device Split" color="text-purple-400" />
-                  <div className="space-y-2">
-                    {/* d.pct is a STRING that already ends in '%' — pct() appends
-                        it. So the old `{d.pct}%` printed "10.7%%", and the style
-                        below built width:"10.7%%", which is not a valid CSS
-                        length: the browser discarded the declaration and every
-                        bar rendered at zero width. Same value, used correctly in
-                        both places now, via one variable so they cannot drift. */}
-                    {deviceSplit.map(d => {
-                      const share = d.pct || `${Math.round((d.value / (completionStats.total || 1)) * 100)}%`;
-                      return (
-                        <div key={d.name}>
-                          <div className="flex justify-between text-xs mb-1">
-                            <span className="text-white/60">{d.name}</span>
-                            <span className="text-white/40">{share} · {fmt(d.value)}</span>
-                          </div>
-                          <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
-                            <div className="h-full rounded-full bg-purple-400" style={{ width: share }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              {/* Device Split used to be rendered here as well, reading the
+                  exact same `deviceSplit` state the Listeners tab draws as a
+                  pie. Two renderings of one number, in two tabs, which is why
+                  those tabs read as though they did the same thing.
+
+                  The Listeners one kept: same split, plus a legend and the raw
+                  counts. This was bars and nothing more. */}
             </div>
           )}
 
@@ -1528,7 +1520,7 @@ export default function AdminAnalytics({ embedded = false }) {
                     <DemoList title="Genres played" icon={Music} rows={demo.by_genre} />
                     <DemoList title="Moods played" icon={Music} rows={demo.by_mood} />
                     <DemoList title="Platform" icon={Monitor} rows={demo.by_platform} />
-                    <DemoList title="Where plays came from" icon={Radio} rows={demo.by_source} sub="Includes Retail, venues playing in their space" />
+                    <DemoList title="Where plays came from" icon={Radio} rows={demo.by_source} sub="Counted as listening events, a wider count than the streams figure on Behaviour. Includes Retail, venues playing in their space" />
                   </div>
                 </>
               )}
