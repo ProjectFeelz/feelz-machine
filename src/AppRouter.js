@@ -39,6 +39,7 @@ const GuidesIndexPage = React.lazy(() => import('./pages/GuidesIndexPage'));
 const GuidePage = React.lazy(() => import('./pages/GuidePage'));
 const FaqPage = React.lazy(() => import('./pages/FaqPage'));
 const SplitsPage = React.lazy(() => import('./pages/SplitsPage'));
+const AdminAppUsage = React.lazy(() => import('./pages/AdminAppUsage'));
 const GamesPage = React.lazy(() => import('./pages/GamesPage'));
 const LoginPage = React.lazy(() => import('./pages/LoginPage'));
 const ResetPasswordPage = React.lazy(() => import('./pages/ResetPasswordPage'));
@@ -104,6 +105,7 @@ const ListenerProfilePage = React.lazy(() => import('./pages/ListenerProfilePage
 const SchoolSessionsPage = React.lazy(() => import('./pages/SchoolSessionsPage'));
 const SchoolSessionsVotePage = React.lazy(() => import('./pages/SchoolSessionsVotePage'));
 const SchoolSessionsEntryPage = React.lazy(() => import('./pages/SchoolSessionsEntryPage'));
+const SessionsPrizeConsentPage = React.lazy(() => import('./pages/SessionsPrizeConsentPage'));
 const SchoolSessionsTermsPage = React.lazy(() => import('./pages/SchoolSessionsTermsPage'));
 const SchoolSessionsJudgePanel = React.lazy(() => import('./pages/SchoolSessionsJudgePanel'));
 const AdminSchoolSessions = React.lazy(() => import('./pages/AdminSchoolSessions'));
@@ -517,6 +519,12 @@ export default function AppRouter() {
                     a TikTok bio, so it has to work before voting opens, not
                     only once finalists exist. */}
                 <Route path="/sessions/entry/:id" element={<SchoolSessionsEntryPage />} />
+                {/* Hidden on purpose, and hidden is not the same as absent.
+                    Nothing links here and nothing ever should: a guardian
+                    reaches it only with the one-time token from the Pay the
+                    winner box. But it still needs a route, or the link we send
+                    a parent 404s and a minor's prize cannot be signed for. */}
+                <Route path="/sessions/prize-consent/:token" element={<SessionsPrizeConsentPage />} />
                 <Route path="/sessions/judge" element={<SchoolSessionsJudgePanel />} />
 
                 <Route path="/schoolsessions" element={
@@ -641,6 +649,7 @@ export default function AppRouter() {
                 <Route path="/legal/:slug" element={<LegalDocumentPage />} />
                 <Route path="/splits" element={<SplitsPage />} />
                 <Route path="/games" element={<GamesPage />} />
+                <Route path="/admin/app-usage" element={<AdminAppUsage />} />
                 <Route path="/admin/home-hero" element={<AdminHomeHero />} />
                 <Route path="/admin/news" element={<AdminNews />} />
                 <Route path="/admin/cold-start" element={<AdminColdStart />} />
