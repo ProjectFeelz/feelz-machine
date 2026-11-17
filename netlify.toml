@@ -362,6 +362,11 @@
 [functions."send-scheduled-newsletters"]
   schedule = "*/5 * * * *"
 
+# Every 5 minutes, emails each newly published platform update to its
+# audience, a page at a time, picking up where the last run stopped.
+[functions."email-new-updates"]
+  schedule = "*/5 * * * *"
+
 # Mon and Thu 08:00, the engagement drip.
 #
 # This schedules the CRON GATEWAY, not the background function it drives.

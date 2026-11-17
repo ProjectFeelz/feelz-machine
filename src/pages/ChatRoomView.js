@@ -12,8 +12,11 @@ import {
   AlertTriangle, Trash2, VolumeX, Lock, X,
   CornerDownRight, BarChart2, Plus, Check, Pin,
   Smile, Music, Play, Bug, CheckCircle,
-  ChevronDown, 
+  ChevronDown, Share2,
 } from 'lucide-react';
+
+// Supporter-only rooms open to fans who have bought or donated this much (USD).
+const SUPPORTER_MIN_USD = 2;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const EMOJIS = [
@@ -582,6 +585,20 @@ export default function ChatRoomView() {
   // know "am I the bug room" was the least reliable. The styling test is
   // kept as a fallback so nothing that looks right today starts looking
   // wrong.
+  const [shareNote, setShareNote] = useState('');
+  // Fans share a room the way they share a song: the phone's share sheet, or
+  // the link copied where there is none.
+  const shareRoom = async () => {
+    const url = `https://www.feelzmachine.com/chat/${roomId}`;
+    const title = room?.name || 'Chat room on Feelz Machine';
+    const text = room?.artists?.artist_name ? `Come chat with ${room.artists.artist_name} on Feelz Machine` : 'Come chat on Feelz Machine';
+    try {
+      if (navigator.share) { await navigator.share({ title, text, url }); return; }
+      await navigator.clipboard.writeText(url);
+      setShareNote('Copied');
+      setTimeout(() => setShareNote(''), 1800);
+    } catch { /* closed the share sheet */ }
+  };
   const isBugRoom     = /report\s*a?\s*bug/i.test(room?.name || '')
                      || (room?.is_pinned && !!room?.accent_color);
   const accentColor   = room?.accent_color || null;
@@ -952,7 +969,7 @@ export default function ChatRoomView() {
   };
 
   const joinRoom = async () => {
-    if (!user) { navigate('/login'); return; }
+    if (!user) { navigate(`/login?next=${encodeURIComponent(`/chat/${roomId}`)}`); return; }
     setJoining(true);
     try {
       // Talking to an artist is a Fan Pro thing.
@@ -976,15 +993,12 @@ export default function ChatRoomView() {
       if (room?.is_subscribers_only) {
         const artistId = room?.artists?.id;
         if (artistId) {
-          const { data: artistTracks } = await supabase.from('tracks').select('id').eq('artist_id', artistId);
-          const trackIds = (artistTracks || []).map(t => t.id);
-          let totalSpent = 0;
-          if (trackIds.length) {
-            const { data: spendData } = await supabase.from('downloads')
-              .select('amount_paid').eq('user_id', user.id).in('track_id', trackIds);
-            totalSpent = (spendData || []).reduce((sum, d) => sum + (d.amount_paid || 0), 0);
-          }
-          if (totalSpent < 5) { setSpendGate(true); setJoining(false); return; }
+          // Music bought from this artist plus donations to them, counted in
+          // the database (chat_room_supporter_spend) so tips the fan cannot
+          // read back directly still count.
+          const { data: spent } = await supabase.rpc('chat_room_supporter_spend', { p_room: roomId });
+          const totalSpent = Number(spent || 0);
+          if (totalSpent < SUPPORTER_MIN_USD) { setSpendGate(true); setJoining(false); return; }
         }
       }
       const { data: existing } = await supabase.from('chat_room_members').select('id')
@@ -1146,7 +1160,7 @@ export default function ChatRoomView() {
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
       <Lock className="w-12 h-12 text-white/10 mb-4" />
       <p className="text-white/40 text-sm mb-4">Sign in to join chat rooms</p>
-      <button onClick={() => navigate('/login')} className="px-6 py-2.5 bg-white text-black rounded-lg text-sm font-medium">Sign In</button>
+      <button onClick={() => navigate(`/login?next=${encodeURIComponent(`/chat/${roomId}`)}`)} className="px-6 py-2.5 bg-white text-black rounded-lg text-sm font-medium">Sign In</button>
     </div>
   );
 
@@ -1228,9 +1242,18 @@ export default function ChatRoomView() {
             </div>
           </button>
         </div>
-        <button onClick={() => setShowMembers(!showMembers)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
-          <Users className="w-4 h-4 text-white/50" />
-        </button>
+        <div className="flex items-center gap-2">
+          {!isBugRoom && (
+            <button onClick={shareRoom} aria-label="Share this chat room"
+              className="h-9 px-3 flex items-center gap-1.5 rounded-full bg-white/[0.06] text-white/60 hover:text-white transition">
+              <Share2 className="w-4 h-4" />
+              <span className="text-xs font-semibold">{shareNote || 'Share'}</span>
+            </button>
+          )}
+          <button onClick={() => setShowMembers(!showMembers)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]">
+            <Users className="w-4 h-4 text-white/50" />
+          </button>
+        </div>
       </div>
 
       {showMembers && (
@@ -1551,7 +1574,7 @@ export default function ChatRoomView() {
                 <Lock className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
                 <p className="text-sm font-semibold text-white mb-1">Supporter Access Required</p>
                 <p className="text-xs text-white/40 mb-3">
-                  Purchase at least <span className="text-white font-semibold">$5</span> of music from <span className="text-white">{room?.artists?.artist_name}</span> to join.
+                  Buy or donate at least <span className="text-white font-semibold">${SUPPORTER_MIN_USD}</span> to <span className="text-white">{room?.artists?.artist_name}</span> to join.
                 </p>
                 <button
                   onClick={() => room?.artists?.slug && navigate(`/artist/${room.artists.slug}`)}

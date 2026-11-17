@@ -626,6 +626,7 @@ export default function AppRouter() {
                     own, so it needed the route moved, nothing else. */}
                 <Route path="/setup" element={<ProfileSetup />} />
                 <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/settings" element={<ProfilePage />} />
                 <Route path="/profile/edit" element={<UserProfilePage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/hub" element={<HubPage />} />

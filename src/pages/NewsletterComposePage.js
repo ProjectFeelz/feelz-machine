@@ -462,274 +462,283 @@ export default function NewsletterComposePage() {
           <PlatformStoryComposer onToast={showToast} />
         </div>
 
-        {drafts.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-bold text-white/50 uppercase tracking-wide">
-              Drafts ready for you ({drafts.length})
-              {drafts.some(d => d.scheduled_at) && <span className="normal-case font-semibold text-sky-300/80"> · {drafts.filter(d => d.scheduled_at).length} scheduled</span>}
-            </p>
-            {drafts.map(d => (
-              <div key={d.id}
-                className={`px-3 py-2.5 rounded-lg text-sm space-y-1 border ${activeDraft?.id === d.id ? 'bg-purple-500/10 border-purple-500/40' : 'bg-white/[0.03] border-transparent'}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <button onClick={() => openDraft(d)} className="flex items-center min-w-0 text-left text-white/80 hover:text-white">
-                    <FileText className="w-3.5 h-3.5 mr-1.5 flex-shrink-0 text-purple-300" />
-                    <span className="truncate">{d.title || 'Untitled'}</span>
-                  </button>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {d.audience && (
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${AUDIENCE[d.audience]?.badge || 'bg-white/10 text-white/50'}`}>
-                        {AUDIENCE[d.audience]?.label || d.audience}
-                      </span>
-                    )}
-                    {deleteArmed === d.id ? (
-                      <button onClick={() => deleteDraft(d.id)} className="text-[11px] text-red-400 font-semibold">Delete?</button>
-                    ) : (
-                      <button onClick={() => setDeleteArmed(d.id)} className="text-white/20 hover:text-red-400" title="Delete draft">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {d.scheduled_at && (
-                  <p className="text-[11px] font-semibold text-sky-300 flex items-center">
-                    <Clock className="w-3 h-3 mr-1" />Goes out {fmtWhen(d.scheduled_at)}
+        {/* On a computer: writing on the left, drafts, sent and editors on the
+            right, so nothing has to be scrolled past to reach the composer. On a
+            phone it is one column, as before. */}
+        <div className="space-y-6 lg:space-y-0 lg:grid lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-10 lg:items-start">
+          <div className="space-y-6 min-w-0">
+            {activeDraft && (
+              <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-purple-500/10 text-xs">
+                <span className="text-purple-200">Editing a draft. Use the picture button in the editor to add an image.</span>
+                <button onClick={clearComposer} className="text-white/50 hover:text-white ml-2 flex-shrink-0">Close</button>
+              </div>
+            )}
+
+            {activeDraft?.scheduled_at && (
+              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-sky-500/10 text-xs">
+                <span className="text-sky-200 flex items-center min-w-0">
+                  <Clock className="w-3.5 h-3.5 mr-1.5 flex-shrink-0" />
+                  <span>Goes out {fmtWhen(activeDraft.scheduled_at)}. Changes you save before then go out with it.</span>
+                </span>
+                <span className="flex items-center gap-3 flex-shrink-0">
+                  <button onClick={() => { setScheduleAt(toLocalInput(new Date(activeDraft.scheduled_at))); setScheduleOpen(true); }}
+                    className="text-sky-200 font-semibold hover:text-white">Change</button>
+                  <button onClick={() => scheduleDraft(null)} disabled={scheduling}
+                    className="text-white/50 hover:text-red-300 disabled:opacity-40">Cancel</button>
+                </span>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Who's this going to?</p>
+              <div className="grid grid-cols-3 gap-2">
+                <button onClick={() => setAudience('main_app')}
+                  className={`flex flex-col items-center justify-center space-y-1 py-3.5 rounded-xl border-2 transition ${audience === 'main_app' ? 'bg-purple-500 border-purple-500 text-white' : 'bg-white/[0.03] border-white/10 text-white/50'}`}>
+                  <Users className="w-4 h-4" /><span className="text-xs font-bold">Main App</span>
+                </button>
+                <button onClick={() => setAudience('listeners')}
+                  className={`flex flex-col items-center justify-center space-y-1 py-3.5 rounded-xl border-2 transition ${audience === 'listeners' ? 'bg-purple-500 border-purple-500 text-white' : 'bg-white/[0.03] border-white/10 text-white/50'}`}>
+                  <Headphones className="w-4 h-4" /><span className="text-xs font-bold">Listeners</span>
+                </button>
+                <button onClick={() => setAudience('retail')}
+                  className={`flex flex-col items-center justify-center space-y-1 py-3.5 rounded-xl border-2 transition ${audience === 'retail' ? 'bg-purple-500 border-purple-500 text-white' : 'bg-white/[0.03] border-white/10 text-white/50'}`}>
+                  <Store className="w-4 h-4" /><span className="text-xs font-bold">Retail</span>
+                </button>
+              </div>
+              {audience && (
+                <p className="text-[11px] text-white/30">
+                  {AUDIENCE[audience]?.blurb}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <input className={inputCls} placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} />
+              <textarea className={inputCls} placeholder="Short excerpt, this is what shows in the notification itself"
+                rows={2} value={excerpt} onChange={e => setExcerpt(e.target.value)} />
+
+              <div>
+                <p className="text-xs text-white/40 mb-1.5">Full content, this becomes the linked page</p>
+                <WysiwygEditor key={editorResetKey} value={body} onChange={setBody} placeholder="Write the update here..." minHeight="220px" />
+              </div>
+
+              <input className={inputCls} placeholder="YouTube video link (optional)" value={youtubeUrl}
+                onChange={e => setYoutubeUrl(e.target.value)} />
+            </div>
+
+            <div className="grid grid-cols-2 sm:flex gap-2">
+              <button onClick={() => saveDraft()} disabled={savingDraft || !(title.trim() || body.trim())}
+                className="px-4 py-3 rounded-xl bg-white/[0.06] text-white/80 font-semibold hover:bg-white/[0.1] transition disabled:opacity-30 flex items-center justify-center space-x-2">
+                {savingDraft ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                <span>{activeDraft ? 'Save' : 'Save draft'}</span>
+              </button>
+              <button onClick={() => { setScheduleAt(activeDraft?.scheduled_at ? toLocalInput(new Date(activeDraft.scheduled_at)) : defaultWhen()); setScheduleOpen(true); }}
+                disabled={!canSend}
+                className="px-4 py-3 rounded-xl bg-sky-500/15 text-sky-200 font-semibold hover:bg-sky-500/25 transition disabled:opacity-30 flex items-center justify-center space-x-2">
+                <Clock className="w-4 h-4" /><span>{activeDraft?.scheduled_at ? 'Reschedule' : 'Schedule'}</span>
+              </button>
+              <button onClick={() => setConfirmOpen(true)} disabled={!canSend}
+                className="col-span-2 sm:flex-1 py-3 rounded-xl bg-purple-500 text-white font-bold hover:bg-purple-400 transition disabled:opacity-30 flex items-center justify-center space-x-2">
+                <Send className="w-4 h-4" /><span>Send now</span>
+              </button>
+            </div>
+
+            {scheduleOpen && (
+              <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center px-6" onClick={() => setScheduleOpen(false)}>
+                <div className="bg-black border border-white/10 rounded-2xl p-5 max-w-sm w-full space-y-3" onClick={e => e.stopPropagation()}>
+                  <p className="text-sm font-bold text-white">Schedule for {AUDIENCE[audience]?.confirm || audience}</p>
+                  <input type="datetime-local" value={scheduleAt} min={toLocalInput(new Date(Date.now() + 5 * 60 * 1000))}
+                    onChange={e => setScheduleAt(e.target.value)}
+                    className={`${inputCls} [color-scheme:dark]`} />
+                  <p className="text-[11px] text-white/40 leading-relaxed">
+                    {scheduleAt ? `Goes out ${fmtWhen(new Date(scheduleAt).toISOString())}, within 5 minutes of that time. ` : ''}
+                    In-app only. You can edit it, change the time or cancel it until then.
                   </p>
-                )}
-                {d.note && <p className={`text-[11px] ${/^hold/i.test(d.note) ? 'text-amber-300' : 'text-white/40'}`}>{d.note}</p>}
-                {d.send_error && <p className="text-[11px] text-red-300">{d.send_error}</p>}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {activeDraft && (
-          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-purple-500/10 text-xs">
-            <span className="text-purple-200">Editing a draft. Use the picture button in the editor to add an image.</span>
-            <button onClick={clearComposer} className="text-white/50 hover:text-white ml-2 flex-shrink-0">Close</button>
-          </div>
-        )}
-
-        {activeDraft?.scheduled_at && (
-          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-sky-500/10 text-xs">
-            <span className="text-sky-200 flex items-center min-w-0">
-              <Clock className="w-3.5 h-3.5 mr-1.5 flex-shrink-0" />
-              <span>Goes out {fmtWhen(activeDraft.scheduled_at)}. Changes you save before then go out with it.</span>
-            </span>
-            <span className="flex items-center gap-3 flex-shrink-0">
-              <button onClick={() => { setScheduleAt(toLocalInput(new Date(activeDraft.scheduled_at))); setScheduleOpen(true); }}
-                className="text-sky-200 font-semibold hover:text-white">Change</button>
-              <button onClick={() => scheduleDraft(null)} disabled={scheduling}
-                className="text-white/50 hover:text-red-300 disabled:opacity-40">Cancel</button>
-            </span>
-          </div>
-        )}
-
-        <div className="space-y-3">
-          <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Who's this going to?</p>
-          <div className="grid grid-cols-3 gap-2">
-            <button onClick={() => setAudience('main_app')}
-              className={`flex flex-col items-center justify-center space-y-1 py-3.5 rounded-xl border-2 transition ${audience === 'main_app' ? 'bg-purple-500 border-purple-500 text-white' : 'bg-white/[0.03] border-white/10 text-white/50'}`}>
-              <Users className="w-4 h-4" /><span className="text-xs font-bold">Main App</span>
-            </button>
-            <button onClick={() => setAudience('listeners')}
-              className={`flex flex-col items-center justify-center space-y-1 py-3.5 rounded-xl border-2 transition ${audience === 'listeners' ? 'bg-purple-500 border-purple-500 text-white' : 'bg-white/[0.03] border-white/10 text-white/50'}`}>
-              <Headphones className="w-4 h-4" /><span className="text-xs font-bold">Listeners</span>
-            </button>
-            <button onClick={() => setAudience('retail')}
-              className={`flex flex-col items-center justify-center space-y-1 py-3.5 rounded-xl border-2 transition ${audience === 'retail' ? 'bg-purple-500 border-purple-500 text-white' : 'bg-white/[0.03] border-white/10 text-white/50'}`}>
-              <Store className="w-4 h-4" /><span className="text-xs font-bold">Retail</span>
-            </button>
-          </div>
-          {audience && (
-            <p className="text-[11px] text-white/30">
-              {AUDIENCE[audience]?.blurb}
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-3">
-          <input className={inputCls} placeholder="Title" value={title} onChange={e => setTitle(e.target.value)} />
-          <textarea className={inputCls} placeholder="Short excerpt, this is what shows in the notification itself"
-            rows={2} value={excerpt} onChange={e => setExcerpt(e.target.value)} />
-
-          <div>
-            <p className="text-xs text-white/40 mb-1.5">Full content, this becomes the linked page</p>
-            <WysiwygEditor key={editorResetKey} value={body} onChange={setBody} placeholder="Write the update here..." minHeight="220px" />
-          </div>
-
-          <input className={inputCls} placeholder="YouTube video link (optional)" value={youtubeUrl}
-            onChange={e => setYoutubeUrl(e.target.value)} />
-        </div>
-
-        <div className="grid grid-cols-2 sm:flex gap-2">
-          <button onClick={() => saveDraft()} disabled={savingDraft || !(title.trim() || body.trim())}
-            className="px-4 py-3 rounded-xl bg-white/[0.06] text-white/80 font-semibold hover:bg-white/[0.1] transition disabled:opacity-30 flex items-center justify-center space-x-2">
-            {savingDraft ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            <span>{activeDraft ? 'Save' : 'Save draft'}</span>
-          </button>
-          <button onClick={() => { setScheduleAt(activeDraft?.scheduled_at ? toLocalInput(new Date(activeDraft.scheduled_at)) : defaultWhen()); setScheduleOpen(true); }}
-            disabled={!canSend}
-            className="px-4 py-3 rounded-xl bg-sky-500/15 text-sky-200 font-semibold hover:bg-sky-500/25 transition disabled:opacity-30 flex items-center justify-center space-x-2">
-            <Clock className="w-4 h-4" /><span>{activeDraft?.scheduled_at ? 'Reschedule' : 'Schedule'}</span>
-          </button>
-          <button onClick={() => setConfirmOpen(true)} disabled={!canSend}
-            className="col-span-2 sm:flex-1 py-3 rounded-xl bg-purple-500 text-white font-bold hover:bg-purple-400 transition disabled:opacity-30 flex items-center justify-center space-x-2">
-            <Send className="w-4 h-4" /><span>Send now</span>
-          </button>
-        </div>
-
-        {scheduleOpen && (
-          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center px-6" onClick={() => setScheduleOpen(false)}>
-            <div className="bg-black border border-white/10 rounded-2xl p-5 max-w-sm w-full space-y-3" onClick={e => e.stopPropagation()}>
-              <p className="text-sm font-bold text-white">Schedule for {AUDIENCE[audience]?.confirm || audience}</p>
-              <input type="datetime-local" value={scheduleAt} min={toLocalInput(new Date(Date.now() + 5 * 60 * 1000))}
-                onChange={e => setScheduleAt(e.target.value)}
-                className={`${inputCls} [color-scheme:dark]`} />
-              <p className="text-[11px] text-white/40 leading-relaxed">
-                {scheduleAt ? `Goes out ${fmtWhen(new Date(scheduleAt).toISOString())}, within 5 minutes of that time. ` : ''}
-                In-app only. You can edit it, change the time or cancel it until then.
-              </p>
-              <div className="flex space-x-2">
-                <button onClick={() => setScheduleOpen(false)} className="flex-1 py-2.5 rounded-lg bg-white/[0.06] text-white/60 text-sm font-semibold">Back</button>
-                <button onClick={() => scheduleDraft(scheduleAt)} disabled={!scheduleAt || scheduling}
-                  className="flex-1 py-2.5 rounded-lg bg-sky-500 text-white text-sm font-bold disabled:opacity-40">
-                  {scheduling ? 'Scheduling...' : 'Schedule'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {confirmOpen && (
-          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center px-6" onClick={() => setConfirmOpen(false)}>
-            <div className="bg-black border border-white/10 rounded-2xl p-5 max-w-sm w-full" onClick={e => e.stopPropagation()}>
-              <p className="text-sm font-bold text-white mb-2">
-                Send to {AUDIENCE[audience]?.confirm || audience}?
-              </p>
-              <p className="text-xs text-white/40 mb-4">This can't be recalled once sent.</p>
-              <div className="flex space-x-2">
-                <button onClick={() => setConfirmOpen(false)} className="flex-1 py-2.5 rounded-lg bg-white/[0.06] text-white/60 text-sm font-semibold">Cancel</button>
-                <button onClick={send} disabled={sending} className="flex-1 py-2.5 rounded-lg bg-purple-500 text-white text-sm font-bold disabled:opacity-40">
-                  {sending ? 'Sending…' : 'Confirm send'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-2 pt-4 border-t border-white/[0.06]">
-          <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Sent</p>
-          {posts.length === 0 ? (
-            <p className="text-xs text-white/30 py-2">Nothing sent yet.</p>
-          ) : posts.map(p => {
-            const st  = emailing[p.id];
-            const log = sendLog[p.id];
-            const busy = st && (st.phase === 'checking' || st.phase === 'sending');
-            return (
-              <div key={p.id} className="px-3 py-2 rounded-lg bg-white/[0.03] text-sm space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-white/70 truncate">{p.title}</span>
-                  <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
-                    {log && log.sent > 0 && (
-                      <span className="text-[10px] text-emerald-300/80 flex items-center">
-                        <Check className="w-3 h-3 mr-0.5" />{log.sent} emailed
-                      </span>
-                    )}
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${AUDIENCE[p.audience]?.badge || 'bg-white/10 text-white/50'}`}>
-                      {AUDIENCE[p.audience]?.label || p.audience}
-                    </span>
+                  <div className="flex space-x-2">
+                    <button onClick={() => setScheduleOpen(false)} className="flex-1 py-2.5 rounded-lg bg-white/[0.06] text-white/60 text-sm font-semibold">Back</button>
+                    <button onClick={() => scheduleDraft(scheduleAt)} disabled={!scheduleAt || scheduling}
+                      className="flex-1 py-2.5 rounded-lg bg-sky-500 text-white text-sm font-bold disabled:opacity-40">
+                      {scheduling ? 'Scheduling...' : 'Schedule'}
+                    </button>
                   </div>
                 </div>
+              </div>
+            )}
 
-                {/* Emailing needs admins or newsletter_senders.
-                    newsletter_editors can publish in-app but not mail a list,
-                    a bigger action than posting. */}
-                {EMAIL_NEWSLETTERS && canEmail && (
-                  <div className="flex items-center flex-wrap gap-2">
-                    {(!st || st.phase === 'error' || st.phase === 'done') && (
-                      <button
-                        onClick={() => emailPost(p, true)}
-                        className="text-[11px] px-2 py-1 rounded-md bg-white/[0.06] text-white/70 hover:bg-white/[0.1] flex items-center transition"
-                      >
-                        <Mail className="w-3 h-3 mr-1" />
-                        {log && log.sent > 0 ? 'Email again' : 'Email this'}
+            {confirmOpen && (
+              <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center px-6" onClick={() => setConfirmOpen(false)}>
+                <div className="bg-black border border-white/10 rounded-2xl p-5 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+                  <p className="text-sm font-bold text-white mb-2">
+                    Send to {AUDIENCE[audience]?.confirm || audience}?
+                  </p>
+                  <p className="text-xs text-white/40 mb-4">This can't be recalled once sent.</p>
+                  <div className="flex space-x-2">
+                    <button onClick={() => setConfirmOpen(false)} className="flex-1 py-2.5 rounded-lg bg-white/[0.06] text-white/60 text-sm font-semibold">Cancel</button>
+                    <button onClick={send} disabled={sending} className="flex-1 py-2.5 rounded-lg bg-purple-500 text-white text-sm font-bold disabled:opacity-40">
+                      {sending ? 'Sending…' : 'Confirm send'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <aside className="space-y-6 min-w-0">
+            {drafts.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-white/50 uppercase tracking-wide">
+                  Drafts ready for you ({drafts.length})
+                  {drafts.some(d => d.scheduled_at) && <span className="normal-case font-semibold text-sky-300/80"> · {drafts.filter(d => d.scheduled_at).length} scheduled</span>}
+                </p>
+                {drafts.map(d => (
+                  <div key={d.id}
+                    className={`px-3 py-2.5 rounded-lg text-sm space-y-1 border ${activeDraft?.id === d.id ? 'bg-purple-500/10 border-purple-500/40' : 'bg-white/[0.03] border-transparent'}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <button onClick={() => openDraft(d)} className="flex items-center min-w-0 text-left text-white/80 hover:text-white">
+                        <FileText className="w-3.5 h-3.5 mr-1.5 flex-shrink-0 text-purple-300" />
+                        <span className="truncate">{d.title || 'Untitled'}</span>
                       </button>
-                    )}
-
-                    {busy && (
-                      <span className="text-[11px] text-white/50 flex items-center">
-                        <Loader className="w-3 h-3 mr-1 animate-spin" />
-                        {st.phase === 'checking' ? 'Checking recipients…' : `Sending… ${st.sent} so far`}
-                      </span>
-                    )}
-
-                    {st && st.phase === 'confirm' && (
-                      st.would === 0 ? (
-                        <span className="text-[11px] text-white/50">
-                          Nobody left to email{st.already > 0 ? `, all ${st.already} already received it` : ''}.
-                        </span>
-                      ) : (
-                        <>
-                          <span className="text-[11px] text-amber-300">
-                            Send to {st.would} {st.would === 1 ? 'person' : 'people'}?
-                            {st.already > 0 ? ` (${st.already} already have it)` : ''}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {d.audience && (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${AUDIENCE[d.audience]?.badge || 'bg-white/10 text-white/50'}`}>
+                            {AUDIENCE[d.audience]?.label || d.audience}
                           </span>
-                          <button
-                            onClick={() => emailPost(p, false)}
-                            className="text-[11px] px-2 py-1 rounded-md bg-purple-500 text-white hover:bg-purple-400 flex items-center transition"
-                          >
-                            <Send className="w-3 h-3 mr-1" />Send now
+                        )}
+                        {deleteArmed === d.id ? (
+                          <button onClick={() => deleteDraft(d.id)} className="text-[11px] text-red-400 font-semibold">Delete?</button>
+                        ) : (
+                          <button onClick={() => setDeleteArmed(d.id)} className="text-white/20 hover:text-red-400" title="Delete draft">
+                            <X className="w-3.5 h-3.5" />
                           </button>
+                        )}
+                      </div>
+                    </div>
+                    {d.scheduled_at && (
+                      <p className="text-[11px] font-semibold text-sky-300 flex items-center">
+                        <Clock className="w-3 h-3 mr-1" />Goes out {fmtWhen(d.scheduled_at)}
+                      </p>
+                    )}
+                    {d.note && <p className={`text-[11px] ${/^hold/i.test(d.note) ? 'text-amber-300' : 'text-white/40'}`}>{d.note}</p>}
+                    {d.send_error && <p className="text-[11px] text-red-300">{d.send_error}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="space-y-2 pt-4 border-t border-white/[0.06]">
+              <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Sent</p>
+              {posts.length === 0 ? (
+                <p className="text-xs text-white/30 py-2">Nothing sent yet.</p>
+              ) : posts.map(p => {
+                const st  = emailing[p.id];
+                const log = sendLog[p.id];
+                const busy = st && (st.phase === 'checking' || st.phase === 'sending');
+                return (
+                  <div key={p.id} className="px-3 py-2 rounded-lg bg-white/[0.03] text-sm space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-white/70 truncate">{p.title}</span>
+                      <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
+                        {log && log.sent > 0 && (
+                          <span className="text-[10px] text-emerald-300/80 flex items-center">
+                            <Check className="w-3 h-3 mr-0.5" />{log.sent} emailed
+                          </span>
+                        )}
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${AUDIENCE[p.audience]?.badge || 'bg-white/10 text-white/50'}`}>
+                          {AUDIENCE[p.audience]?.label || p.audience}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Emailing needs admins or newsletter_senders.
+                        newsletter_editors can publish in-app but not mail a list,
+                        a bigger action than posting. */}
+                    {EMAIL_NEWSLETTERS && canEmail && (
+                      <div className="flex items-center flex-wrap gap-2">
+                        {(!st || st.phase === 'error' || st.phase === 'done') && (
                           <button
-                            onClick={() => setEmailing(prev => ({ ...prev, [p.id]: undefined }))}
-                            className="text-[11px] px-2 py-1 rounded-md text-white/40 hover:text-white/70 transition"
+                            onClick={() => emailPost(p, true)}
+                            className="text-[11px] px-2 py-1 rounded-md bg-white/[0.06] text-white/70 hover:bg-white/[0.1] flex items-center transition"
                           >
-                            Cancel
+                            <Mail className="w-3 h-3 mr-1" />
+                            {log && log.sent > 0 ? 'Email again' : 'Email this'}
                           </button>
-                        </>
-                      )
-                    )}
+                        )}
 
-                    {st && st.phase === 'done' && (
-                      <span className="text-[11px] text-emerald-300 flex items-center">
-                        <Check className="w-3 h-3 mr-1" />
-                        Sent {st.sent}{st.failed > 0 ? `, ${st.failed} failed` : ''}
-                      </span>
-                    )}
+                        {busy && (
+                          <span className="text-[11px] text-white/50 flex items-center">
+                            <Loader className="w-3 h-3 mr-1 animate-spin" />
+                            {st.phase === 'checking' ? 'Checking recipients…' : `Sending… ${st.sent} so far`}
+                          </span>
+                        )}
 
-                    {st && st.phase === 'error' && (
-                      <span className="text-[11px] text-red-300 flex items-start">
-                        <AlertTriangle className="w-3 h-3 mr-1 mt-0.5 flex-shrink-0" />
-                        <span className="break-words">{st.message}</span>
-                      </span>
+                        {st && st.phase === 'confirm' && (
+                          st.would === 0 ? (
+                            <span className="text-[11px] text-white/50">
+                              Nobody left to email{st.already > 0 ? `, all ${st.already} already received it` : ''}.
+                            </span>
+                          ) : (
+                            <>
+                              <span className="text-[11px] text-amber-300">
+                                Send to {st.would} {st.would === 1 ? 'person' : 'people'}?
+                                {st.already > 0 ? ` (${st.already} already have it)` : ''}
+                              </span>
+                              <button
+                                onClick={() => emailPost(p, false)}
+                                className="text-[11px] px-2 py-1 rounded-md bg-purple-500 text-white hover:bg-purple-400 flex items-center transition"
+                              >
+                                <Send className="w-3 h-3 mr-1" />Send now
+                              </button>
+                              <button
+                                onClick={() => setEmailing(prev => ({ ...prev, [p.id]: undefined }))}
+                                className="text-[11px] px-2 py-1 rounded-md text-white/40 hover:text-white/70 transition"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          )
+                        )}
+
+                        {st && st.phase === 'done' && (
+                          <span className="text-[11px] text-emerald-300 flex items-center">
+                            <Check className="w-3 h-3 mr-1" />
+                            Sent {st.sent}{st.failed > 0 ? `, ${st.failed} failed` : ''}
+                          </span>
+                        )}
+
+                        {st && st.phase === 'error' && (
+                          <span className="text-[11px] text-red-300 flex items-start">
+                            <AlertTriangle className="w-3 h-3 mr-1 mt-0.5 flex-shrink-0" />
+                            <span className="break-words">{st.message}</span>
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
 
-        {isAdmin && (
-          <div className="space-y-3 pt-4 border-t border-white/[0.06]">
-            <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Newsletter editors ({editors.length})</p>
-            <p className="text-[11px] text-white/30">Someone with editor access can compose and send from this exact panel, nothing else on the platform opens up to them. Admins already have full access and don't need to be added here, this list is only for granting access to people who aren't admins.</p>
-            <div className="flex space-x-2">
-              <input className={inputCls} placeholder="Editor's email" value={newEditorEmail} onChange={e => setNewEditorEmail(e.target.value)} />
-              <input className={inputCls} placeholder="Name (optional)" value={newEditorName} onChange={e => setNewEditorName(e.target.value)} />
-              <button onClick={addEditor} className="px-3.5 py-2.5 rounded-lg bg-purple-500 text-white flex-shrink-0"><Plus className="w-4 h-4" /></button>
-            </div>
-            <div className="space-y-1.5">
-              {editors.map(ed => (
-                <div key={ed.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.03]">
-                  <span className="text-sm text-white">{ed.editor_name || ed.user_id}</span>
-                  <button onClick={() => removeEditor(ed.id)} className="text-white/20 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
+            {isAdmin && (
+              <div className="space-y-3 pt-4 border-t border-white/[0.06]">
+                <p className="text-xs font-bold text-white/50 uppercase tracking-wide">Newsletter editors ({editors.length})</p>
+                <p className="text-[11px] text-white/30">Someone with editor access can compose and send from this exact panel, nothing else on the platform opens up to them. Admins already have full access and don't need to be added here, this list is only for granting access to people who aren't admins.</p>
+                <div className="flex space-x-2">
+                  <input className={inputCls} placeholder="Editor's email" value={newEditorEmail} onChange={e => setNewEditorEmail(e.target.value)} />
+                  <input className={inputCls} placeholder="Name (optional)" value={newEditorName} onChange={e => setNewEditorName(e.target.value)} />
+                  <button onClick={addEditor} className="px-3.5 py-2.5 rounded-lg bg-purple-500 text-white flex-shrink-0"><Plus className="w-4 h-4" /></button>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+                <div className="space-y-1.5">
+                  {editors.map(ed => (
+                    <div key={ed.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.03]">
+                      <span className="text-sm text-white">{ed.editor_name || ed.user_id}</span>
+                      <button onClick={() => removeEditor(ed.id)} className="text-white/20 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </aside>
+        </div>
       </div>
     </div>
   );

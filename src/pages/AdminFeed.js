@@ -78,7 +78,27 @@ const FIELDS = [
   'threshold_abandon', 'threshold_partial', 'threshold_full',
   'weight_abandon', 'weight_weak', 'weight_partial', 'weight_full',
   'recency_half_life', 'affinity_min_weight',
+  'rank_genre', 'rank_mood', 'rank_artist', 'rank_bpm', 'rank_serendipity',
+  'boost_following', 'boost_new_release', 'boost_hidden_gem', 'boost_trending',
 ];
+
+// What For You favours when it orders a listener's picks (get_ranked_feed).
+// The first group says how much a match with someone's taste is worth; the
+// second adds a straight bonus to tracks that come in for a particular reason.
+const FAVOURS = [
+  { key: 'rank_genre',  label: 'Their genres',  hint: 'Tracks in the genres they play most and are playing now', min: 0, max: 200, step: 5 },
+  { key: 'rank_artist', label: 'Their artists', hint: 'More from artists they keep coming back to', min: 0, max: 200, step: 5 },
+  { key: 'rank_mood',   label: 'Their mood',    hint: 'Tracks that match the mood of what they are playing', min: 0, max: 200, step: 5 },
+  { key: 'rank_bpm',    label: 'Their tempo',   hint: 'Tracks close to the speed they usually play', min: 0, max: 200, step: 5 },
+];
+const BOOSTS = [
+  { key: 'boost_following',   label: 'Artists they follow', hint: 'New and older tracks from artists they follow' },
+  { key: 'boost_new_release', label: 'New releases',        hint: 'Tracks released in the last few weeks' },
+  { key: 'boost_trending',    label: 'Trending',            hint: 'Tracks many people are playing right now' },
+  { key: 'boost_hidden_gem',  label: 'Unheard artists',     hint: 'Good tracks from artists with few plays so far' },
+];
+
+const FAVOUR_DEFAULTS = { rank_genre: 80, rank_mood: 50, rank_artist: 60, rank_bpm: 40, rank_serendipity: 25, boost_following: 0, boost_new_release: 0, boost_hidden_gem: 0, boost_trending: 0 };
 
 const WINDOWS = [7, 14, 30, 90];
 
@@ -134,7 +154,7 @@ export default function AdminFeed() {
     if (e) { setError('Could not read the weight sets: ' + e.message); setLoading(false); return; }
     setSets(data || []);
     const live = (data || []).find(r => r.is_active);
-    if (live) setDraft(Object.fromEntries(FIELDS.map(f => [f, Number(live[f])])));
+    if (live) setDraft(Object.fromEntries(FIELDS.map(f => [f, Number(live[f] ?? FAVOUR_DEFAULTS[f] ?? 0)])));
     setLoading(false);
   }, []);
 
@@ -646,6 +666,56 @@ export default function AdminFeed() {
                 was={Number(active.affinity_min_weight)}
                 onChange={v => setDraft(d => ({ ...d, affinity_min_weight: v }))}
                 format={v => `${v}`}
+              />
+            </div>
+          </div>
+
+          {/* ── What For You favours ────────────────────────────────────── */}
+          <div className={`${card} mb-5`}>
+            <p className={`${heading} mb-1`}>What For You favours</p>
+            <p className="text-xs text-white/30 mb-5">
+              How For You puts a listener's picks in order. The first four say how much a match with
+              their taste counts. The bonuses lift tracks that came in for that reason. Zero means no
+              extra lift. These save with the dials above, as one set.
+            </p>
+
+            <div className="space-y-4">
+              {FAVOURS.map(f => (
+                <Dial key={f.key}
+                  label={f.label}
+                  hint={f.hint}
+                  min={f.min} max={f.max} step={f.step}
+                  value={draft[f.key]}
+                  was={Number(active[f.key] ?? FAVOUR_DEFAULTS[f.key])}
+                  onChange={v => setDraft(d => ({ ...d, [f.key]: v }))}
+                  format={v => `${v}`}
+                />
+              ))}
+
+              <div className="h-px bg-white/[0.06]" />
+
+              {BOOSTS.map(b => (
+                <Dial key={b.key}
+                  label={`Bonus for ${b.label.toLowerCase()}`}
+                  hint={b.hint}
+                  min={0} max={150} step={5}
+                  value={draft[b.key]}
+                  was={Number(active[b.key] ?? 0)}
+                  onChange={v => setDraft(d => ({ ...d, [b.key]: v }))}
+                  format={v => (v === 0 ? 'none' : `+${v}`)}
+                />
+              ))}
+
+              <div className="h-px bg-white/[0.06]" />
+
+              <Dial
+                label="Surprise"
+                hint="How much chance shuffles the order, so the feed does not feel the same every time."
+                min={0} max={100} step={5}
+                value={draft.rank_serendipity}
+                was={Number(active.rank_serendipity ?? 25)}
+                onChange={v => setDraft(d => ({ ...d, rank_serendipity: v }))}
+                format={v => (v === 0 ? 'off' : `${v}`)}
               />
             </div>
           </div>

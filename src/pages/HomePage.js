@@ -258,6 +258,32 @@ export default function HomePage() {
   const navigate = useNavigate();
 
   const [newReleases, setNewReleases]               = useState([]);
+  // Sessions entries get their own row. They are left out of New Singles and
+  // the other rows (is_competition_entry), so this is where they are seen.
+  const [sessionsEntries, setSessionsEntries]       = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.from('school_sessions_entries')
+      .select('id, entrant_full_name, created_at, is_rejected, track:tracks(*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
+      .order('created_at', { ascending: false })
+      .limit(30)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) { console.warn('[home] sessions entries:', error.message); return; }
+        const list = (data || [])
+          .filter(e => !e.is_rejected && e.track && e.track.is_published)
+          .map(e => ({
+            ...e.track,
+            artist_name: e.track.artists?.artist_name || e.entrant_full_name || 'Sessions entrant',
+            artist_slug: e.track.artists?.slug || null,
+            _isAlbum: false,
+            _date: e.created_at,
+          }));
+        setSessionsEntries(list);
+      });
+    return () => { cancelled = true; };
+  }, []);
   const [newAlbums, setNewAlbums]                   = useState([]);
   const [trending, setTrending]                     = useState([]);
   const [topArtists, setTopArtists]                 = useState([]);
@@ -977,6 +1003,21 @@ export default function HomePage() {
       )}
 
 
+      {/* Sessions entries, newest first */}
+      {sessionsEntries.length > 0 && (
+        <Section title="Sessions entries" icon={Trophy} gradient="amber" onSeeAll={() => navigate('/sessions')}>
+          <div className="flex space-x-3 overflow-x-auto px-6 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {sessionsEntries.map(item => (
+              <SquareCard
+                key={`session-${item.id}`}
+                item={item} itemList={sessionsEntries}
+                isAlbum={false} onPlay={handlePlay} onMore={handleMore}
+                currentTrack={currentTrack} isPlaying={isPlaying} />
+            ))}
+          </div>
+        </Section>
+      )}
+
       {/* New Releases, tracks only, with NEW badge + date */}
       {newReleases.length > 0 && (
         <Section title="New Singles" gradient="purple" onSeeAll={() => navigate('/browse?tab=new')}>
@@ -1250,4 +1291,4 @@ export default function HomePage() {
       `}</style>
     </div>
   );
-}
+}

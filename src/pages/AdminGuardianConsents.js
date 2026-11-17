@@ -25,7 +25,52 @@ const TABS = [
   { key: 'pending',  label: 'To check' },
   { key: 'verified', label: 'Confirmed' },
   { key: 'rejected', label: 'Turned down' },
+  { key: 'sessions', label: 'Sessions entrants' },
 ];
+
+// Under-18s who entered Sessions, and the parent or guardian approval they gave
+// on the entry form. These are a separate record from artist sales consents.
+function SessionsRow({ c }) {
+  const copy = (v) => { try { navigator.clipboard.writeText(v); } catch {} };
+  return (
+    <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-white truncate">{c.entrant_full_name}</p>
+          <p className="text-[11px] text-white/35 mt-0.5 truncate">
+            {c.artist_name || 'No artist name'}{c.track_title ? ` · ${c.track_title}` : ''}
+          </p>
+        </div>
+        <span className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 ${
+          c.consented ? 'bg-green-500/15 text-green-300' : 'bg-red-500/15 text-red-300'}`}>
+          {c.consented ? 'Guardian approved' : 'No approval'}
+        </span>
+      </div>
+      {c.guardian_name ? (
+        <>
+          <p className="text-[11px] text-white/50">
+            <span className="text-white/30">Guardian</span> {c.guardian_name}{c.relationship ? ` (${c.relationship})` : ''}
+          </p>
+          {c.guardian_contact && (
+            <button onClick={() => copy(c.guardian_contact)}
+              className="flex items-center space-x-1.5 text-[11px] text-white/50 hover:text-white/80 transition">
+              <Phone className="w-3 h-3 text-white/25" />
+              <span>{c.guardian_contact}</span>
+              <Copy className="w-2.5 h-2.5 text-white/20" />
+            </button>
+          )}
+          <p className="text-[10px] text-white/25">
+            {c.consented_at ? `Approved on ${new Date(c.consented_at).toLocaleDateString()}` : `Entered ${new Date(c.entered_at).toLocaleDateString()}`}
+            {c.prize_consented_at ? ` · Prize terms signed "${c.prize_signed_name}"` : ''}
+          </p>
+        </>
+      ) : (
+        <p className="text-[11px] text-red-300/80">No guardian details on this entry.</p>
+      )}
+      {c.is_rejected && <p className="text-[10px] text-white/30">This entry was removed from Sessions.</p>}
+    </div>
+  );
+}
 
 function Row({ c, onVerify, busy }) {
   const [note, setNote] = React.useState(c.admin_note || '');
@@ -130,7 +175,9 @@ export default function AdminGuardianConsents() {
 
   const load = React.useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.rpc('admin_guardian_consents', { p_status: tab });
+    const { data, error } = tab === 'sessions'
+      ? await supabase.rpc('admin_sessions_guardian_consents')
+      : await supabase.rpc('admin_guardian_consents', { p_status: tab });
     if (error) {
       console.error('[AdminGuardianConsents] read failed:', error.code, error.message);
       setToast(error.message);
@@ -174,10 +221,11 @@ export default function AdminGuardianConsents() {
       <p className="px-5 text-[11px] text-white/30 leading-relaxed max-w-3xl mx-auto w-full mb-4">
         An artist under 18 cannot sell until a parent or guardian has consented and someone here
         has confirmed it. Contact the guardian on the details below, then mark it. Nothing else
-        about their account is affected either way.
+        about their account is affected either way. Under-18s who entered Sessions, and the
+        guardian who approved each entry, are under Sessions entrants.
       </p>
 
-      <div className="flex space-x-2 px-5 mb-4 max-w-5xl mx-auto w-full">
+      <div className="flex flex-wrap gap-2 px-5 mb-4 max-w-5xl mx-auto w-full">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition ${
@@ -199,7 +247,9 @@ export default function AdminGuardianConsents() {
             <p className="text-sm text-white/30">Nothing here.</p>
           </div>
         ) : (
-          rows.map(c => <Row key={c.id} c={c} onVerify={verify} busy={busy} />)
+          tab === 'sessions'
+            ? rows.map(c => <SessionsRow key={c.entry_id} c={c} />)
+            : rows.map(c => <Row key={c.id} c={c} onVerify={verify} busy={busy} />)
         )}
       </div>
     </div>

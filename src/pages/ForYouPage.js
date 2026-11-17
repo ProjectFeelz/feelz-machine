@@ -1556,11 +1556,16 @@ export default function ForYouPage() {
 
   // Persistent hidden IDs ref, survives across loadTracks calls and page re-renders
   const hiddenIdsRef = React.useRef(new Set());
+  // Every track already dealt into this feed, so a later page never deals it
+  // again, and the songs skipped in the last day, which stay out of the feed.
+  const seenIdsRef = React.useRef(new Set());
+  const skippedIdsRef = React.useRef(new Set());
 
   const loadTracks = useCallback(async (offset = 0) => {
     if (offset === 0) setLoading(true); else setLoadingMore(true);
     try {
       let fetched = [];
+      if (offset === 0) seenIdsRef.current = new Set();
       let hiddenIds = [...hiddenIdsRef.current]; // start with locally known hidden IDs
 
       if (user) {
@@ -1572,7 +1577,20 @@ export default function ForYouPage() {
           .eq('signal', 'not_interested');
         const dbHiddenIds = (hiddenData || []).map(h => h.track_id).filter(Boolean);
         dbHiddenIds.forEach(id => hiddenIdsRef.current.add(id));
-        hiddenIds = [...hiddenIdsRef.current];
+
+        // Skipped in the last 24 hours: kept out of the feed for a day.
+        if (offset === 0) {
+          const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+          const { data: skipData } = await supabase
+            .from('listener_feedback')
+            .select('track_id')
+            .eq('user_id', user.id)
+            .eq('signal', 'skip')
+            .gte('updated_at', since)
+            .limit(200);
+          (skipData || []).forEach(r => r.track_id && skippedIdsRef.current.add(r.track_id));
+        }
+        hiddenIds = [...new Set([...hiddenIdsRef.current, ...skippedIdsRef.current])];
 
         // ── Session re-rank ──────────────────────────────────────────────
         // get_ranked_feed reorders the stored candidate pool using what the
@@ -1750,7 +1768,10 @@ export default function ForYouPage() {
         const existingIds = fetched.map(t => t.id);
         // Combine with hidden IDs, and the leading picks, so the fallback
         // query cannot hand back a track that is already on the page.
-        const allExcludeIds = [...new Set([...existingIds, ...leadPicks.map(t => t.id), ...hiddenIds])];
+        // Plus what this feed has already dealt (the most recent 150, to keep
+        // the request a sensible length), so a later page cannot repeat it.
+        const alreadyDealt = [...seenIdsRef.current].slice(-150);
+        const allExcludeIds = [...new Set([...existingIds, ...leadPicks.map(t => t.id), ...hiddenIds, ...alreadyDealt])];
         // Mix: half by engagement, half by recency so new releases get exposure
         const halfPage = Math.ceil((pageRoom - fetched.length) / 2);
         const existingIdsStr = allExcludeIds.length > 0 ? `(${allExcludeIds.join(',')})` : null;
@@ -1842,6 +1863,19 @@ export default function ForYouPage() {
           }
         } catch {}
       }
+
+      // Never deal a track twice in one feed, and never a hidden or recently
+      // skipped one, whichever source it came from.
+      const keep = (t) => t && (t._type === 'story' || (t.id
+        && !seenIdsRef.current.has(t.id)
+        && !hiddenIdsRef.current.has(t.id)
+        && !skippedIdsRef.current.has(t.id)));
+      fetched = fetched.filter(keep);
+      leadPicks = leadPicks.filter(keep);
+      const dealtNow = new Set();
+      fetched = fetched.filter(t => t._type === 'story' || (dealtNow.has(t.id) ? false : (dealtNow.add(t.id), true)));
+      leadPicks.forEach(t => seenIdsRef.current.add(t.id));
+      fetched.forEach(t => { if (t._type !== 'story') seenIdsRef.current.add(t.id); });
 
       // Shuffle so feed feels fresh on every open
       if (offset === 0) {
@@ -2068,8 +2102,11 @@ export default function ForYouPage() {
       const duration = currentItem.duration || 180;
       const pct = Math.min(100, Math.round((elapsed / duration) * 100));
       // Log as implicit signal: < 10% = skip, > 70% = deep listen
-      if (pct < 10 && elapsed < 15) {
-        // Quick skip, negative signal, record in listener_feedback
+      if (pct < 10 && elapsed < 15 && !hiddenIdsRef.current.has(currentItem.id)) {
+        // Quick skip, negative signal, record in listener_feedback. Never for
+        // a hidden song: this upsert shares its row with "not interested", and
+        // writing "skip" over it is what brought hidden songs back.
+        skippedIdsRef.current.add(currentItem.id);
         reportFeedbackWrite('skip', supabase.from('listener_feedback').upsert({
           user_id:    user.id,
           track_id:   currentItem.id,
@@ -2078,7 +2115,7 @@ export default function ForYouPage() {
           listen_pct: pct,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id,track_id' }));
-      } else if (pct >= 70) {
+      } else if (pct >= 70 && !hiddenIdsRef.current.has(currentItem.id)) {
         // Deep listen, positive signal
         reportFeedbackWrite('deep listen', supabase.from('listener_feedback').upsert({
           user_id:    user.id,
@@ -2544,4 +2581,4 @@ export default function ForYouPage() {
     </div>
     </>
   );
-}
+}

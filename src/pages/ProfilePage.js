@@ -5,11 +5,13 @@ import { supabase } from '../supabaseClient';
 import { slugForNameChange } from '../utils/artistSlug';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  LogOut, ChevronRight, User, Music, Globe, Shield,
+  LogOut, ChevronRight, User, Music, Shield,
   Loader,
   Save, Palette, ExternalLink, DollarSign, Camera, Check,
-  Link, Zap, Crown, Star, Trash2, AlertTriangle, Plus, Mic, Sparkles, Info, Send
+  Link, Zap, Crown, Star, Trash2, AlertTriangle, Plus, Mic, Sparkles, Info, Send,
+  Bell, Mail, EyeOff, Download, BarChart2, FileText
 } from 'lucide-react';
+import NotificationPreferences from '../components/NotificationPreferences';
 import VerifiedBadge from '../components/VerifiedBadge';
 import ThemeEditor from '../components/ThemeEditor';
 import PaymentSettings from '../components/PaymentSettings';
@@ -18,6 +20,7 @@ import { TierBadge } from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
 import ProfileCompletionBanner from '../components/ProfileCompletionBanner';
 import BirthYearField from '../components/BirthYearField';
+
 import { useStreakContext } from '../contexts/StreakContext';
 
 // Extracted from both this file and its twin — the block was byte-identical in
@@ -95,6 +98,7 @@ export default function ProfilePage() {
   const [saving, setSaving]                   = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [msg, setMsg]                         = useState('');
+  const [showNotifPrefs, setShowNotifPrefs]   = useState(false);
   const [profileImgFile, setProfileImgFile]   = useState(null);
   const [previewUrl, setPreviewUrl]           = useState(null);
   const [form, setForm] = useState({
@@ -344,13 +348,13 @@ export default function ProfilePage() {
       <Helmet>
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/logo192.png" />
-        <title>Profile · Feelz Machine</title>
-        <meta name="description" content="Manage your Feelz Machine artist profile, theme, social links and payments." />
+        <title>Settings · Feelz Machine</title>
+        <meta name="description" content="Your Feelz Machine settings: profile, payments, notifications, look and privacy, all in one place." />
         <link rel="canonical" href="https://www.feelzmachine.com/profile" />
       </Helmet>
 
       <div className="sticky top-0 z-20 bg-black/95 backdrop-blur-xl md:relative md:top-auto md:bg-transparent md:backdrop-blur-none pt-14 md:pt-4 pb-3 -mx-4 px-4 border-b border-white/[0.04] md:border-none mb-5">
-        <h1 className="text-2xl font-bold text-white">Profile</h1>
+        <h1 className="text-2xl font-bold text-white">Settings</h1>
       </div>
 
       <ProfileCompletionBanner compact />
@@ -784,29 +788,67 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* ── Listener: App Theme + Fan Pro explainer ── */}
+      {/* ── One settings page ──
+          Everything a person can change lives here, in the same five groups
+          for artists and listeners: Account, Payments, Notifications,
+          Appearance, Privacy. Artists keep their tabs above for the artist
+          page itself. */}
+
+      <SettingsGroup title="Account">
+        {!isArtist && <NavRow icon={User} label="Edit profile" onClick={() => nav('/profile/edit')} />}
+        {isArtist && <NavRow icon={User} label="Edit artist profile" onClick={() => { setActiveTab('edit'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />}
+        {/* Birth year: optional, nothing depends on it. Everyone sees it,
+            artists included, since an artist is also a listener. */}
+        <div className="px-4 border-t border-white/[0.04]"><BirthYearField compact /></div>
+        {isArtist && <NavRow icon={Music} label="Artist dashboard" iconColor="text-purple-400" onClick={() => nav('/dashboard')} border />}
+        {!isArtist && <NavRow icon={BarChart2} label="Your listening" onClick={() => nav('/listener/stats')} border />}
+        {isAdmin && <NavRow icon={Shield} label="Admin" iconColor="text-yellow-400" onClick={() => nav('/admin')} border />}
+      </SettingsGroup>
+
+      <SettingsGroup title="Payments">
+        {isArtist
+          ? <NavRow icon={DollarSign} label="Payouts and subscription" onClick={() => { setActiveTab('payments'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+          : <NavRow icon={Crown} label="Fan Pro" iconColor="text-amber-400" onClick={() => nav('/upgrade')} />}
+        <NavRow icon={Download} label="Your downloads" onClick={() => nav('/library/downloads')} border />
+        <NavRow icon={Link} label="Affiliate programme" iconColor="text-green-400" onClick={() => nav('/affiliates')} border badge="Earn" />
+      </SettingsGroup>
+
+      <SettingsGroup title="Notifications">
+        <button onClick={() => setShowNotifPrefs(v => !v)}
+          className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition">
+          <span className="flex items-center space-x-3">
+            <Bell className="w-5 h-5 text-white/30" />
+            <span className="text-sm text-white">Phone and in-app notifications</span>
+          </span>
+          <ChevronRight className={`w-4 h-4 text-white/20 transition-transform ${showNotifPrefs ? 'rotate-90' : ''}`} />
+        </button>
+        {showNotifPrefs && (
+          <div className="px-4 pb-4 border-t border-white/[0.04] pt-3">
+            <NotificationPreferences user={user} onToast={(m) => { setMsg(m); setTimeout(() => setMsg(''), 3000); }} />
+          </div>
+        )}
+        <NavRow icon={Mail} label="Emails we send you" onClick={() => nav('/contact-preferences')} border />
+      </SettingsGroup>
+
+      {/* Appearance: artists have the Theme tab above for their page; this
+          is the look of the app itself, for listeners. */}
       {!isArtist && (
-        <ListenerThemeAndFanProSection isListenerPro={isListenerPro} nav={nav} />
+        <SettingsGroup title="Appearance" bare>
+          <ListenerThemeAndFanProSection isListenerPro={isListenerPro} nav={nav} />
+        </SettingsGroup>
+      )}
+      {isArtist && (
+        <SettingsGroup title="Appearance">
+          <NavRow icon={Palette} label="Your artist page theme" onClick={() => { setActiveTab('theme'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+        </SettingsGroup>
       )}
 
-      {/* Birth year. Settings rather than a prompt in the feed: it is optional,
-          nothing depends on it, and interrupting someone's listening for a
-          demographic question is how you get people typing 1901.
-          Everyone sees it, artists included — an artist is also a listener and
-          shows up in another artist's audience. */}
-      <div className="rounded-2xl border border-white/[0.06] px-4 mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
-        <BirthYearField compact />
-      </div>
-
-      {/* ── Nav links ── */}
-      <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
-        {isArtist && <NavRow icon={Music} label="Artist Dashboard" iconColor="text-purple-400" onClick={() => nav('/dashboard')} />}
-        {isAdmin  && <NavRow icon={Shield} label="Admin Panel" iconColor="text-yellow-400" onClick={() => nav('/admin')} border />}
-        <NavRow icon={Link} label="Affiliate Programme" iconColor="text-green-400" onClick={() => nav('/affiliates')} border badge="Earn" />
-        <NavRow icon={Globe} label="Privacy Policy" onClick={() => nav('/privacy-policy')} border />
-        <NavRow icon={Globe} label="Terms of Use"   onClick={() => nav('/terms-of-use')}   border />
-        <NavRow icon={Globe} label="Acceptable Use Policy" onClick={() => nav('/legal/acceptable-use')} border />
-      </div>
+      <SettingsGroup title="Privacy">
+        <NavRow icon={EyeOff} label="Hidden tracks and artists" onClick={() => nav('/hidden')} />
+        <NavRow icon={FileText} label="Privacy policy" onClick={() => nav('/privacy-policy')} border />
+        <NavRow icon={FileText} label="Terms of use" onClick={() => nav('/terms-of-use')} border />
+        <NavRow icon={FileText} label="Acceptable use policy" onClick={() => nav('/legal/acceptable-use')} border />
+      </SettingsGroup>
 
       {/* ── Role switcher ── */}
       {(rawIsAdmin || rawIsMaster) && (
@@ -879,6 +921,19 @@ export default function ProfilePage() {
                 : <><Trash2 className="w-4 h-4" /><span>Delete Forever</span></>}
             </button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SettingsGroup({ title, children, bare = false }) {
+  return (
+    <div className="mb-4">
+      <p className="text-[10px] uppercase tracking-wider text-white/25 font-semibold mb-2 px-1">{title}</p>
+      {bare ? children : (
+        <div className="rounded-2xl border border-white/[0.06] overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
+          {children}
         </div>
       )}
     </div>

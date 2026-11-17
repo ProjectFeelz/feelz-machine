@@ -167,6 +167,7 @@ export default function LibraryPage() {
     let q = supabase.from('tracks')
       .select('id, title, slug, file_url, cover_artwork_url, artist_id, artists(artist_name)')
       .eq('is_published', true)
+      .eq('is_competition_entry', false)
       .not('cover_artwork_url', 'is', null)
       .order('created_at', { ascending: false })
       .limit(60);
@@ -192,6 +193,7 @@ export default function LibraryPage() {
       let q = supabase.from('tracks')
         .select('id, title, slug, file_url, cover_artwork_url, created_at, artist_id, artists(artist_name)')
         .eq('is_published', true)
+        .eq('is_competition_entry', false)
         .not('cover_artwork_url', 'is', null)
         .order('created_at', { ascending: false })
         .limit(60);

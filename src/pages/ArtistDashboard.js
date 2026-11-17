@@ -271,8 +271,8 @@ function GrowthSnapshot({ artist }) {
     <div className="bg-white/[0.02] rounded-xl p-4 border border-white/[0.05]">
       <p className="text-[10px] uppercase tracking-wider text-white/20 font-semibold mb-3">This week vs last week</p>
       <div className="flex divide-x divide-white/[0.04]">
-        <Metric label="Streams"   curr={data.streams.this} prev={data.streams.last} />
-        <Metric label="New Fans"  curr={data.follows.this} prev={data.follows.last} />
+        <Metric label="Plays"     curr={data.streams.this} prev={data.streams.last} />
+        <Metric label="New followers" curr={data.follows.this} prev={data.follows.last} />
         <Metric label="Likes"     curr={data.likes.this}   prev={data.likes.last}   />
       </div>
     </div>
@@ -462,7 +462,7 @@ function EarningsSection({ artist, sectionRef, downloadsRef, highlight }) {
                         {p.tracks?.title || 'Track sale'} · {new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </p>
                       {p.status === 'no_paypal_email' && (
-                        <p className="text-[11px] text-red-300/60 mt-1">Add your PayPal email in Profile → Edit to receive this payout</p>
+                        <p className="text-[11px] text-red-300/60 mt-1">Add your PayPal email in Settings, under Edit artist profile, to receive this payout</p>
                       )}
                     </div>
                     <span className="text-sm font-bold text-red-400 ml-3 flex-shrink-0">
@@ -837,13 +837,13 @@ export default function ArtistDashboard() {
   };
 
   const statCards = [
-    { icon: Headphones,   label: 'Total Streams',  value: stats.streams,    color: 'text-purple-400',  section: 'streams'   },
+    { icon: Headphones,   label: 'Plays',          value: stats.streams,    color: 'text-purple-400',  section: 'streams'   },
     { icon: Users,        label: 'Followers',      value: stats.followers,  color: 'text-pink-400',    section: 'followers' },
     { icon: Heart,        label: 'Likes',          value: stats.likes,      color: 'text-red-400',     section: null        },
     { icon: Download,     label: 'Downloads',      value: stats.downloads,  color: 'text-blue-400',    section: 'downloads' },
     { icon: MessageCircle,label: 'Comments',       value: stats.comments,   color: 'text-indigo-400',  section: null        },
     { icon: Music,        label: 'Tracks',         value: stats.tracks,     color: 'text-green-400',   section: 'tracks'    },
-    { icon: Zap,          label: 'Presaves',       value: stats.presaves,   color: 'text-yellow-400',  section: null        },
+    { icon: Zap,          label: 'Pre-saves',      value: stats.presaves,   color: 'text-yellow-400',  section: null        },
     { icon: Users,        label: 'Collabs',        value: stats.collabs,    color: 'text-cyan-400',    section: 'collabs'   },
     ...(isBeatmaker ? [{ icon: DollarSign, label: 'Beat Sales', value: stats.beatSales, color: 'text-green-400', section: 'earnings' }] : []),
     { icon: DollarSign,   label: 'Tips Received',  value: `$${(stats.totalTipsUSD||0).toFixed(2)}`, color: 'text-green-400', isText: true, section: 'earnings' },
@@ -1084,10 +1084,10 @@ export default function ArtistDashboard() {
                               {/* Top stats row */}
                               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                                 {[
-                                  { label: 'Streams', value: demographics.totalStreams, color: 'text-white' },
-                                  { label: 'Unique Listeners', value: demographics.uniqueListeners, color: 'text-purple-400' },
-                                  { label: 'Played To End', value: demographics.completionRate !== null ? `${demographics.completionRate}%` : '--', color: 'text-green-400' },
-                                  { label: 'Avg Listen', value: demographics.avgDuration ? `${Math.floor(demographics.avgDuration/60)}:${String(demographics.avgDuration%60).padStart(2,'0')}` : '--', color: 'text-blue-400' },
+                                  { label: 'Plays', value: demographics.totalStreams, color: 'text-white' },
+                                  { label: 'People who listened', value: demographics.uniqueListeners, color: 'text-purple-400' },
+                                  { label: 'Heard to the end', value: demographics.completionRate !== null ? `${demographics.completionRate}%` : '--', color: 'text-green-400' },
+                                  { label: 'Average listen', value: demographics.avgDuration ? `${Math.floor(demographics.avgDuration/60)}:${String(demographics.avgDuration%60).padStart(2,'0')}` : '--', color: 'text-blue-400' },
                                 ].map(s => (
                                   <div key={s.label} className="bg-white/[0.03] rounded-xl p-3 border border-white/[0.05] text-center">
                                     <p className={`text-lg font-black ${s.color}`}>{s.value}</p>
@@ -1155,7 +1155,7 @@ export default function ArtistDashboard() {
                             trackId={selectedTrack}
                             exportType="streams"
                             days={trackRange}
-                            label="Export streams CSV"
+                            label="Export plays CSV"
                           />
                         </div>
                       )
