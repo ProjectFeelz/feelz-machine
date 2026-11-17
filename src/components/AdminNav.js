@@ -40,7 +40,8 @@
 // code is organised. Money first because it is what gets opened under
 // pressure.
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -127,6 +128,22 @@ export default function AdminNav() {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const [openGroup, setOpenGroup] = useState(null);
+  // Where the open menu's button is on screen. The bar scrolls sideways, and a
+  // scrolling box clips anything that hangs out of it, which is what cut the
+  // menus off. So the open menu is drawn on document.body at the button's
+  // position instead of inside the bar.
+  const [anchor, setAnchor] = useState(null);
+
+  useEffect(() => {
+    if (!openGroup) return undefined;
+    const close = () => setOpenGroup(null);
+    window.addEventListener('resize', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [openGroup]);
 
   // The print view is deliberately chrome-free: it exists to come out of a
   // printer, and a nav bar across the top of a VIP card is not wanted.
@@ -182,7 +199,12 @@ export default function AdminNav() {
             return (
               <div key={group.name} className="relative flex-shrink-0">
                 <button
-                  onClick={() => setOpenGroup(isOpen ? null : group.name)}
+                  onClick={(e) => {
+                    if (isOpen) { setOpenGroup(null); return; }
+                    const r = e.currentTarget.getBoundingClientRect();
+                    setAnchor({ left: r.left, top: r.bottom + 4 });
+                    setOpenGroup(group.name);
+                  }}
                   className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition
                     ${isCurrent
                       ? 'bg-white/[0.1] text-white'
@@ -192,12 +214,13 @@ export default function AdminNav() {
                   <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                 </button>
 
-                {isOpen && (
+                {isOpen && anchor && createPortal(
                   <>
                     {/* Catches the next click anywhere so the menu closes the
                         way every other menu does. */}
-                    <div className="fixed inset-0 z-40" onClick={() => setOpenGroup(null)} />
-                    <div className="absolute left-0 top-full mt-1 z-50 min-w-[190px] rounded-xl border border-white/[0.1] bg-[#0b0b0f] shadow-2xl overflow-hidden">
+                    <div className="fixed inset-0 z-[690]" onClick={() => setOpenGroup(null)} />
+                    <div className="fixed z-[700] min-w-[190px] rounded-xl border border-white/[0.1] bg-[#0b0b0f] shadow-2xl overflow-hidden"
+                      style={{ left: Math.max(8, Math.min(anchor.left, window.innerWidth - 206)), top: anchor.top }}>
                       {group.items.map(([label, to]) => (
                         <button
                           key={to}
@@ -210,7 +233,8 @@ export default function AdminNav() {
                         </button>
                       ))}
                     </div>
-                  </>
+                  </>,
+                  document.body
                 )}
               </div>
             );

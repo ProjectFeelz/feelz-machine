@@ -45,7 +45,16 @@ export const MENU_TINTS = {
 // screen tall instead of a long scroll. The menus keep only one group open at
 // a time by passing `open` and `onToggle`; a group that is not collapsible is
 // always open (Create, and whatever is happening right now).
-export default function CreateMenuSection({ heading, tint, items, collapsible = false, open = true, onToggle }) {
+// Icons are lucide components drawn in the group's hue, so every row, tile and
+// folded group reads as one family. A folded group shows ONE icon (its own
+// `icon`), not a stack of its contents.
+function Glyph({ icon: Icon, tint, size = 'w-5 h-5' }) {
+  if (!Icon) return null;
+  const [r, g, b] = tint;
+  return <Icon className={size} style={{ color: `rgb(${r},${g},${b})` }} strokeWidth={2} />;
+}
+
+export default function CreateMenuSection({ heading, icon: groupIcon, tint, items, collapsible = false, open = true, onToggle }) {
   const rows = (items || []).filter(Boolean);
   // An empty group would render a heading over nothing. That happens on its
   // own here (newsletter is editors only, Sessions is gated, merch is
@@ -64,9 +73,9 @@ export default function CreateMenuSection({ heading, tint, items, collapsible = 
         borderColor: `rgba(${r},${g},${b},0.18)`,
         background: `linear-gradient(100deg, rgba(${r},${g},${b},0.13) 0%, rgba(${r},${g},${b},0.04) 42%, rgba(255,255,255,0.02) 100%)`,
       }}>
-      <span className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl text-xl"
+      <span className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl"
             style={{ background: `rgba(${r},${g},${b},0.16)` }}>
-        {icon}
+        <Glyph icon={icon} tint={tint} />
       </span>
       {/* min-w-0 so a long subtitle wraps inside the row instead of
           pushing the button wider than the sheet. */}
@@ -96,9 +105,9 @@ export default function CreateMenuSection({ heading, tint, items, collapsible = 
                   borderColor: `rgba(${r},${g},${b},0.2)`,
                   background: `linear-gradient(135deg, rgba(${r},${g},${b},0.15) 0%, rgba(${r},${g},${b},0.04) 70%)`,
                 }}>
-                <span className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl text-lg"
+                <span className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl"
                       style={{ background: `rgba(${r},${g},${b},0.18)` }}>
-                  {icon}
+                  <Glyph icon={icon} tint={tint} />
                 </span>
                 <span className="text-[13px] font-semibold text-white leading-tight min-w-0">{label}</span>
               </button>
@@ -114,11 +123,9 @@ export default function CreateMenuSection({ heading, tint, items, collapsible = 
          style={{ borderColor: `rgba(${r},${g},${b},${open ? 0.3 : 0.16})`, background: `rgba(${r},${g},${b},${open ? 0.05 : 0.025})` }}>
       <button type="button" onClick={onToggle} aria-expanded={open}
         className="w-full flex items-center gap-3 p-3 text-left active:scale-[0.99] transition">
-        <span className="flex -space-x-1.5 flex-shrink-0">
-          {rows.slice(0, 3).map(({ id, icon }) => (
-            <span key={id} className="w-8 h-8 flex items-center justify-center rounded-lg text-base border border-black/40"
-                  style={{ background: `rgba(${r},${g},${b},0.18)` }}>{icon}</span>
-          ))}
+        <span className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl"
+              style={{ background: `rgba(${r},${g},${b},0.18)` }}>
+          <Glyph icon={groupIcon || rows[0].icon} tint={tint} />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold text-white">{heading}</span>

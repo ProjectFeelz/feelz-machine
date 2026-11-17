@@ -266,6 +266,34 @@ function slugify(text) {
   return `${base}-${Date.now().toString(36)}`;
 }
 
+// THE ARTIST'S NAME IS NOT PART OF THE SONG TITLE.
+//
+// Files arrive named the way a laptop saves them, "Angony on fleek_Don't divide"
+// or "N_XIETY_-_Ride_4_U", and that name lands on the cover card with the
+// artist's name printed again underneath it. This takes the artist's own name
+// off the front or the end of the title when it is joined by a separator
+// (_ - : | ~) or wrapped in brackets at the end, and turns underscores into
+// spaces. A title that is only the name, or that starts with the name as part
+// of a phrase with no separator, is left alone.
+function escapeRegExp(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+export function cleanTrackTitle(title, artistName) {
+  if (!title) return title;
+  let t = String(title);
+  const name = String(artistName || '').trim();
+  if (name) {
+    const flexible = name.split(/[\s_]+/).filter(Boolean).map(escapeRegExp).join('[\\s_]+');
+    const sep = '[\\s_]*[-–—_:|~]+[\\s_]*';
+    const lead = new RegExp(`^\\s*${flexible}${sep}`, 'i');
+    const tail = new RegExp(`${sep}(?:by[\\s_]+)?${flexible}\\s*$`, 'i');
+    const tailBracket = new RegExp(`[\\s_]*[(\\[](?:by[\\s_]+)?${flexible}[)\\]]\\s*$`, 'i');
+    const next = t.replace(lead, '').replace(tail, '').replace(tailBracket, '');
+    if (next.replace(/[\s_\-–—:|~]/g, '').length > 0) t = next;
+  }
+  t = t.replace(/_+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  t = t.replace(/^[-–—:|~\s]+|[-–—:|~\s]+$/g, '').trim();
+  return t || String(title).trim();
+}
+
 function normaliseTitleCase(str) {
   if (!str) return str;
   const letters = str.replace(/[^a-zA-Z]/g, '');
@@ -946,6 +974,12 @@ function AddTrackToAlbum({
   };
 
   const submitTrack = async () => {
+    // Also here, not only on blur: a title typed and submitted without leaving
+    // the field has never been through the blur handler.
+    {
+      const cleaned = cleanTrackTitle(trackForm.title, artist?.artist_name);
+      if (cleaned !== trackForm.title) { trackForm.title = cleaned; setTrackForm(f => ({ ...f, title: cleaned })); }
+    }
     if (!trackForm.audio_file) { showMessage('error', 'Audio file is required'); return; }
     if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
     if (!trackForm.cover_file && !album?.cover_artwork_url) { showMessage('error', 'Add artwork, or give the album a cover first'); return; }
@@ -1116,7 +1150,7 @@ function AddTrackToAlbum({
           <FieldLabel>Track Title *</FieldLabel>
           <FInput type="text" required value={trackForm.title}
             onChange={(e) => setTrackForm({ ...trackForm, title: e.target.value })}
-            onBlur={(e) => setTrackForm(prev => ({ ...prev, title: normaliseTitleCase(e.target.value) }))} />
+            onBlur={(e) => setTrackForm(prev => ({ ...prev, title: normaliseTitleCase(cleanTrackTitle(e.target.value, artist?.artist_name)) }))} />
         </div>
         <div>
           <FieldLabel>Track Number</FieldLabel>
@@ -1734,6 +1768,12 @@ export default function TrackUploadPanel() {
     // everybody stops then shows up as the gap between two numbers, with
     // nobody having to guess which rule is the annoying one.
     step('upload_opened');
+    // Also here, not only on blur: a title typed and submitted without leaving
+    // the field has never been through the blur handler.
+    {
+      const cleaned = cleanTrackTitle(trackForm.title, artist?.artist_name);
+      if (cleaned !== trackForm.title) { trackForm.title = cleaned; setTrackForm(f => ({ ...f, title: cleaned })); }
+    }
     if (!trackForm.audio_file) { showMessage('error', 'Audio file is required'); return; }
     step('upload_file_chosen');
     if (!trackForm.title.trim()) { showMessage('error', 'Track title is required'); return; }
@@ -2878,7 +2918,7 @@ export default function TrackUploadPanel() {
                   <FieldLabel>Track Title *</FieldLabel>
                   <FInput type="text" required value={trackForm.title}
                     onChange={(e) => setTrackForm({ ...trackForm, title: e.target.value })}
-                    onBlur={(e) => setTrackForm(prev => ({ ...prev, title: normaliseTitleCase(e.target.value) }))} />
+                    onBlur={(e) => setTrackForm(prev => ({ ...prev, title: normaliseTitleCase(cleanTrackTitle(e.target.value, artist?.artist_name)) }))} />
                 </div>
                 {!isAlbumRelease && !isBeat && (
                   <div>
@@ -3693,7 +3733,7 @@ export default function TrackUploadPanel() {
                               <FieldLabel>Title</FieldLabel>
                               <FInput type="text" value={editForm.title}
                                 onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                                onBlur={(e) => setEditForm(prev => ({ ...prev, title: normaliseTitleCase(e.target.value) }))} />
+                                onBlur={(e) => setEditForm(prev => ({ ...prev, title: normaliseTitleCase(cleanTrackTitle(e.target.value, artist?.artist_name)) }))} />
                             </div>
                             <div>
                               <FieldLabel>Album</FieldLabel>

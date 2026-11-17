@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { X } from 'lucide-react';
+import {
+  X, Trophy, ListMusic, MessagesSquare, BarChart3, Link, Pencil, Settings, Sparkles, Inbox, GraduationCap, User,
+} from 'lucide-react';
 import { useTier } from '../contexts/useTier';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 import { tap } from '../utils/track';
@@ -38,58 +40,64 @@ export default function ListenerCreateMenu({ onClose }) {
   // listening and earning, profile and account, and help last.
   const groups = [
     ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
-      ? [{ heading: 'Happening now', tint: MENU_TINTS.now, items: [{
-          id: 'sessions', icon: '\u{1F3C6}', label: 'Sessions',
+      ? [{ heading: 'Happening now', icon: Trophy, tint: MENU_TINTS.now, items: [{
+          id: 'sessions', icon: Trophy, label: 'Sessions',
           sub: 'The cover competition. Listen, vote, or enter it yourself',
           onClick: go('/sessions', 'sessions'),
         }] }]
       : []),
     {
       heading: 'Create',
+      icon: ListMusic,
       tint: MENU_TINTS.create,
       items: [
-        { id: 'playlist', icon: '🎵', label: 'Create Playlist', sub: 'Start a new playlist', onClick: go('/library/playlists?create=1', 'playlist') },
+        { id: 'playlist', icon: ListMusic, label: 'Create Playlist', sub: 'Start a new playlist', onClick: go('/library/playlists?create=1', 'playlist') },
       ],
     },
     {
       heading: 'Your people',
+      icon: MessagesSquare,
       tint: MENU_TINTS.fans,
       items: [
-        { id: 'chats', icon: '💬', label: 'Chats', sub: 'Your rooms and artist chats', onClick: go('/community', 'chats') },
+        { id: 'chats', icon: MessagesSquare, label: 'Chat Rooms', sub: 'Your rooms and artist chats', onClick: go('/community', 'chats') },
       ],
     },
     {
       heading: 'You and Feelz Machine',
+      icon: BarChart3,
       tint: MENU_TINTS.money,
       items: [
-        { id: 'stats', icon: '\u{1F4CA}', label: 'Your listening', sub: 'Your top songs, artists and hours', onClick: go('/listener/stats', 'stats') },
+        { id: 'stats', icon: BarChart3, label: 'Your listening', sub: 'Your top songs, artists and hours', onClick: go('/listener/stats', 'stats') },
         // The Earn tab gave its place in the bottom bar to Games, so this is the way in now.
-        { id: 'affiliate', icon: '\u{1F517}', label: 'Affiliate Programme', sub: 'Share Feelz Machine and earn', onClick: go('/affiliates', 'affiliate') },
+        { id: 'affiliate', icon: Link, label: 'Affiliate Programme', sub: 'Share Feelz Machine and earn', onClick: go('/affiliates', 'affiliate') },
       ],
     },
     {
       heading: 'Your profile',
+      icon: User,
       tint: MENU_TINTS.profile,
       items: [
-        { id: 'edit', icon: '✏️', label: 'Edit Profile', sub: 'Update your photo and details', onClick: go('/profile/edit', 'edit') },
+        { id: 'edit', icon: Pencil, label: 'Edit Profile', sub: 'Update your photo and details', onClick: go('/profile/edit', 'edit') },
       ],
     },
     {
       heading: 'Account',
+      icon: Settings,
       tint: MENU_TINTS.account,
       items: [
-        { id: 'settings', icon: '⚙️', label: 'Settings', sub: 'Theme, account and notifications', onClick: go('/profile', 'settings') },
+        { id: 'settings', icon: Settings, label: 'Settings', sub: 'Theme, account and notifications', onClick: go('/profile', 'settings') },
         isPro
-          ? { id: 'fanpro', icon: '✨', label: 'Fan Pro Themes', sub: 'Change your app theme', onClick: go('/profile', 'fanpro') }
-          : { id: 'fanpro', icon: '✨', label: 'Get Fan Pro', sub: 'Unlock themes and a supporter badge', onClick: go('/listener/upgrade', 'fanpro') },
-        { id: 'contactprefs', icon: '\u2709\uFE0F', label: 'Email preferences', sub: 'Choose what reaches your inbox', onClick: go('/contact-preferences', 'contactprefs') },
+          ? { id: 'fanpro', icon: Sparkles, label: 'Fan Pro Themes', sub: 'Change your app theme', onClick: go('/profile', 'fanpro') }
+          : { id: 'fanpro', icon: Sparkles, label: 'Get Fan Pro', sub: 'Unlock themes and a supporter badge', onClick: go('/listener/upgrade', 'fanpro') },
+        { id: 'contactprefs', icon: Inbox, label: 'Email preferences', sub: 'Choose what reaches your inbox', onClick: go('/contact-preferences', 'contactprefs') },
       ],
     },
     {
       heading: 'Help',
+      icon: GraduationCap,
       tint: MENU_TINTS.more,
       items: [
-        { id: 'course', icon: '🎓', label: 'How to Use Feelz Machine', sub: 'A short course on how it all works', onClick: go('/learn', 'course') },
+        { id: 'course', icon: GraduationCap, label: 'How to Use Feelz Machine', sub: 'A short course on how it all works', onClick: go('/learn', 'course') },
       ],
     },
   ];
@@ -110,8 +118,8 @@ export default function ListenerCreateMenu({ onClose }) {
         </div>
 
         <div className="p-4 space-y-3">
-          {groups.map(({ heading, tint, items }) => (
-            <CreateMenuSection key={heading} heading={heading} tint={tint} items={items}
+          {groups.map(({ heading, icon, tint, items }) => (
+            <CreateMenuSection key={heading} heading={heading} icon={icon} tint={tint} items={items}
               collapsible={!ALWAYS_OPEN.includes(heading)}
               open={openGroup === heading}
               onToggle={() => setOpenGroup(g => (g === heading ? null : heading))} />

@@ -16,6 +16,11 @@ import MerchParked from './MerchParked';
 import { MERCH_PARKED } from '../config/features';
 import { tap } from '../utils/track';
 import CreateMenuSection, { MENU_TINTS } from './CreateMenuSection';
+import {
+  Trophy, Camera, Mic, TrendingUp, HeartHandshake, Store, Coins, Wallet,
+  Megaphone, MessagesSquare, Mail, Radar, Pencil, Star, ShoppingBag, User,
+  Home, Settings, Inbox, GraduationCap, Calendar,
+} from 'lucide-react';
 
 // Exact copy of the "+" create menu from ArtistProfilePage.js — same
 // dimensions (maxWidth 360, maxHeight 85vh), same styling, same tab flow.
@@ -347,77 +352,83 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                 // then the money, then fans, profile, account, and help last.
                 // Extra features sit in their own bands so the top stays short.
                 ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
-                  ? [{ heading: 'Happening now', tint: MENU_TINTS.now, items: [
-                      { id: 'sessions', icon: '🏆', label: 'Enter Sessions', sub: 'The cover competition, open to everyone' },
+                  ? [{ heading: 'Happening now', icon: Trophy, tint: MENU_TINTS.now, items: [
+                      { id: 'sessions', icon: Trophy, label: 'Enter Sessions', sub: 'The cover competition, open to everyone' },
                     ] }]
                   : []),
                 {
                   heading: 'Create',
+                  icon: Music,
                   tint: MENU_TINTS.create,
                   items: [
-                    { id: 'upload', icon: '🎵', label: 'Upload Track', sub: 'Add new music to your profile' },
-                    gated('live_streaming', { id: 'live', icon: '🔴', label: 'Go Live', sub: 'Start a live session' }),
-                    gated('stories', { id: 'story', icon: '📸', label: 'Add Story', sub: 'Share a 24hr clip with fans' }),
-                    gated('voice_memo', { id: 'memo', icon: '🎙️', label: 'Voice Memo', sub: 'Record a message for your fans' }),
+                    { id: 'upload', icon: Music, label: 'Upload Track', sub: 'Add new music to your profile' },
+                    gated('live_streaming', { id: 'live', icon: Radio, label: 'Go Live', sub: 'Start a live session' }),
+                    gated('stories', { id: 'story', icon: Camera, label: 'Add Story', sub: 'Share a 24hr clip with fans' }),
+                    gated('voice_memo', { id: 'memo', icon: Mic, label: 'Voice Memo', sub: 'Record a message for your fans' }),
                   ],
                 },
                 {
                   // Money owed to you and money you can make, together.
                   heading: 'Your money',
+                  icon: Wallet,
                   tint: MENU_TINTS.money,
                   items: [
-                    { id: 'earnings', icon: '📈', label: 'Earnings and stats', sub: 'What you have made and who is listening' },
-                    { id: 'splits', icon: '🤝', label: 'Splits', sub: 'Collab shares owed to you and by you' },
-                    { id: 'retail', icon: '🏬', label: 'Feelz Retail', sub: 'Put your music in venues and get paid for it' },
-                    { id: 'affiliates', icon: '💸', label: 'Affiliate Programme', sub: 'Earn by bringing people to the platform' },
+                    { id: 'earnings', icon: TrendingUp, label: 'Earnings and stats', sub: 'What you have made and who is listening' },
+                    { id: 'splits', icon: HeartHandshake, label: 'Splits', sub: 'Collab shares owed to you and by you' },
+                    { id: 'retail', icon: Store, label: 'Feelz Retail', sub: 'Put your music in venues and get paid for it' },
+                    { id: 'affiliates', icon: Coins, label: 'Affiliate Programme', sub: 'Earn by bringing people to the platform' },
                   ],
                 },
                 {
                   heading: 'Reach your fans',
+                  icon: Megaphone,
                   tint: MENU_TINTS.fans,
                   items: [
-                    gated('fan_broadcast', { id: 'dm', icon: '📣', label: 'Message Fans', sub: 'Send a notification to all followers' }),
-                    { id: 'chats', icon: '💬', label: 'Chats',        sub: 'Your rooms and artist chats' },
+                    gated('fan_broadcast', { id: 'dm', icon: Megaphone, label: 'Message Fans', sub: 'Send a notification to all followers' }),
+                    { id: 'chats', icon: MessagesSquare, label: 'Chat Rooms', sub: 'Your rooms and artist chats' },
                     ...(canNewsletter
-                      ? [{ id: 'newsletter', icon: '📨', label: 'Newsletter', sub: 'Write an update for the app or venues' }]
+                      ? [{ id: 'newsletter', icon: Mail, label: 'Newsletter', sub: 'Write an update for the app or venues' }]
                       : []),
-                    { id: 'radar', icon: '🛰️', label: 'Collab Radar', sub: 'Find artists to work with' },
+                    { id: 'radar', icon: Radar, label: 'Collab Radar', sub: 'Find artists to work with' },
                   ],
                 },
                 {
                   heading: 'Your profile',
+                  icon: User,
                   tint: MENU_TINTS.profile,
                   items: [
-                    { id: 'edit',    icon: '✏️', label: 'Edit Profile', sub: 'Update your bio, photo and links' },
-                    { id: 'toppick', icon: '⭐', label: 'Top Pick',     sub: 'Choose the track or album your profile leads with' },
+                    { id: 'edit',    icon: Pencil, label: 'Edit Profile', sub: 'Update your bio, photo and links' },
+                    { id: 'toppick', icon: Star, label: 'Top Pick',     sub: 'Choose the track or album your profile leads with' },
                     MERCH_PARKED
-                      ? { id: 'merch_parked', icon: '🛍️', label: 'Merch Store', sub: 'Paused, tap to see why' }
+                      ? { id: 'merch_parked', icon: ShoppingBag, label: 'Merch Store', sub: 'Paused, tap to see why' }
                       : isPremium
-                        ? { id: 'merch', icon: '🛍️', label: 'Merch Store', sub: 'Connect Printful · sell to your fans' }
-                        : { id: 'merch_locked', icon: '🛍️', label: 'Merch Store', sub: 'Premium only, upgrade to unlock' },
+                        ? { id: 'merch', icon: ShoppingBag, label: 'Merch Store', sub: 'Connect Printful · sell to your fans' }
+                        : { id: 'merch_locked', icon: ShoppingBag, label: 'Merch Store', sub: 'Premium only, upgrade to unlock' },
                   ],
                 },
                 {
                   heading: 'Account',
+                  icon: Settings,
                   tint: MENU_TINTS.account,
                   items: [
                     // The Hub moved here from the bottom bar on phones, where Games now sits.
-                    { id: 'hub', icon: '🏠', label: isBeatmaker ? 'Studio' : 'Hub', sub: 'All your tools in one place' },
-                    { id: 'settings', icon: '⚙️', label: 'Settings', sub: 'Payments, theme and account' },
+                    { id: 'hub', icon: Home, label: isBeatmaker ? 'Studio' : 'Hub', sub: 'All your tools in one place' },
+                    { id: 'settings', icon: Settings, label: 'Settings', sub: 'Payments, theme and account' },
                     // Somebody who wants fewer emails and cannot find the switch marks the
                     // next one as spam instead, which costs every artist deliverability.
-                    { id: 'contactprefs', icon: '✉️', label: 'Email preferences', sub: 'Choose what reaches your inbox' },
+                    { id: 'contactprefs', icon: Inbox, label: 'Email preferences', sub: 'Choose what reaches your inbox' },
                   ],
                 },
                 {
                   heading: 'Help',
+                  icon: GraduationCap,
                   tint: MENU_TINTS.more,
                   items: [
-                    { id: 'course', icon: '🎓', label: 'How to Use Feelz Machine', sub: 'Recording, uploading, splits, getting paid' },
+                    { id: 'course', icon: GraduationCap, label: 'How to Use Feelz Machine', sub: 'Recording, uploading, splits, getting paid' },
                   ],
                 },
-              ].map(({ heading, tint, items }) => (
-                <CreateMenuSection key={heading} heading={heading} tint={tint}
+              ].map(({ heading, icon, tint, items }) => (
+                <CreateMenuSection key={heading} heading={heading} icon={icon} tint={tint}
                   collapsible={!ALWAYS_OPEN.includes(heading)}
                   open={openGroup === heading}
                   onToggle={() => setOpenGroup(g => (g === heading ? null : heading))}
@@ -648,7 +659,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
               )}
               <button onClick={() => setScheduleMode(v => !v)}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm transition ${scheduleMode ? 'bg-purple-500/15 border-purple-500/30 text-purple-300' : 'bg-white/[0.04] border-white/[0.06] text-white/40'}`}>
-                <span>📅 Schedule for later</span><span className="text-xs">{scheduleMode ? 'On' : 'Off'}</span>
+                <span>Schedule for later</span><span className="text-xs">{scheduleMode ? 'On' : 'Off'}</span>
               </button>
               {scheduleMode && (
                 <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)}
@@ -660,7 +671,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                 className={`w-full py-3 rounded-xl disabled:opacity-40 transition text-white font-semibold text-sm flex items-center justify-center space-x-2 ${scheduleMode ? 'bg-purple-500 hover:bg-purple-400' : 'bg-red-500 hover:bg-red-400'}`}>
                 {startingSession
                   ? <><Loader className="w-4 h-4 animate-spin" /><span>{scheduleMode ? 'Scheduling...' : 'Starting...'}</span></>
-                  : scheduleMode ? <><span>📅</span><span>Schedule Stream</span></> : <><Radio className="w-4 h-4" /><span>Go Live</span></>}
+                  : scheduleMode ? <><Calendar className="w-4 h-4" /><span>Schedule Stream</span></> : <><Radio className="w-4 h-4" /><span>Go Live</span></>}
               </button>
             </div>
           )}
