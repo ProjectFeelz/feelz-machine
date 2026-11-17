@@ -200,7 +200,7 @@ export default function ChatRoomsPage() {
     try {
       const { data: memberships } = await supabase
         .from('chat_room_members')
-        .select('room_id, last_read_at')
+        .select('room_id, last_read_at, joined_at')
         .eq('user_id', user.id)
         .in('room_id', roomIds);
       if (!memberships?.length) return;
@@ -208,13 +208,17 @@ export default function ChatRoomsPage() {
 
       const counts = {};
       await Promise.all(memberships.map(async (m) => {
-        if (!m.last_read_at) return;
+        // Never opened: everything since joining is unread. Your own messages
+        // never count as unread.
+        const since = m.last_read_at || m.joined_at;
+        if (!since) return;
         const { count } = await supabase
           .from('chat_messages')
           .select('*', { count: 'exact', head: true })
           .eq('room_id', m.room_id)
           .eq('is_deleted', false)
-          .gt('created_at', m.last_read_at);
+          .neq('user_id', user.id)
+          .gt('created_at', since);
         if (count > 0) counts[m.room_id] = count;
       }));
       setUnreadCounts(counts);

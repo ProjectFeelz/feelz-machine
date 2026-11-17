@@ -811,14 +811,35 @@ export default function ChatRoomView() {
       (max, m) => (m.created_at > max ? m.created_at : max), real[0].created_at);
   }, [messages]);
 
-  // Update last_read_at when entering the room
-  useEffect(() => {
+  // READ MEANS READ.
+  //
+  // The room counts as read when you open it, while you sit in it as messages
+  // arrive, and again when you leave or switch away from the app. chat_mark_read
+  // moves last_read_at and clears this room's chat notifications in the bell in
+  // one go, so the unread badge on the room and the bell both clear together.
+  const markReadTimer = useRef(null);
+  const markRead = useCallback(() => {
     if (!roomId || !user || !isMember) return;
-    supabase.from('chat_room_members')
-      .update({ last_read_at: new Date().toISOString() })
-      .eq('room_id', roomId).eq('user_id', user.id)
-      .then(() => {});
+    supabase.rpc('chat_mark_read', { p_room: roomId }).then(() => {});
   }, [roomId, user, isMember]);
+
+  useEffect(() => {
+    markRead();
+    const onHide = () => { if (document.visibilityState === 'hidden') markRead(); };
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      clearTimeout(markReadTimer.current);
+      markRead();
+    };
+  }, [markRead]);
+
+  // A message arriving while you are looking at the room is read too.
+  useEffect(() => {
+    if (!messages.length || document.visibilityState !== 'visible') return;
+    clearTimeout(markReadTimer.current);
+    markReadTimer.current = setTimeout(markRead, 1500);
+  }, [messages.length, markRead]);
 
   // ── Data fetchers ────────────────────────────────────────────────────────────
   const fetchRoom = async () => {
@@ -1053,6 +1074,18 @@ export default function ChatRoomView() {
         .select('id, room_id, user_id, content, created_at, is_deleted, deleted_reason, is_pinned')
         .single();
       if (error) throw error;
+
+      // Tell the other members' phones. Fire and forget: the message is
+      // already saved, and a push that fails must not look like a failed send.
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session?.access_token) return;
+        fetch('/.netlify/functions/chat-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ messageId: data.id }),
+          keepalive: true,
+        }).catch(() => {});
+      });
 
       // Swap the placeholder for the real row. Written as a filter-then-add
       // rather than a map, because the realtime channel may already have
