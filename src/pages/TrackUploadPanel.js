@@ -1940,7 +1940,19 @@ export default function TrackUploadPanel() {
         preorder_early_access: (trackForm.is_preorder && trackForm.preorder_early_access) || false,
         youtube_url:       trackForm.youtube_url?.trim() || null,
         ai_content:        trackForm.ai_content || 'human',
-        is_beat:           trackForm.is_beat || false,
+        // THE BEAT FLAG, FINALLY WRITTEN FROM THE THING THE FORM ACTUALLY SETS.
+        //
+        // trackForm.is_beat is initialised false at the top of this file and is
+        // never assigned anywhere, by anything. The whole upload form branches on
+        // `isBeat`, which comes from release.release_type, and a beatmaker is
+        // locked to release_type 'beat'. So the UI knew it was a beat the entire
+        // time and then wrote false into the row.
+        //
+        // Every beat uploaded since 27 May 2026 was filed as an ordinary song:
+        // 162 tracks, not one of them marked. The beat marketplace has had no new
+        // stock for six months and nothing anywhere reported a problem, because
+        // saving a song is not an error.
+        is_beat:           isBeat,
         is_podcast:        trackForm.is_podcast || false,
         // Who uploaded it. tracks recorded created_at and nothing about who,
         // so working out who published a given track meant looking at who
