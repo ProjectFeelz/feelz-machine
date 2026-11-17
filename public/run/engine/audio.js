@@ -31,10 +31,22 @@ function slowSong(seconds) { songSlowT = Math.max(songSlowT, seconds); }
 
 let lastResync = 0;
 
+// The top of a run: the clock waits at 0:00 until the song is actually playing, so a song that
+// takes a moment to arrive starts from its first note instead of being jumped ahead to catch up.
+// No sound, sound blocked, or a song that still hasn't started after 8 seconds: the clock goes anyway.
+let songStarted = true, songWaitT = 0;
+
 function updateSongClock(realDt) {
   songSlowT = Math.max(0, songSlowT - realDt);
   const rate = songRate();
   if (songAudio.playbackRate !== rate) { try { songAudio.preservesPitch = false; songAudio.playbackRate = rate; } catch (e) { /* older browsers */ } }
+  if (!songStarted) {
+    songWaitT += realDt;
+    const playingNow = !songAudio.paused && songAudio.readyState >= 3 && songAudio.currentTime > 0;
+    if (playingNow) { songStarted = true; songClock = songAudio.currentTime; return; }
+    if (!soundOn || musicBlocked || songWaitT > 8 || songClock > 0.5) songStarted = true;
+    else return;
+  }
   songClock += realDt * rate;
   if (freeRoam) { if (!songAudio.paused && songAudio.readyState >= 3) songClock = songAudio.currentTime; return; }
   // While the audio is playing it leads; the clock follows small drift. A big gap means the browser
@@ -94,6 +106,7 @@ function startMusic() {
   loadSongBlob(mission.song.src);
   songAudio.loop = !!freeRoam;
   songHeld = false; songSlowT = 0;
+  songStarted = false; songWaitT = 0;
   songAudio.volume = MUSIC_VOLUME;
   try { songAudio.playbackRate = 1; songAudio.currentTime = 0; } catch (e) { /* not loaded yet */ }
   const playing = songAudio.play();

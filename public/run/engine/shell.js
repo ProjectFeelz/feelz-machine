@@ -311,7 +311,12 @@ window.addEventListener("popstate", () => {
     // From the menu: one swipe warns, a second within a few seconds leaves.
     backNav.warnUntil = Date.now() + 2500;
     backToast("SWIPE BACK AGAIN TO LEAVE FEELZ RUN");
-  } else { backNav.leaving = true; history.back(); return; }
+  } else {
+    backNav.leaving = true;
+    // On Feelz Machine, leaving goes to the Games page; anywhere else, back to wherever they came from.
+    if (/(^|\.)feelzmachine\.com$/.test(location.hostname)) location.href = "/games"; else history.back();
+    return;
+  }
   armBack();
 });
 

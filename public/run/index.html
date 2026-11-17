@@ -50,7 +50,7 @@
         <strong>TURN YOUR PHONE SIDEWAYS</strong>
         <span id="rotateText">Feelz Run plays full screen in landscape. The game is paused until you turn it.</span>
         <span class="rotate-tap" id="rotateTap">TAP TO PLAY SIDEWAYS</span>
-        <a class="text-button hidden" id="rotateBack" href="/" style="margin-top:14px;text-decoration:none">← BACK TO FEELZ MACHINE</a>
+        <a class="text-button hidden" id="rotateBack" href="/games" style="margin-top:14px;text-decoration:none">← BACK TO FEELZ MACHINE</a>
       </div>
 
       <canvas id="gameCanvas" width="960" height="540" aria-label="Game canvas">
@@ -67,7 +67,7 @@
       </script>
 
       <div class="overlay start-screen" id="startOverlay">
-        <a class="text-button hidden" id="backHome" href="/" style="position:absolute;top:max(env(safe-area-inset-top,0px),14px);right:max(env(safe-area-inset-right,0px),18px);z-index:5;margin:0;padding:8px 12px;border-radius:999px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.14);text-decoration:none">← FEELZ MACHINE</a>
+        <a class="text-button hidden" id="backHome" href="/games" style="position:absolute;top:max(env(safe-area-inset-top,0px),14px);right:max(env(safe-area-inset-right,0px),18px);z-index:5;margin:0;padding:8px 12px;border-radius:999px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.14);text-decoration:none">← FEELZ MACHINE</a>
         <script>
           if (/(^|\.)feelzmachine\.com$/.test(location.hostname)) document.getElementById("backHome").classList.remove("hidden");
         </script>

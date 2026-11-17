@@ -1286,6 +1286,9 @@ function chooseMission(id) {
   if (!MISSION_DATA[id]) return;
   selectedMission = id;
   buildMissionStrip();
+  // Fetch the song while they are still on the menu, so it is ready the moment they press Play.
+  const song = MISSION_DATA[id].song;
+  if (song && song.src) loadSongBlob(song.src);
 }
 
 // The run starts on a timer, not a tap, so wake the sound up while there is a tap to use.
