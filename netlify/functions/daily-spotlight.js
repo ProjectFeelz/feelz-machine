@@ -2,22 +2,20 @@
  * netlify/functions/daily-spotlight.js
  *
  * Runs daily at 00:05 UTC via netlify.toml schedule.
- * For every active listener, picks SPOTLIGHT_PER_DAY artists they have NEVER
- * streamed and writes a row each to daily_artist_spotlight so the home page
- * can read them.
+ * Gives every active listener (seen in the last 60 days) up to three Artists of
+ * the Day they have not heard, written to daily_artist_spotlight for the home
+ * page to read.
  *
- * Strategy:
- *   1. Get all artists the user has ever streamed
- *   2. From the remaining artists (published, with tracks), take the ones
- *      with the highest total_streams they haven't seen as a spotlight before
- *   3. Upsert into daily_artist_spotlight
- *      (unique on user_id + spotlight_date + artist_id, migration 136)
+ * The work is one database call: public.generate_daily_spotlight(date, per_day)
+ * (migration generate_daily_spotlight). It picks, best first, artists the
+ * listener has never streamed and never been shown, then never streamed, then
+ * anyone; each listener sees the pool in their own order for the day.
  *
- * NOTE: migration 136 must be applied before deploying this. Until it is, the
- * unique key is (user_id, spotlight_date) and the second and third rows would
- * overwrite the first rather than sit beside it. The home page tops itself up
- * client side either way, so a lagging migration shows three artists, just not
- * the personalised ones.
+ * It used to do this here, three round trips to the database per listener. With
+ * a few hundred listeners that took longer than the 30 seconds Netlify gives a
+ * scheduled function, so the run was cut off before it could record itself and
+ * the watchdog reported it overdue every day. In the database it takes well
+ * under a second.
  *
  * Required env vars:
  *   SUPABASE_URL
@@ -27,223 +25,43 @@
 const { createClient } = require('@supabase/supabase-js');
 const { recordRun } = require('../lib/jobRun');
 
-
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-const BATCH_SIZE = 100;
-const TODAY = new Date().toISOString().split('T')[0];
-
-// Must match SPOTLIGHT_PER_DAY in src/pages/HomePage.js.
 // The name in netlify.toml and in job_expectations, so the schedule, the run
 // record and the watchdog all refer to the same thing.
 const JOB = 'daily-spotlight';
 
+// Must match SPOTLIGHT_PER_DAY in src/pages/HomePage.js.
 const SPOTLIGHT_PER_DAY = 3;
 
 exports.handler = async (event) => {
   const started = Date.now();
-  const isManual = event.httpMethod === 'POST';
-  console.log(`Daily spotlight running for ${TODAY} — ${isManual ? 'manual' : 'scheduled'}`);
+  // Worked out on every run, not when the module loads: a warm function can be
+  // reused the next day, and a date fixed at load time would still say yesterday.
+  const today = new Date().toISOString().split('T')[0];
+  const isManual = event && event.httpMethod === 'POST';
+  console.log(`Daily spotlight running for ${today} (${isManual ? 'manual' : 'scheduled'})`);
 
   try {
-    // 1. Get all active listeners (seen in last 60 days)
-    const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: activeListeners } = await supabase
-      .from('listeners')
-      .select('user_id')
-      .gte('last_seen_at', cutoff);
-
-    if (!activeListeners?.length) {
-      // Recorded as a run that did no work. A day with nothing to do and a
-      // job that stopped running are the same silence otherwise.
-      await recordRun(JOB, { ok: true, items: 0, detail: { skipped: 'no active listeners' }, startedAt: started });
-      return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'no active listeners' }) };
-    }
-
-    // 2. Get all artists with at least one published track (eligible for spotlight)
-    const { data: allArtists } = await supabase
-      .from('artists')
-      .select('id, artist_name, slug, profile_image_url, total_streams, follower_count')
-      .not('profile_image_url', 'is', null)
-      .neq('profile_image_url', '')
-      .eq('is_suspended', false)
-      .gt('track_count', 0)
-      .order('total_streams', { ascending: false })
-      .limit(500);
-
-    if (!allArtists?.length) {
-      // Recorded as a run that did no work. A day with nothing to do and a
-      // job that stopped running are the same silence otherwise.
-      await recordRun(JOB, { ok: true, items: 0, detail: { skipped: 'no eligible artists' }, startedAt: started });
-      return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'no eligible artists' }) };
-    }
-
-    // ── EVERY LISTENER USED TO GET THE SAME THREE ARTISTS ────────────────────
-    //
-    // The pool above is ordered by total_streams, and the picker below walks it
-    // from the top. So for any listener with nothing in their history, the
-    // first tier matched the first three artists in that list, and it was the
-    // same first three for every one of them. Two people sitting next to each
-    // other saw an identical "Artists of the Day", which is what Steve and his
-    // wife noticed, and it always led with whoever is top of the streams table.
-    //
-    // Fixing the client fallback was only half of it. This job produces the
-    // same result for the same reason, and it is the half that runs first.
-    //
-    // WHY ORDERING BY STREAMS WAS WRONG HERE SPECIFICALLY
-    //
-    // This row exists to show somebody an artist they have never heard. Sorting
-    // the candidates by total streams does the opposite of that: it puts the
-    // artists who already get heard the most at the front of a discovery row.
-    // The quality bar is the eligibility filter above, a real profile picture,
-    // not suspended, at least one track. Past that bar, who leads should not be
-    // decided by who is already winning.
-    //
-    // So each listener walks the same pool from a different place, stable for
-    // the day, different tomorrow. Same idea as the client fallback so the two
-    // behave alike.
-    const gcd = (a, b) => (b ? gcd(b, a % b) : a);
-    const poolSize = allArtists.length;
-    const stride = [17, 13, 11, 7, 5, 3].find(s => poolSize > s && gcd(s, poolSize) === 1) || 1;
-
-    const poolFor = (userId) => {
-      let seed = 0;
-      const key = `${userId}:${TODAY}`;
-      for (let k = 0; k < key.length; k++) seed = ((seed << 5) - seed + key.charCodeAt(k)) | 0;
-      const offset = ((seed % poolSize) + poolSize) % poolSize;
-      const out = new Array(poolSize);
-      for (let k = 0; k < poolSize; k++) out[k] = allArtists[(offset + k * stride) % poolSize];
-      return out;
-    };
-
-    // 3. Check who already got a spotlight today
-    const userIds = activeListeners.map(l => l.user_id);
-    const { data: alreadySpotlit } = await supabase
-      .from('daily_artist_spotlight')
-      .select('user_id')
-      .eq('spotlight_date', TODAY)
-      .in('user_id', userIds);
-
-    // Count per user, not a bare set: a listener who already has one artist for
-    // today still needs the other two.
-    const haveToday = {};
-    (alreadySpotlit || []).forEach(r => {
-      haveToday[r.user_id] = (haveToday[r.user_id] || 0) + 1;
+    const { data, error } = await supabase.rpc('generate_daily_spotlight', {
+      p_date: today,
+      p_per_day: SPOTLIGHT_PER_DAY,
     });
-    const eligible = activeListeners.filter(
-      l => (haveToday[l.user_id] || 0) < SPOTLIGHT_PER_DAY
-    );
+    if (error) throw new Error(error.message);
 
-    if (!eligible.length) {
-      // Recorded as a run that did no work. A day with nothing to do and a
-      // job that stopped running are the same silence otherwise.
-      await recordRun(JOB, { ok: true, items: 0, detail: { skipped: 'all users already have spotlight today' }, startedAt: started });
-      return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: 'all users already have spotlight today' }) };
-    }
-
-    let assigned = 0;
-
-    // Process in batches
-    for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
-      const batch = eligible.slice(i, i + BATCH_SIZE);
-
-      for (const listener of batch) {
-        try {
-          // Get artist IDs this user has streamed
-          const { data: streamed } = await supabase
-            .from('streams')
-            .select('tracks(artist_id)')
-            .eq('user_id', listener.user_id)
-            .limit(1000);
-
-          const streamedArtistIds = new Set(
-            (streamed || []).map(s => s.tracks?.artist_id).filter(Boolean)
-          );
-
-          // Get artists this user has already seen as spotlight (avoid repeats)
-          const { data: pastSpotlights } = await supabase
-            .from('daily_artist_spotlight')
-            .select('artist_id, spotlight_date')
-            .eq('user_id', listener.user_id);
-
-          const seenSpotlightIds = new Set((pastSpotlights || []).map(r => r.artist_id));
-          // Artists this user already has for TODAY, from a partial earlier run.
-          // Seeded into `taken` below so the looser passes cannot pick them
-          // again and report an assignment that was really a no-op upsert.
-          const todayIds = new Set(
-            (pastSpotlights || []).filter(r => r.spotlight_date === TODAY).map(r => r.artist_id)
-          );
-
-          // Fill in three tiers of preference, best first, without repeating an
-          // artist inside the same day.
-          const need   = SPOTLIGHT_PER_DAY - (haveToday[listener.user_id] || 0);
-          const chosen = [];
-          const taken  = new Set(todayIds);
-
-          // This listener's own view of the pool. Same artists, different
-          // starting point, so the tiers below prefer what they should prefer
-          // without everybody landing on the same three names.
-          const pool = poolFor(listener.user_id);
-
-          const take = (predicate) => {
-            for (const a of pool) {
-              if (chosen.length >= need) return;
-              if (taken.has(a.id)) continue;
-              if (!predicate(a)) continue;
-              taken.add(a.id);
-              chosen.push(a);
-            }
-          };
-
-          // 1. Never streamed and never spotlighted before.
-          take(a => !streamedArtistIds.has(a.id) && !seenSpotlightIds.has(a.id));
-          // 2. Never streamed, even if spotlighted before.
-          take(a => !streamedArtistIds.has(a.id));
-          // 3. Anyone, so the row still fills on a small catalogue.
-          take(() => true);
-
-          if (!chosen.length) continue;
-
-          const { error: upsertErr } = await supabase
-            .from('daily_artist_spotlight')
-            .upsert(
-              chosen.map(a => ({
-                user_id: listener.user_id,
-                artist_id: a.id,
-                spotlight_date: TODAY,
-              })),
-              { onConflict: 'user_id,spotlight_date,artist_id' }
-            );
-
-          if (upsertErr) {
-            console.error(`Spotlight upsert failed for ${listener.user_id}:`, upsertErr.message);
-            continue;
-          }
-
-          assigned += chosen.length;
-        } catch (err) {
-          console.error(`Spotlight error for user ${listener.user_id}:`, err.message);
-        }
-      }
-    }
-
-    console.log(`Spotlight complete. Assigned: ${assigned}/${eligible.length}`);
-    // Listeners given a spotlight today. This job should always pick somebody
-    // while there are active listeners and published artists, so zero here is
-    // worth looking at rather than shrugging off.
+    const assigned = Number(data && data.assigned) || 0;
+    const eligible = Number(data && data.eligible) || 0;
+    console.log(`Spotlight complete. Assigned: ${assigned} across ${eligible} listeners`);
     await recordRun(JOB, {
       ok: true,
       items: assigned,
-      detail: { eligible: eligible.length, date: TODAY },
+      detail: { eligible, date: today },
       startedAt: started,
     });
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ success: true, date: TODAY, assigned, eligible: eligible.length }),
-    };
+    return { statusCode: 200, body: JSON.stringify({ success: true, date: today, assigned, eligible }) };
   } catch (err) {
     console.error('Daily spotlight error:', err);
     await recordRun(JOB, { ok: false, error: err.message, startedAt: started });
