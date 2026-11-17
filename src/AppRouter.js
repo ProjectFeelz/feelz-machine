@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 // router guard renders and cannot await a lazy chunk to decide a redirect.
 import { hasSeenWelcome, needsWelcome } from './pages/Welcome';
 import AdminNav from './components/AdminNav';
+import RequireAdmin from './components/RequireAdmin';
 import { PlayerProvider } from './contexts/PlayerContext';
 import { TierProvider } from './contexts/useTier';
 import { OfflineProvider } from './contexts/OfflineContext';
@@ -513,7 +514,7 @@ export default function AppRouter() {
                   <TermsOfUse />
                 </PageTitle>
               } />
-              <Route path="/admin/vip-card-print/:candidateId" element={<VipCardPrintPage />} />
+              <Route path="/admin/vip-card-print/:candidateId" element={<RequireAdmin><VipCardPrintPage /></RequireAdmin>} />
 
               {/* Driving mode renders its own full-screen shell and must stay
                   OUTSIDE AppLayout. Inside it, the sidebar, the mini player
@@ -660,11 +661,11 @@ export default function AppRouter() {
                 <Route path="/affiliates" element={<AffiliatePage />} />
                 <Route path="/payment/success" element={<PaymentSuccess />} />
                 <Route path="/payment/cancel" element={<PaymentCancel />} />
-                <Route path="/admin/affiliates"   element={<AdminAffiliates />} />
-                <Route path="/admin/people"       element={<AdminPeople />} />
-                <Route path="/admin/intelligence" element={<AdminIntelligence />} />
-                <Route path="/admin/content"      element={<AdminContent />} />
-                <Route path="/admin/growth"       element={<AdminGrowth />} />
+                <Route path="/admin/affiliates"   element={<RequireAdmin><AdminAffiliates /></RequireAdmin>} />
+                <Route path="/admin/people"       element={<RequireAdmin><AdminPeople /></RequireAdmin>} />
+                <Route path="/admin/intelligence" element={<RequireAdmin><AdminIntelligence /></RequireAdmin>} />
+                <Route path="/admin/content"      element={<RequireAdmin><AdminContent /></RequireAdmin>} />
+                <Route path="/admin/growth"       element={<RequireAdmin><AdminGrowth /></RequireAdmin>} />
                 <Route path="/beat/:slug" element={<BeatDetailPage />} />
                 <Route path="/artist/:slug" element={<ArtistProfilePage />} />
                 {/* Merch is parked, src/config/features.js.
@@ -693,36 +694,36 @@ export default function AppRouter() {
                 <Route path="/track/:slug" element={<TrackPage />} />
                 <Route path="/dashboard" element={<ArtistDashboard />} />
                 <Route path="/collab-radar" element={<CollabRadarPage />} />
-                <Route path="/admin" element={<AdminDashboard />} />
-                <Route path="/admin/artists" element={<AdminArtists />} />
-                <Route path="/admin/analytics" element={<AdminAnalytics />} />
-                <Route path="/admin/moderation" element={<AdminModeration />} />
-                <Route path="/admin/boost" element={<AdminBoost />} />
-                <Route path="/admin/broadcast" element={<AdminBroadcast />} />
-                <Route path="/admin/behavior" element={<AdminUserBehaviorPage />} />
-                <Route path="/admin/duplicates" element={<AdminDuplicates />} />
-                <Route path="/admin/competitions" element={<AdminCompetitions />} />
-                <Route path="/admin/school-sessions" element={<AdminSchoolSessions />} />
-                <Route path="/admin/retail" element={<AdminRetail />} />
-                <Route path="/admin/deals" element={<AdminDeals />} />
+                <Route path="/admin" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
+                <Route path="/admin/artists" element={<RequireAdmin><AdminArtists /></RequireAdmin>} />
+                <Route path="/admin/analytics" element={<RequireAdmin><AdminAnalytics /></RequireAdmin>} />
+                <Route path="/admin/moderation" element={<RequireAdmin><AdminModeration /></RequireAdmin>} />
+                <Route path="/admin/boost" element={<RequireAdmin><AdminBoost /></RequireAdmin>} />
+                <Route path="/admin/broadcast" element={<RequireAdmin><AdminBroadcast /></RequireAdmin>} />
+                <Route path="/admin/behavior" element={<RequireAdmin><AdminUserBehaviorPage /></RequireAdmin>} />
+                <Route path="/admin/duplicates" element={<RequireAdmin><AdminDuplicates /></RequireAdmin>} />
+                <Route path="/admin/competitions" element={<RequireAdmin><AdminCompetitions /></RequireAdmin>} />
+                <Route path="/admin/school-sessions" element={<RequireAdmin><AdminSchoolSessions /></RequireAdmin>} />
+                <Route path="/admin/retail" element={<RequireAdmin><AdminRetail /></RequireAdmin>} />
+                <Route path="/admin/deals" element={<RequireAdmin><AdminDeals /></RequireAdmin>} />
                 <Route path="/deal/:id" element={<CreatorDealPage />} />
                 <Route path="/newsletter/compose" element={<NewsletterComposePage />} />
                 <Route path="/newsletter/:slug" element={<NewsletterPostPage />} />
                 <Route path="/legal/:slug" element={<LegalDocumentPage />} />
                 <Route path="/splits" element={<SplitsPage />} />
                 <Route path="/games" element={<GamesPage />} />
-                <Route path="/admin/app-usage" element={<AdminAppUsage />} />
-                <Route path="/admin/home-hero" element={<AdminHomeHero />} />
-                <Route path="/admin/news" element={<AdminNews />} />
-                <Route path="/admin/cold-start" element={<AdminColdStart />} />
-                <Route path="/admin/feed" element={<AdminFeed />} />
-                <Route path="/admin/guardian-consents" element={<AdminGuardianConsents />} />
-                <Route path="/admin/personas" element={<AdminPersonas />} />
+                <Route path="/admin/app-usage" element={<RequireAdmin><AdminAppUsage /></RequireAdmin>} />
+                <Route path="/admin/home-hero" element={<RequireAdmin><AdminHomeHero /></RequireAdmin>} />
+                <Route path="/admin/news" element={<RequireAdmin><AdminNews /></RequireAdmin>} />
+                <Route path="/admin/cold-start" element={<RequireAdmin><AdminColdStart /></RequireAdmin>} />
+                <Route path="/admin/feed" element={<RequireAdmin><AdminFeed /></RequireAdmin>} />
+                <Route path="/admin/guardian-consents" element={<RequireAdmin><AdminGuardianConsents /></RequireAdmin>} />
+                <Route path="/admin/personas" element={<RequireAdmin><AdminPersonas /></RequireAdmin>} />
                 <Route path="/guardian-consent" element={<GuardianConsentPage />} />
                 <Route path="/hidden" element={<HiddenPage />} />
                 <Route path="/contact-preferences" element={<ContactPreferencesPage />} />
-                <Route path="/admin/retail-staff" element={<Navigate to="/retail-admin?sub=staff" replace />} />
-                <Route path="/admin/engagement" element={<AdminEngagement />} />
+                <Route path="/admin/retail-staff" element={<RequireAdmin><Navigate to="/retail-admin?sub=staff" replace /></RequireAdmin>} />
+                <Route path="/admin/engagement" element={<RequireAdmin><AdminEngagement /></RequireAdmin>} />
                 <Route path="/library/discovered" element={<RecentlyDiscoveredPage />} />
                 <Route path="/listener/:userId" element={<ListenerProfilePage />} />
 
