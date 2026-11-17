@@ -411,6 +411,65 @@ function PaymentCancel() {
 }
 
 
+// ── When a screen's code is not there ────────────────────────────────────────
+//
+// This app lazy-loads its routes, so opening a screen fetches that screen's
+// JavaScript. If that fetch fails — offline, or mid-deploy when the old file
+// names have gone — the lazy component rejects, React unmounts the tree, and
+// what is left on screen is the Suspense fallback below: a black div, one
+// hundred viewport units tall, forever.
+//
+// That is the black screen. Not a crash with a message, not a spinner that
+// never stops. A deliberate black rectangle doing exactly what it was written
+// to do, in a situation nobody wrote it for.
+//
+// React cannot recover from this on its own, and only an error boundary gets
+// told it happened. So this catches it and says the true thing, which offline
+// is not "something went wrong" but "this screen is not on your phone" — and
+// then points at the music that IS, because saved tracks live in IndexedDB and
+// do not need the network or this screen.
+class RouteBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { failed: false }; }
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(err) { console.error('[router] a screen failed to load:', err && err.message); }
+
+  render() {
+    if (!this.state.failed) return this.props.children;
+    const offline = navigator.onLine === false;
+    return (
+      <div style={{ minHeight: '100vh', background: '#000', color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div style={{ maxWidth: 380, textAlign: 'center' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 10 }}>
+            {offline ? 'This screen needs the internet' : 'That screen did not load'}
+          </h1>
+          <p style={{ color: 'rgba(255,255,255,0.55)', lineHeight: 1.6, marginBottom: 20 }}>
+            {offline
+              ? 'Your saved music is still on this phone and plays without a connection.'
+              : 'The app updated while you were using it. Reloading will fix it.'}
+          </p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+            {offline && (
+              <button
+                onClick={() => { window.location.href = '/library/offline'; }}
+                style={{ padding: '12px 18px', borderRadius: 12, border: 0,
+                         background: '#6366f1', color: '#fff', fontWeight: 600, fontSize: 15 }}>
+                Saved music
+              </button>
+            )}
+            <button
+              onClick={() => window.location.reload()}
+              style={{ padding: '12px 18px', borderRadius: 12, border: 0,
+                       background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 600, fontSize: 15 }}>
+              Try again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
 export default function AppRouter() {
   return (
     <HelmetProvider>
@@ -424,6 +483,7 @@ export default function AppRouter() {
             <OfflineProvider>
             <OnboardingGuard>
             <PurchaseReceipt />
+            <RouteBoundary>
             <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}>
             <Routes>
               {/* Legacy /player/* redirects */}
@@ -669,6 +729,7 @@ export default function AppRouter() {
               </Route>
             </Routes>
             </Suspense>
+            </RouteBoundary>
             </OnboardingGuard>
             </OfflineProvider>
             </TierProvider>
