@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { FUNNELS } from './AdminAppUsage';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
@@ -120,7 +121,17 @@ const CustomTooltip = ({ active, payload, label }) => {
 // Rows that carry listeners (people) are measured by people, with their plays
 // shown beside them, so a city is never read as having more people than the
 // platform has.
-function DemoList({ title, icon: Icon, rows, sub }) {
+// `reach` is the Countries panel only, and it is deliberately not a row in
+// `rows`. The function that builds by_country drops any country with fewer
+// than three listeners, because naming a country with one listener beside a
+// panel that also lists cities identifies the person rather than the market.
+//
+// That guard is right and it stays. What it also hid was the EXISTENCE of
+// those countries, so the panel read "South Africa, 100%" while nineteen other
+// countries were listening. This shows the size of what was withheld without
+// naming any of it, and it is drawn as a footer rather than a bar because it
+// is not comparable to the rows above it.
+function DemoList({ title, icon: Icon, rows, sub, reach }) {
   const list = rows || [];
   const byPeople = list.some(r => r.listeners != null);
   const valueOf = (r) => (byPeople ? (r.listeners || 0) : (r.plays || 0));
@@ -155,6 +166,29 @@ function DemoList({ title, icon: Icon, rows, sub }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {reach && reach.countries_hidden > 0 && (
+        <div className="mt-3 pt-3 border-t border-white/[0.06]">
+          <div className="flex items-baseline justify-between">
+            <p className="text-sm text-white/50">Everywhere else</p>
+            <p className="text-xs text-white/40 flex-shrink-0 ml-3">
+              {reach.countries_hidden} {reach.countries_hidden === 1 ? 'country' : 'countries'}
+              <span className="text-white/25"> · {reach.hidden_listeners} {reach.hidden_listeners === 1 ? 'listener' : 'listeners'} · {reach.hidden_plays} plays</span>
+            </p>
+          </div>
+          <p className="text-[10px] text-white/20 mt-1">
+            Too few listeners each to name without identifying somebody.
+          </p>
+        </div>
+      )}
+
+      {reach && reach.suppressed && (
+        <div className="mt-3 pt-3 border-t border-white/[0.06]">
+          <p className="text-[10px] text-white/20">
+            A small number of other countries are listening, too few to total up safely.
+          </p>
         </div>
       )}
     </div>
@@ -195,6 +229,7 @@ export default function AdminAnalytics({ embedded = false }) {
   const [completionStats, setCompletionStats] = useState({});
   const [beatStats, setBeatStats]         = useState({});
   const [demo, setDemo]                   = useState(null);
+  const [reach, setReach]                 = useState(null);
   const [revenueStats, setRevenueStats]   = useState({});
   const [listenerTierSplit, setListenerTierSplit] = useState([]);
   const [platformSignals, setPlatformSignals]     = useState([]);
@@ -402,6 +437,11 @@ export default function AdminAnalytics({ embedded = false }) {
       // so this goes through an admin-gated SECURITY DEFINER function.
       supabase.rpc('get_platform_listener_stats', { p_days: range })
         .then(({ data }) => setDemo(data));
+
+      // How much that function withheld. See the note on DemoList: the
+      // threshold stays, the size of what it hid does not have to.
+      supabase.rpc('admin_country_reach', { p_days: range })
+        .then(({ data }) => setReach(Array.isArray(data) ? data[0] : data));
 
       // Beat stats.
       //
@@ -805,6 +845,42 @@ export default function AdminAnalytics({ embedded = false }) {
     setExportError('');
     exportCSV(data, headers, filename);
   };
+
+  // ── Funnels and segments, the two things the export tab was missing ─────────
+  //
+  // These read through admin RPCs rather than the tables. app_events has row
+  // level security on and NO select policy at all, so a plain
+  // from('app_events') export hands every admin an empty file and says
+  // nothing. The page already goes through these functions; so does this.
+  const exportFunnels = async () => {
+    setExporting('Funnels');
+    setExportError('');
+    const rows = [];
+    for (const f of FUNNELS) {
+      const { data, error } = await supabase.rpc('admin_funnel_report', { p_steps: f.steps, p_days: range });
+      if (error) { setExporting(null); setExportError(`Funnels failed: ${error.message}`); return; }
+      (data || []).forEach(r => rows.push({
+        funnel: f.title,
+        step_no: r.step_no,
+        step: r.step,
+        people: r.people,
+        kept_pct: r.kept_pct,
+        lost_from_previous: r.lost_from_previous,
+        days: range,
+      }));
+    }
+    setExporting(null);
+    if (!rows.length) { setExportError('Funnels: nothing to export yet'); return; }
+    exportCSV(rows, ['funnel','step_no','step','people','kept_pct','lost_from_previous','days'], 'funnels.csv');
+  };
+
+  const exportScreens = () => runExport('Screens',
+    supabase.rpc('admin_screen_report', { p_days: range }),
+    ['screen','views','people','median_seconds','bounced_pct'], 'screens.csv');
+
+  const exportTaps = () => runExport('Taps',
+    supabase.rpc('admin_tap_report', { p_days: range }),
+    ['action','taps','people'], 'taps.csv');
 
   const exportAll = async () => {
     const { data } = await supabase.from('streams').select('track_id, user_id, duration_played, completed, device_type, platform, created_at').order('created_at', { ascending: false }).limit(10000);
@@ -1515,7 +1591,7 @@ export default function AdminAnalytics({ embedded = false }) {
                   )}
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-                    <DemoList title="Countries" icon={MapPin} rows={demo.by_country} sub="Listeners in the period, where they listened from" />
+                    <DemoList title="Countries" icon={MapPin} rows={demo.by_country} reach={reach} sub="Listeners in the period, where they listened from" />
                     <DemoList title="Cities" icon={MapPin} rows={demo.by_city} sub="Listeners in the period. Places with fewer than 3 are hidden to protect them" />
                     <DemoList title="Genres played" icon={Music} rows={demo.by_genre} />
                     <DemoList title="Moods played" icon={Music} rows={demo.by_mood} />
@@ -1660,6 +1736,9 @@ export default function AdminAnalytics({ embedded = false }) {
                 { label: 'Downloads (10k)',  sub: 'Track, user, type, amount, date',                 fn: exportDownloads },
                 { label: 'Retail plays (10k)', sub: 'Venue, track, playlist, duration, played at',   fn: exportRetailPlays },
                 { label: 'Venues',           sub: 'Business, contact, status, ads, last seen',       fn: exportVenues },
+                { label: 'Funnels',          sub: 'Every flow, step by step, where people stop',    fn: exportFunnels },
+                { label: 'Screens',          sub: 'Where people go, time spent, bounce',            fn: exportScreens },
+                { label: 'Taps',             sub: 'What people press, and how many press it',       fn: exportTaps },
               ].map((e, i) => (
                 <button key={i} onClick={e.fn} disabled={!!exporting}
                   className="w-full flex items-center space-x-4 p-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] transition text-left disabled:opacity-50">

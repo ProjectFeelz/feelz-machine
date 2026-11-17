@@ -37,7 +37,10 @@ const RANGES = [
 // The flows worth watching, and the steps that make them up. Named here
 // rather than in the database so adding a funnel is a line of code and not a
 // migration, which is the same reason app_events is one table.
-const FUNNELS = [
+// Exported so the CSV in AdminAnalytics builds from the SAME list the page
+// draws. Copying it would mean a funnel added here goes missing from the
+// export, and nobody would notice until the numbers were already out the door.
+export const FUNNELS = [
   {
     title: 'Signing up',
     blurb: 'From landing on the app to a finished profile.',
