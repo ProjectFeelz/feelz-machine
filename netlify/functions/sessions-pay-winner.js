@@ -86,7 +86,7 @@ async function readSituation(supabase, entryId) {
 
   const [{ data: comp }, { data: profile }, { data: artist }, { data: existing }] = await Promise.all([
     supabase.from('competitions')
-      .select('cash_prize_amount, cash_prize_currency, title')
+      .select('cash_prize_amount, equipment_prize_amount, cash_prize_currency, title')
       .eq('id', entry.competition_id).maybeSingle(),
     supabase.from('artist_payment_profiles')
       .select('paypal_email').eq('artist_id', entry.artist_id).maybeSingle(),
@@ -297,6 +297,9 @@ exports.handler = async (event) => {
           (entry.entrant_is_minor
             ? `You won. Because you are under 18, we have sent ${currency} ${Number(amount).toLocaleString()} to ${guardian?.guardian_name || 'your guardian'}, who signed for it.\n\n`
             : `You won. We have sent ${currency} ${Number(amount).toLocaleString()} to your PayPal address, ${payTo}.\n\n`) +
+          (Number(comp?.equipment_prize_amount) > 0
+            ? `That is the cash half. The ${currency} ${Number(comp.equipment_prize_amount).toLocaleString()} of studio equipment is not money and is not sent, we arrange that with you and hand it over.\n\n`
+            : '') +
           `PayPal usually takes a few minutes, sometimes a day. If nothing shows up by this time tomorrow, reply here and we will chase it.\n\n` +
           `Congratulations. You earned this one.`,
         email_requested: true,

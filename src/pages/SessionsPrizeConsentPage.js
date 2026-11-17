@@ -125,7 +125,10 @@ export default function SessionsPrizeConsentPage() {
       <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 space-y-2.5 mb-6">
         <Row label="Who" value={info.entrant_name} />
         <Row label="Song" value={info.song_title} />
-        <Row label="Prize" value={money(info.prize_amount, info.prize_currency)} />
+        <Row label="Cash to you" value={money(info.prize_amount, info.prize_currency)} />
+        {Number(info.equipment_amount) > 0 && (
+          <Row label="Equipment" value={`${money(info.equipment_amount, info.prize_currency)} of gear`} />
+        )}
         <Row label="Guardian on file" value={info.guardian_name || 'you'} />
       </div>
 
@@ -136,6 +139,11 @@ export default function SessionsPrizeConsentPage() {
         <p>
           We need two things from you. Where the money should be sent, and your name, to show you agreed to receive it on their behalf.
         </p>
+        {Number(info.equipment_amount) > 0 && (
+          <p>
+            You are signing for the cash only, {money(info.prize_amount, info.prize_currency)}. The equipment is not money and is not sent anywhere. We arrange that with you separately and hand it over.
+          </p>
+        )}
         <p className="text-white/50 text-sm">
           The money is sent by PayPal. If you do not have a PayPal address, it is free to open one at paypal.com and takes a few minutes. Use the email address you open it with.
         </p>

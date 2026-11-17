@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 // A tiny synchronous localStorage read. Imported eagerly on purpose: the
 // router guard renders and cannot await a lazy chunk to decide a redirect.
 import { hasSeenWelcome, needsWelcome } from './pages/Welcome';
+import AdminNav from './components/AdminNav';
 import { PlayerProvider } from './contexts/PlayerContext';
 import { TierProvider } from './contexts/useTier';
 import { OfflineProvider } from './contexts/OfflineContext';
@@ -483,6 +484,7 @@ export default function AppRouter() {
             <OfflineProvider>
             <OnboardingGuard>
             <PurchaseReceipt />
+            <AdminNav />
             <RouteBoundary>
             <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}>
             <Routes>

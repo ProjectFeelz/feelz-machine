@@ -163,7 +163,9 @@ function PayWinnerPanel({ showToast, onPaid }) {
               {status.is_group && <span className="text-white/40 text-xs"> (group entry)</span>}
             </p>
             <p className="text-[11px] text-white/30">
-              Prize on the competition: {money(status.prize_amount)}
+              Cash to send: {money(status.prize_amount)}
+              {Number(status.equipment_amount) > 0 &&
+                ` · plus ${money(status.equipment_amount)} of equipment, handed over by you and recorded below`}
             </p>
             {status.payout_route === 'paypal' ? (
               <p className="text-[11px] text-white/40">
