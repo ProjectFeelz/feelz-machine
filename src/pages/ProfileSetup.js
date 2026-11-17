@@ -7,8 +7,7 @@ import { step } from '../utils/track';
 import { generateSlug, getUniqueSlug } from '../utils/artistSlug';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  LogOut, ChevronRight, User, Music, Globe, Shield, Trophy,
-  Loader,
+  LogOut, ChevronRight, User, Music, Globe, Shield, Loader,
   Save, Palette, ExternalLink, DollarSign, Camera, Check,
   Link, Zap, Crown, Star, Trash2, AlertTriangle, Plus, Mic
 } from 'lucide-react';
@@ -919,7 +918,17 @@ export default function ProfilePage() {
       <div className="rounded-2xl border border-white/[0.06] overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
         {isArtist && <NavRow icon={Music} label="Artist Dashboard" iconColor="text-purple-400" onClick={() => nav('/dashboard')} />}
         {isAdmin  && <NavRow icon={Shield} label="Admin Panel" iconColor="text-yellow-400" onClick={() => nav('/admin')} border />}
-        <NavRow icon={Trophy} label="Competitions" iconColor="text-yellow-400" onClick={() => nav('/competitions')} border />
+        {/* Competitions row removed while nothing is running.
+            
+            Collab Roulette moved to Plugin Gallery and both its crons are
+            commented out in netlify.toml, so this pointed every new user at a
+            page that correctly says "No active competitions". An empty room is
+            a worse first impression than no door.
+            
+            Nothing else changed. /competitions still works, the page still
+            lists anything with status open, voting or upcoming, and every
+            competition notification still resolves to it. Put this line back
+            the day a competition runs again. */}
         <NavRow icon={Globe} label="Privacy Policy" onClick={() => nav('/privacy-policy')} border />
         <NavRow icon={Globe} label="Terms of Use"   onClick={() => nav('/terms-of-use')}   border />
       </div>
