@@ -84,7 +84,10 @@ function loadSongBlob(src) {
     const url = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
     songBlob[src] = url;
     if (!mission || mission.song.src !== src || songAudio.getAttribute("src") !== src) return;
-    const wasPlaying = !songAudio.paused;
+    // Already playing from the stream: leave it be. Swapping the source mid-song makes the
+    // browser load it again, a gap you can hear. The copy in memory is used next time.
+    if (!songAudio.paused) return;
+    const wasPlaying = false;
     songAudio.src = url;
     songAudio.addEventListener("loadedmetadata", () => {
       try { songAudio.currentTime = songClock; } catch (e) { /* not ready */ }

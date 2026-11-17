@@ -12,6 +12,12 @@ setText("lyricsButton", lyricsOn ? "LYRICS: ON" : "LYRICS: OFF");
 
 setMode("1");
 
+// Fetch the first mission's song now, so it is ready the moment they press Play.
+{
+  const first = MISSION_DATA[selectedMission];
+  if (first && first.song && first.song.src) loadSongBlob(first.song.src);
+}
+
 updatePlayerCard();
 
 if (Backend.online) {

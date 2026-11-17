@@ -961,7 +961,9 @@ async function openCheckout(v) {
   } catch (e) { skillsError(e.message); }
 }
 
+let leaderAsk = 0;   // the latest board asked for: a slower, older answer never overwrites it
 async function openLeaderboard(period) {
+  const ask = ++leaderAsk;
   leaderOverlay.classList.remove("hidden");
   period = period || "all";
   const entry = MISSIONS.find(mi => mi.id === selectedMission);
@@ -972,8 +974,11 @@ async function openLeaderboard(period) {
   setText("leaderYou", "");
   try {
     const rows = await Backend.leaderboard(selectedMission, period, 50);
+    if (ask !== leaderAsk) return;
     list.innerHTML = "";
-    if (!rows || !rows.length) list.innerHTML = "<li class='leader-empty'>No runs yet. Be the first on the board.</li>";
+    if (!rows || !rows.length) list.innerHTML = period === "week"
+      ? "<li class='leader-empty'>No finished runs on this mission yet this week. The week starts on Monday.</li>"
+      : "<li class='leader-empty'>No runs yet. Be the first on the board.</li>";
     (rows || []).forEach(row => {
       const li = document.createElement("li");
       if (row.is_me) li.classList.add("me");
@@ -986,6 +991,7 @@ async function openLeaderboard(period) {
     });
     if (signedIn() && !(rows || []).some(r => r.is_me)) setText("leaderYou", "Finish this mission to get on this board.");
   } catch (e) {
+    if (ask !== leaderAsk) return;
     list.innerHTML = "";
     const li = document.createElement("li");
     li.className = "leader-empty";

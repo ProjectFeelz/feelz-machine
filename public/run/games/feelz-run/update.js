@@ -14,6 +14,16 @@ function update(realDt) {
 
   // A journal page is open: the world holds still while you read.
   if (reading) { updateReading(realDt); return; }
+  // The top of a run: the run waits for the song's first note, so the two start together.
+  // (No sound, sound blocked, or a song still not playing after 8 seconds: it goes anyway.)
+  if (!songStarted) {
+    updateSongClock(realDt);
+    if (!songStarted) {
+      if (banner.time < 0.3) showBanner("GET READY", "", 0.6);
+      updateParticles(realDt);
+      return;
+    }
+  }
   // Hit-stop: a blink of near-freeze when a hit lands.
   let dt = realDt;
   if (hitStop > 0) { hitStop = Math.max(0, hitStop - realDt); dt = realDt * 0.12; }

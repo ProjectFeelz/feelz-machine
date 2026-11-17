@@ -41,7 +41,15 @@ exports.handler = async (event) => {
   }
 
   try {
-    const { trackId, source } = JSON.parse(event.body || '{}');
+    const { trackId, source, visitorHash, userAgent } = JSON.parse(event.body || '{}');
+
+    // A partner site that calls this from its own server (the Plugin Gallery
+    // does) sends the visitor's hashed address with the shared key, because
+    // the address seen here would be the partner's server for every visitor.
+    const partnerKey = process.env.PARTNER_PLAY_KEY || '';
+    const sentKey = event.headers['x-partner-key'] || '';
+    const trusted = partnerKey.length > 0 && sentKey.length === partnerKey.length &&
+      crypto.timingSafeEqual(Buffer.from(sentKey), Buffer.from(partnerKey));
     if (!trackId) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'trackId required' }) };
     }
@@ -57,9 +65,14 @@ exports.handler = async (event) => {
       return { statusCode: 404, headers, body: JSON.stringify({ error: 'Track not found' }) };
     }
 
-    const ipHash = crypto.createHash('sha256')
-      .update(event.headers['x-forwarded-for'] || 'unknown')
-      .digest('hex').slice(0, 16);
+    const ipHash = trusted && /^[0-9a-f]{16}$/.test(visitorHash || '')
+      ? visitorHash
+      : crypto.createHash('sha256')
+          .update(event.headers['x-forwarded-for'] || 'unknown')
+          .digest('hex').slice(0, 16);
+    const ua = trusted && typeof userAgent === 'string'
+      ? userAgent.slice(0, 200)
+      : (event.headers['user-agent']?.slice(0, 200) || '');
 
     // Light dedupe — the same visitor replaying/re-clicking the same track
     // within the window doesn't count again
@@ -70,6 +83,7 @@ exports.handler = async (event) => {
       .eq('track_id', trackId)
       .eq('ip_hash', ipHash)
       .gte('created_at', windowStart)
+      .limit(1)
       .maybeSingle();
 
     if (recent) {
@@ -80,7 +94,7 @@ exports.handler = async (event) => {
       track_id:   trackId,
       source:     source || 'plugin_gallery',
       ip_hash:    ipHash,
-      user_agent: event.headers['user-agent']?.slice(0, 200) || '',
+      user_agent: ua,
     });
 
     await supabase.rpc('increment_external_play', { p_track_id: trackId });

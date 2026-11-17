@@ -117,9 +117,14 @@ const CustomTooltip = ({ active, payload, label }) => {
 // A labelled breakdown with a share bar. Percentages are of the rows shown,
 // not of all plays: groups under the suppression floor are absent, so a
 // total taken from these rows is the only honest denominator.
+// Rows that carry listeners (people) are measured by people, with their plays
+// shown beside them, so a city is never read as having more people than the
+// platform has.
 function DemoList({ title, icon: Icon, rows, sub }) {
   const list = rows || [];
-  const total = list.reduce((s, r) => s + (r.plays || r.listeners || 0), 0);
+  const byPeople = list.some(r => r.listeners != null);
+  const valueOf = (r) => (byPeople ? (r.listeners || 0) : (r.plays || 0));
+  const total = list.reduce((s, r) => s + valueOf(r), 0);
   return (
     <div className="rounded-2xl p-4 bg-white/[0.02] border border-white/[0.05]">
       <SectionTitle icon={Icon} title={title} color="text-purple-400" />
@@ -129,7 +134,7 @@ function DemoList({ title, icon: Icon, rows, sub }) {
       ) : (
         <div className="space-y-2.5">
           {list.slice(0, 10).map((r, i) => {
-            const v = r.plays || r.listeners || 0;
+            const v = valueOf(r);
             const pct = total > 0 ? Math.round((v / total) * 100) : 0;
             return (
               <div key={i}>
@@ -138,7 +143,11 @@ function DemoList({ title, icon: Icon, rows, sub }) {
                     {r.name || 'Unknown'}
                     {r.country && <span className="text-white/30 text-xs ml-1.5">{r.country}</span>}
                   </p>
-                  <p className="text-xs text-white/40 flex-shrink-0 ml-3">{v} · {pct}%</p>
+                  <p className="text-xs text-white/40 flex-shrink-0 ml-3">
+                    {byPeople
+                      ? <>{v} {v === 1 ? 'listener' : 'listeners'}{r.plays != null && <span className="text-white/25"> · {r.plays} plays</span>} · {pct}%</>
+                      : <>{v} plays · {pct}%</>}
+                  </p>
                 </div>
                 <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                   <div className="h-full rounded-full bg-purple-500/70" style={{ width: `${pct}%` }} />
@@ -1514,8 +1523,8 @@ export default function AdminAnalytics({ embedded = false }) {
                   )}
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-                    <DemoList title="Countries" icon={MapPin} rows={demo.by_country} />
-                    <DemoList title="Cities" icon={MapPin} rows={demo.by_city} sub="Small groups hidden to protect listeners" />
+                    <DemoList title="Countries" icon={MapPin} rows={demo.by_country} sub="Listeners in the period, where they listened from" />
+                    <DemoList title="Cities" icon={MapPin} rows={demo.by_city} sub="Listeners in the period. Places with fewer than 3 are hidden to protect them" />
                     <DemoList title="Genres played" icon={Music} rows={demo.by_genre} />
                     <DemoList title="Moods played" icon={Music} rows={demo.by_mood} />
                     <DemoList title="Platform" icon={Monitor} rows={demo.by_platform} />
