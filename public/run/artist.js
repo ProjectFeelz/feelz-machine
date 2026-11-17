@@ -152,6 +152,12 @@ async function openArtistRuns() {
 
 document.getElementById("artistRunsButton").addEventListener("click", openArtistRuns);
 
+// A link to one album mission (/run/?mission=m05, from the Feelz Games page) opens with it picked.
+{
+  const want = new URLSearchParams(location.search).get("mission");
+  if (want && /^m\d\d$/.test(want) && MISSION_DATA[want] && MISSIONS.some(mi => mi.id === want && mi.ready)) chooseMission(want);
+}
+
 // Show the button only when there's something to play, and open a shared link (/run/?level=<id>) straight away.
 (async () => {
   if (!Backend.online) return;

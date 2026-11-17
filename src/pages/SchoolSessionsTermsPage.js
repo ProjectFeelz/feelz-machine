@@ -5,7 +5,7 @@ import useGoBack from '../hooks/useGoBack';
 import { ArrowLeft } from 'lucide-react';
 
 const COMPANY      = 'Feelz Machine';
-const CONTACT      = 'legal@feelzmachine.com';
+const CONTACT      = 'legal@projectfeelz.com';
 const LAST_UPDATED = 'November 2026';
 const BASE_URL     = 'https://www.feelzmachine.com';
 

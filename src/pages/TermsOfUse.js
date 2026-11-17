@@ -5,7 +5,7 @@ import useGoBack from '../hooks/useGoBack';
 import { ArrowLeft } from 'lucide-react';
 
 const COMPANY     = 'Feelz Machine';
-const CONTACT     = 'legal@feelzmachine.com';
+const CONTACT     = 'legal@projectfeelz.com';
 const LAST_UPDATED = 'November 2026';
 
 function Section({ title, children }) {
@@ -51,7 +51,7 @@ export default function TermsOfUse() {
         <p className="text-xs text-white/30 mb-8">Last updated: {LAST_UPDATED}</p>
 
         <Section title="1. About These Terms">
-          <p>These Terms of Use govern your access to and use of {COMPANY} ("we", "us", "our", "the Platform"), a music streaming and distribution platform. By creating an account or using the Platform in any way, you agree to these terms in full. If you do not agree, do not use the Platform.</p>
+          <p>These Terms of Use govern your access to and use of {COMPANY} ("we", "us", "our", "the Platform"), a music streaming and distribution platform and an app of Project Feelz, based in South Africa. By creating an account or using the Platform in any way, you agree to these terms in full. If you do not agree, do not use the Platform.</p>
           <p>We may update these Terms from time to time. Continued use of the Platform after changes are posted constitutes acceptance of the updated Terms.</p>
         </Section>
 
@@ -186,7 +186,7 @@ export default function TermsOfUse() {
         </Section>
 
         <Section title="20. Governing Law">
-          <p>These Terms are governed by applicable law. Disputes will be resolved through good faith negotiation where possible. If you are a consumer, nothing in these Terms affects your statutory rights under applicable consumer protection legislation.</p>
+          <p>These Terms are governed by the laws of the Republic of South Africa. Disputes will be resolved through good faith negotiation where possible, and otherwise by the South African courts. If you are a consumer, nothing in these Terms affects your rights under the Consumer Protection Act, the Electronic Communications and Transactions Act, or any other consumer protection law that applies to you where you live.</p>
         </Section>
 
         <Section title="21. Contact">

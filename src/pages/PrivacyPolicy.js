@@ -5,7 +5,7 @@ import useGoBack from '../hooks/useGoBack';
 import { ArrowLeft } from 'lucide-react';
 
 const COMPANY      = 'Feelz Machine';
-const CONTACT      = 'privacy@feelzmachine.com';
+const CONTACT      = 'privacy@projectfeelz.com';
 const LAST_UPDATED = 'November 2026';
 
 function Section({ title, children }) {
@@ -31,14 +31,14 @@ export default function PrivacyPolicy() {
           dropping the page: "Alternate page with proper canonical tag". */}
       <Helmet>
         <title>Privacy Policy · Feelz Machine</title>
-        <meta name="description" content="What Feelz Machine collects, why, and how to get it removed. Contact privacy@feelzmachine.com." />
+        <meta name="description" content="What Feelz Machine collects, why, and how to get it removed. Contact privacy@projectfeelz.com." />
         <link rel="canonical" href="https://www.feelzmachine.com/privacy-policy" />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://www.feelzmachine.com/privacy-policy" />
         <meta property="og:title" content="Privacy Policy · Feelz Machine" />
-        <meta property="og:description" content="What Feelz Machine collects, why, and how to get it removed. Contact privacy@feelzmachine.com." />
+        <meta property="og:description" content="What Feelz Machine collects, why, and how to get it removed. Contact privacy@projectfeelz.com." />
         <meta name="twitter:title" content="Privacy Policy · Feelz Machine" />
-        <meta name="twitter:description" content="What Feelz Machine collects, why, and how to get it removed. Contact privacy@feelzmachine.com." />
+        <meta name="twitter:description" content="What Feelz Machine collects, why, and how to get it removed. Contact privacy@projectfeelz.com." />
       </Helmet>
       <div className="sticky top-0 z-10 bg-black/95 backdrop-blur-xl border-b border-white/[0.05] px-4 py-4 flex items-center space-x-3">
         <button onClick={() => goBack()} className="p-1.5 hover:bg-white/[0.06] rounded-lg transition">
@@ -51,8 +51,8 @@ export default function PrivacyPolicy() {
         <p className="text-xs text-white/30 mb-8">Last updated: {LAST_UPDATED}</p>
 
         <Section title="1. Who We Are">
-          <p>{COMPANY} is a music streaming and distribution platform. This Privacy Policy explains how we collect, use, and protect your personal data when you use our service at feelzmachine.com.</p>
-          <p>For privacy-related questions or requests, contact us at <strong className="text-white/70">{CONTACT}</strong>.</p>
+          <p>{COMPANY} is a music streaming and distribution platform and an app of Project Feelz, based in South Africa. Project Feelz is responsible for your personal data under the Protection of Personal Information Act (POPIA). This Privacy Policy explains how we collect, use, and protect your personal data when you use our service at feelzmachine.com.</p>
+          <p>For privacy-related questions or requests, or to reach our Information Officer, contact us at <strong className="text-white/70">{CONTACT}</strong>.</p>
         </Section>
 
         <Section title="2. Data We Collect">
@@ -125,6 +125,7 @@ export default function PrivacyPolicy() {
         <Section title="10. Your Rights">
           <p>Depending on your location, you may have the right to: access the personal data we hold about you; request correction of inaccurate data; request deletion of your data; object to or restrict certain processing; and receive your data in a portable format.</p>
           <p>To exercise any of these rights, contact us at <strong className="text-white/70">{CONTACT}</strong>. We will respond within 30 days. We may need to verify your identity before processing your request.</p>
+          <p>If you are not happy with how we handle your data or a request, you can complain to the Information Regulator of South Africa at <strong className="text-white/70">inforegulator.org.za</strong>.</p>
           <p><strong className="text-white/70">Objecting to marketing specifically:</strong> You do not need to contact us and you do not need to give a reason. Use the unsubscribe link in any marketing email (it works without a password and takes effect immediately), or open Email Preferences in your Hub, where you can stop Platform emails, or stop a single artist, without stopping the rest. Objecting to marketing does not close your account and does not stop receipts, payout notices or security alerts, which are not marketing.</p>
           <p>You may delete your account and all associated data at any time from your profile settings.</p>
         </Section>
