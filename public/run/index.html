@@ -356,29 +356,52 @@
 
   <audio id="songAudio" preload="auto"></audio>
   <script src="vendor/supabase-2.45.4/supabase.js"></script>
-  <script src="config.js"></script>
-  <script src="backend.js"></script>
-  <script src="missions/m01-against-the-storm.js"></script>
-  <script src="missions/m02-get-out-the-way.js"></script>
-  <script src="missions/m03-ghetto-gospel.js"></script>
-  <script src="missions/m04-blessings.js"></script>
-  <script src="missions/m05-chemistry.js"></script>
-  <script src="missions/m06-god-is-my-woman.js"></script>
-  <script src="missions/m07-close-to-my-heart.js"></script>
-  <script src="missions/m08-patience.js"></script>
-  <script src="missions/m09-heads-up.js"></script>
-  <script src="missions/m10-i-pray.js"></script>
-  <script src="missions/m11-letting-off-steam.js"></script>
-  <script src="missions/m12-my-brothers.js"></script>
-  <script src="missions/m13-roses-butterflies.js"></script>
-  <script src="missions/m14-shine-olive-gem.js"></script>
-  <script src="missions/m15-thug-in-love.js"></script>
-  <script src="engine.js"></script>
-  <script src="render.js"></script>
-  <script src="systems.js"></script>
-  <script src="ui.js"></script>
-  <script src="artist.js"></script>
-  <script src="coop.js"></script>
+  <!-- The Feelz Engine (engine/) and the game built on it (games/feelz-run/). See engine/README.md. -->
+  <script src="games/feelz-run/config.js"></script>
+  <script src="engine/backend.js"></script>
+  <script src="games/feelz-run/missions/m01-against-the-storm.js"></script>
+  <script src="games/feelz-run/missions/m02-get-out-the-way.js"></script>
+  <script src="games/feelz-run/missions/m03-ghetto-gospel.js"></script>
+  <script src="games/feelz-run/missions/m04-blessings.js"></script>
+  <script src="games/feelz-run/missions/m05-chemistry.js"></script>
+  <script src="games/feelz-run/missions/m06-god-is-my-woman.js"></script>
+  <script src="games/feelz-run/missions/m07-close-to-my-heart.js"></script>
+  <script src="games/feelz-run/missions/m08-patience.js"></script>
+  <script src="games/feelz-run/missions/m09-heads-up.js"></script>
+  <script src="games/feelz-run/missions/m10-i-pray.js"></script>
+  <script src="games/feelz-run/missions/m11-letting-off-steam.js"></script>
+  <script src="games/feelz-run/missions/m12-my-brothers.js"></script>
+  <script src="games/feelz-run/missions/m13-roses-butterflies.js"></script>
+  <script src="games/feelz-run/missions/m14-shine-olive-gem.js"></script>
+  <script src="games/feelz-run/missions/m15-thug-in-love.js"></script>
+  <script src="engine/core.js"></script>
+  <script src="games/feelz-run/tuning.js"></script>
+  <script src="engine/assets.js"></script>
+  <script src="games/feelz-run/art.js"></script>
+  <script src="games/feelz-run/state.js"></script>
+  <script src="games/feelz-run/level.js"></script>
+  <script src="engine/audio.js"></script>
+  <script src="engine/input.js"></script>
+  <script src="engine/physics.js"></script>
+  <script src="games/feelz-run/enemies.js"></script>
+  <script src="games/feelz-run/rules.js"></script>
+  <script src="engine/camera.js"></script>
+  <script src="engine/inward.js"></script>
+  <script src="engine/inward3d.js"></script>
+  <script src="engine/fx.js"></script>
+  <script src="games/feelz-run/update.js"></script>
+  <script src="engine/sprites.js"></script>
+  <script src="engine/hud.js"></script>
+  <script src="games/feelz-run/world.js"></script>
+  <script src="games/feelz-run/characters.js"></script>
+  <script src="games/feelz-run/frame.js"></script>
+  <script src="games/feelz-run/journal.js"></script>
+  <script src="games/feelz-run/systems.js"></script>
+  <script src="games/feelz-run/ui.js"></script>
+  <script src="engine/shell.js"></script>
+  <script src="games/feelz-run/artist.js"></script>
+  <script src="engine/net.js"></script>
+  <script src="games/feelz-run/boot.js"></script>
   <script>if ("serviceWorker" in navigator && location.protocol === "https:" && !/feelzmachine\.com$/.test(location.hostname)) navigator.serviceWorker.register("sw.js").catch(() => {});</script>
 </body>
 </html>

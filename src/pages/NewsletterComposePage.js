@@ -48,10 +48,10 @@ const AUDIENCE = {
   },
 };
 
-// Newsletters go out in-app only for now. Email to lists costs more than it is
-// worth at this size, so the "Email this" button is switched off for everyone.
-// Set to true to bring it back; nothing else needs to change.
-const EMAIL_NEWSLETTERS = false;
+// "Email this" on a sent post: shown to admins and to anyone in newsletter_senders.
+// Sending is always two clicks (a dry run that counts recipients, then Send now).
+// Set to false to hide it for everyone again; nothing else needs to change.
+const EMAIL_NEWSLETTERS = true;
 
 // "Tue 22 Sep, 09:00" in the viewer's own time zone.
 const fmtWhen = (iso) => iso
