@@ -23,8 +23,9 @@ import { assignPlaybackSrc } from '../utils/offlineStore';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Play, Pause, SkipForward, X, Users, Music, Radio,
-  Plus, Search, Loader, Send, Gift,
-  ChevronDown, Star, Trash2, BarChart2
+  Plus, Search, Loader, Send,
+  ChevronDown, Star, Trash2, BarChart2,
+  Pin, Shield, Ban, Clock, AtSign, Check, ArrowDown, Timer
 } from 'lucide-react';
 
 const YOUTUBE_REGEX = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
@@ -121,13 +122,15 @@ function nameColour(name) {
   return NAME_COLOURS[h % NAME_COLOURS.length];
 }
 
-function ChatMessage({ msg, hostUserId }) {
+function ChatMessage({ msg, hostUserId, isModUser, myName, onTap }) {
   const colour = nameColour(msg.name);
   const isHostMsg = hostUserId && msg.user_id === hostUserId;
+  const mentionsMe = !!myName && (msg.content || '').toLowerCase().includes('@' + myName.toLowerCase().replace(/\s+/g, ''));
 
   if (msg.is_tip) {
     return (
-      <div className="mx-3 my-1.5 p-3 rounded-2xl bg-gradient-to-r from-amber-400/20 via-pink-500/15 to-violet-500/20 border border-amber-300/30">
+      <button type="button" onClick={() => onTap && onTap(msg)}
+        className="block w-[calc(100%-1.5rem)] text-left mx-3 my-1.5 p-3 rounded-2xl bg-gradient-to-r from-amber-400/20 via-pink-500/15 to-violet-500/20 border border-amber-300/30">
         <div className="flex items-center gap-2">
           <span className="px-2 py-0.5 rounded-md bg-amber-400 text-black text-[11px] font-black">
             ${Number(msg.tip_amount || 0).toFixed(Number(msg.tip_amount) % 1 ? 2 : 0)} TIP
@@ -135,12 +138,13 @@ function ChatMessage({ msg, hostUserId }) {
           <span className="text-xs font-black truncate" style={{ color: colour }}>{msg.name || 'Listener'}</span>
         </div>
         {msg.content && <p className="text-sm text-white mt-1.5 leading-snug break-words">{msg.content}</p>}
-      </div>
+      </button>
     );
   }
 
   return (
-    <div className="flex items-start gap-2.5 px-4 py-1.5">
+    <button type="button" onClick={() => onTap && onTap(msg)}
+      className={`w-full text-left flex items-start gap-2.5 px-4 py-1.5 transition hover:bg-white/[0.03] ${mentionsMe ? 'bg-pink-500/10 border-l-2 border-pink-400' : ''}`}>
       <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden mt-0.5" style={{ background: colour }}>
         {msg.avatar
           ? <img src={msg.avatar} alt="" className="w-full h-full object-cover" />
@@ -152,9 +156,69 @@ function ChatMessage({ msg, hostUserId }) {
         <p className="text-sm leading-snug break-words">
           <span className="font-black mr-1.5" style={{ color: colour }}>{msg.name || 'Listener'}</span>
           {isHostMsg && <span className="mr-1.5 px-1.5 py-px rounded bg-gradient-to-r from-pink-500 to-violet-500 text-[9px] font-black tracking-wider align-middle">HOST</span>}
+          {!isHostMsg && isModUser && <span className="mr-1.5 px-1.5 py-px rounded bg-emerald-400 text-black text-[9px] font-black tracking-wider align-middle">MOD</span>}
           <span className="text-white/85">{msg.content}</span>
         </p>
         <span className="text-[10px] text-white/25">{timeAgo(msg.created_at)}</span>
+      </div>
+    </button>
+  );
+}
+
+// What you can do with a message. Everyone can mention or remove their own;
+// moderators can pin, remove, time out and ban; the host can also make
+// someone a moderator.
+function MessageSheet({ msg, me, isMod, isHost, hostUserId, isModUser, onClose, actions }) {
+  if (!msg) return null;
+  const mine = msg.user_id === me;
+  const targetIsHost = msg.user_id === hostUserId;
+  const row = 'w-full flex items-center gap-3 px-4 py-3.5 text-sm font-semibold text-left hover:bg-white/[0.05] transition';
+  const go = (fn) => async () => { onClose(); await fn(); };
+  return (
+    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl bg-[#121018] border border-white/[0.08] overflow-hidden pb-safe"
+        onClick={e => e.stopPropagation()}>
+        <div className="px-4 pt-4 pb-3 border-b border-white/[0.06]">
+          <p className="text-xs font-black" style={{ color: nameColour(msg.name) }}>{msg.name || 'Listener'}</p>
+          {msg.content && <p className="text-sm text-white/70 mt-1 line-clamp-3 break-words">{msg.content}</p>}
+        </div>
+        {!mine && msg.name && (
+          <button className={row} onClick={go(() => actions.mention(msg))}>
+            <AtSign className="w-4 h-4 text-white/50" /> Mention {msg.name}
+          </button>
+        )}
+        {isMod && !msg.is_tip && (
+          <button className={row} onClick={go(() => actions.pin(msg))}>
+            <Pin className="w-4 h-4 text-amber-300" /> Pin to the top of chat
+          </button>
+        )}
+        {(mine || isMod) && (
+          <button className={row} onClick={go(() => actions.remove(msg))}>
+            <Trash2 className="w-4 h-4 text-red-400" /> Remove message
+          </button>
+        )}
+        {isMod && !mine && !targetIsHost && (!isModUser || isHost) && (
+          <>
+            <button className={row} onClick={go(() => actions.ban(msg, 5))}>
+              <Clock className="w-4 h-4 text-white/50" /> Time out for 5 minutes
+            </button>
+            <button className={row} onClick={go(() => actions.ban(msg, null))}>
+              <Ban className="w-4 h-4 text-red-400" /> Remove from chat for this stream
+            </button>
+          </>
+        )}
+        {isHost && !mine && !targetIsHost && (
+          isModUser ? (
+            <button className={row} onClick={go(() => actions.unmod(msg))}>
+              <Shield className="w-4 h-4 text-white/50" /> Remove as moderator
+            </button>
+          ) : (
+            <button className={row} onClick={go(() => actions.mod(msg))}>
+              <Shield className="w-4 h-4 text-emerald-400" /> Make moderator
+            </button>
+          )
+        )}
+        <button className={`${row} justify-center text-white/50 border-t border-white/[0.06]`} onClick={onClose}>Cancel</button>
       </div>
     </div>
   );
@@ -411,70 +475,74 @@ const REVIEW_OPTIONS = [
   { id: 'skip',  text: '❌ Skip',  emoji: '❌' },
 ];
 
-function SessionPollCard({ poll, userId, onVote }) {
+function SessionPollCard({ poll, userId, onVote, canEnd, onEnd }) {
   const expired    = new Date(poll.expires_at) < new Date();
   const totalVotes = (poll.options || []).reduce((s, o) => s + (o.votes || 0), 0);
   const myVote     = poll.my_vote;
   const showResults = !!myVote || expired;
   const isReview   = poll.poll_type === 'track_review';
+  const top = Math.max(0, ...(poll.options || []).map(o => o.votes || 0));
 
   return (
-    <div className="mx-2 my-2 p-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
-      <div className="flex items-center space-x-1.5 mb-2">
-        <BarChart2 className="w-3.5 h-3.5 text-purple-400" />
-        <span className="text-[10px] font-semibold text-purple-400 uppercase tracking-wide">
-          {isReview ? 'Track Review' : 'Poll'}
+    <div className="m-2 p-3.5 rounded-2xl bg-gradient-to-br from-violet-500/[0.12] via-white/[0.03] to-pink-500/[0.08] border border-violet-400/20">
+      <div className="flex items-center gap-1.5 mb-2">
+        <BarChart2 className="w-3.5 h-3.5 text-violet-300" />
+        <span className="text-[10px] font-black text-violet-200 uppercase tracking-[0.2em]">
+          {isReview ? 'Rate this track' : 'Poll'}
         </span>
-        <span className="text-[10px] text-white/20 ml-auto">
-          {expired ? 'Ended' : 'Live'}
+        <span className={`ml-auto text-[10px] font-black px-1.5 py-0.5 rounded ${expired ? 'bg-white/10 text-white/50' : 'bg-red-500 text-white'}`}>
+          {expired ? 'ENDED' : 'LIVE'}
         </span>
       </div>
 
-      {/* Track info for review polls */}
       {isReview && poll.track_title && (
-        <div className="flex items-center space-x-2 mb-2 p-2 rounded-lg bg-white/[0.03] border border-white/[0.04]">
-          <Music className="w-3.5 h-3.5 text-white/30 flex-shrink-0" />
+        <div className="flex items-center gap-2 mb-2 p-2 rounded-xl bg-black/30">
+          <Music className="w-3.5 h-3.5 text-white/40 flex-shrink-0" />
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-white truncate">{poll.track_title}</p>
-            {poll.track_artist && <p className="text-[10px] text-white/30 truncate">{poll.track_artist}</p>}
+            <p className="text-xs font-bold text-white truncate">{poll.track_title}</p>
+            {poll.track_artist && <p className="text-[10px] text-white/40 truncate">{poll.track_artist}</p>}
           </div>
         </div>
       )}
 
-      <p className="text-sm font-medium text-white mb-3">{poll.question}</p>
+      <p className="text-sm font-bold text-white mb-3">{poll.question}</p>
 
-      {/* Not logged in — gate */}
       {!userId ? (
-        <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-center">
-          <p className="text-xs font-semibold text-purple-300 mb-1">Sign in to vote</p>
-          <p className="text-[10px] text-white/30">Create a free account to rate tracks and join the session</p>
-        </div>
+        <p className="text-xs text-violet-200/80 text-center py-2">Sign in to vote</p>
       ) : (
         <div className="space-y-2">
           {(poll.options || []).map(opt => {
             const pct = totalVotes > 0 ? Math.round((opt.votes || 0) / totalVotes * 100) : 0;
             const isMyChoice = myVote === opt.id;
+            const leading = showResults && top > 0 && (opt.votes || 0) === top;
             return (
               <button key={opt.id} disabled={!!myVote || expired}
                 onClick={() => !myVote && !expired && onVote(poll.id, opt.id)}
-                className="w-full text-left relative overflow-hidden rounded-lg transition active:scale-[0.98]">
-                <div className="relative z-10 flex items-center justify-between px-3 py-2.5">
-                  <span className={`text-sm ${isMyChoice ? 'text-purple-300 font-semibold' : 'text-white/70'}`}>
-                    {opt.text}
-                  </span>
-                  {showResults && <span className="text-xs font-bold text-white/50">{pct}%</span>}
-                </div>
+                className={`w-full text-left relative overflow-hidden rounded-xl transition active:scale-[0.98] border ${isMyChoice ? 'border-pink-400/60' : 'border-white/[0.06]'}`}>
                 {showResults && (
-                  <div className="absolute inset-0 rounded-lg transition-all duration-500"
-                    style={{ width: `${pct}%`, background: isMyChoice ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.04)' }} />
+                  <div className="absolute inset-y-0 left-0 transition-all duration-700 ease-out"
+                    style={{ width: `${pct}%`, background: leading ? 'linear-gradient(90deg, rgba(236,72,153,0.45), rgba(139,92,246,0.45))' : 'rgba(255,255,255,0.08)' }} />
                 )}
-                {!showResults && <div className="absolute inset-0 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] transition" />}
+                {!showResults && <div className="absolute inset-0 bg-white/[0.05] hover:bg-white/[0.1] transition" />}
+                <div className="relative flex items-center justify-between px-3 py-2.5">
+                  <span className={`text-sm ${isMyChoice ? 'font-black text-white' : 'text-white/85'}`}>
+                    {opt.text}{isMyChoice && <Check className="inline w-3.5 h-3.5 ml-1.5 text-pink-300" />}
+                  </span>
+                  {showResults && <span className="text-xs font-black text-white">{pct}%</span>}
+                </div>
               </button>
             );
           })}
         </div>
       )}
-      <p className="text-[10px] text-white/20 mt-2">{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</p>
+      <div className="flex items-center mt-2">
+        <p className="text-[10px] text-white/40">{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</p>
+        {canEnd && !expired && (
+          <button onClick={() => onEnd(poll)} className="ml-auto text-[10px] font-black text-white/60 hover:text-white px-2 py-1 rounded-lg bg-white/[0.06]">
+            End poll
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -656,7 +724,7 @@ export default function ListeningSessionPage() {
   // this page IS the first history entry, which is every shared link and
   // every tapped push notification. See src/hooks/useGoBack.js.
   const goBack = useGoBack('/browse');
-  const { user, artist } = useAuth();
+  const { user, artist, isAdmin } = useAuth();
 
   const [session, setSession]         = useState(null);
   const [queue, setQueue]             = useState([]);
@@ -682,7 +750,103 @@ export default function ListeningSessionPage() {
   const queueRef      = useRef([]);
 
   const isHost = artist && session?.artist_id === artist.id;
+  // Host status for realtime callbacks, which close over the first render.
+  const hostRef = useRef(false);
+  useEffect(() => { hostRef.current = !!isHost; }, [isHost]);
+
+  // ── Moderation ──────────────────────────────────────────────────────────
+  // Moderators belong to the artist (artist_moderators), so whoever the
+  // artist trusts carries over to every stream.
+  const [modIds, setModIds]       = useState(() => new Set());
+  const [modNames, setModNames]   = useState({});
+  const [myBan, setMyBan]         = useState(null);   // { until } or null
+  const [sheetMsg, setSheetMsg]   = useState(null);   // message the action sheet is for
+  const [showMods, setShowMods]   = useState(false);
+  const [notice, setNotice]       = useState('');
+  const [slowLeft, setSlowLeft]   = useState(0);
+  const isMod = !!user && (isHost || isAdmin || modIds.has(user.id));
+
+  const flash = useCallback((m) => { setNotice(m); setTimeout(() => setNotice(''), 3500); }, []);
+
+  const loadMods = useCallback(async (artistId) => {
+    if (!artistId) return;
+    const { data, error } = await supabase.from('artist_moderators').select('user_id').eq('artist_id', artistId);
+    if (error) return; // table not created yet: no moderators
+    const ids = (data || []).map(r => r.user_id);
+    setModIds(new Set(ids));
+    if (!ids.length) { setModNames({}); return; }
+    const [{ data: as }, { data: ls }] = await Promise.all([
+      supabase.from('artists').select('user_id, artist_name').in('user_id', ids),
+      supabase.from('listeners').select('user_id, display_name').in('user_id', ids),
+    ]);
+    const names = {};
+    (ls || []).forEach(l => { if (l.display_name) names[l.user_id] = l.display_name; });
+    (as || []).forEach(a => { if (a.artist_name) names[a.user_id] = a.artist_name; });
+    setModNames(names);
+  }, []);
+
+  const loadMyBan = useCallback(async () => {
+    if (!user?.id || !sessionId) return;
+    const { data, error } = await supabase.from('session_chat_bans')
+      .select('until').eq('session_id', sessionId).eq('user_id', user.id).maybeSingle();
+    if (error || !data) { setMyBan(null); return; }
+    if (data.until && new Date(data.until) <= new Date()) { setMyBan(null); return; }
+    setMyBan(data);
+  }, [user?.id, sessionId]);
+  useEffect(() => { loadMyBan(); }, [loadMyBan]);
+
+  // A timeout lifts on its own.
+  useEffect(() => {
+    if (!myBan?.until) return undefined;
+    const ms = new Date(myBan.until) - Date.now();
+    const t = setTimeout(() => setMyBan(null), Math.max(ms, 0) + 500);
+    return () => clearTimeout(t);
+  }, [myBan]);
+
+  // Slow mode countdown after you send.
+  useEffect(() => {
+    if (slowLeft <= 0) return undefined;
+    const t = setTimeout(() => setSlowLeft(v => v - 1), 1000);
+    return () => clearTimeout(t);
+  }, [slowLeft]);
+
+  const modAction = async (fn, args, ok) => {
+    const { error } = await supabase.rpc(fn, args);
+    if (error) { flash(error.message.includes('not allowed') ? 'Only the host and moderators can do that.' : error.message); return false; }
+    if (ok) flash(ok);
+    return true;
+  };
+
+  const pinMessage = (m) => modAction('session_pin', { p_session: sessionId, p_message: m ? m.id : null }, m ? 'Pinned to the top of chat' : 'Unpinned');
+  const setSlowMode = (secs) => modAction('session_set_slow_mode', { p_session: sessionId, p_seconds: secs }, secs ? `Slow mode on: one message every ${secs}s` : 'Slow mode off');
+  const banUser = (m, minutes) => modAction('session_ban', { p_session: sessionId, p_user: m.user_id, p_minutes: minutes },
+    minutes ? `${m.name || 'They'} can't chat for ${minutes} minutes` : `${m.name || 'They'} can't chat for the rest of the stream`);
+  const deleteMessage = async (m) => {
+    const { error } = await supabase.from('session_messages').delete().eq('id', m.id);
+    if (error) { flash('That message could not be removed.'); return; }
+    setMessages(prev => prev.filter(x => x.id !== m.id));
+  };
+  const makeMod = async (m) => {
+    const { error } = await supabase.from('artist_moderators').insert({ artist_id: session.artist_id, user_id: m.user_id, added_by: user.id });
+    if (error && error.code !== '23505') { flash('Could not add that moderator.'); return; }
+    flash(`${m.name || 'They'} is now a moderator`);
+    loadMods(session.artist_id);
+  };
+  const removeMod = async (userId, name) => {
+    const { error } = await supabase.from('artist_moderators').delete().eq('artist_id', session.artist_id).eq('user_id', userId);
+    if (error) { flash('Could not remove that moderator.'); return; }
+    flash(`${name || 'They'} is no longer a moderator`);
+    loadMods(session.artist_id);
+  };
+  const mention = (m) => {
+    if (!m?.name) return;
+    setChatInput(v => (v ? v.replace(/\s*$/, ' ') : '') + '@' + m.name.replace(/\s+/g, '') + ' ');
+  };
+
   const [polls, setPolls]           = useState([]);
+  const [pollFolded, setPollFolded] = useState(null);
+  const firstPollId = polls[0]?.id;
+  useEffect(() => { setPollFolded(null); }, [firstPollId]); // a new poll opens itself
   const [showPollModal, setShowPollModal]   = useState(false);
   const [myVotes, setMyVotes]               = useState({});
   const [showSubmitModal, setShowSubmitModal] = useState(false);
@@ -736,20 +900,21 @@ export default function ListeningSessionPage() {
         filter: `id=eq.${sessionId}`,
       }, (payload) => {
         setSession(prev => ({ ...prev, ...payload.new }));
-        // Use !artist (not !isHost) — isHost closes over stale session state
-        // during the initial render before session loads
-        if (!artist && payload.new.mode === 'audio') {
+        // The host drives playback; everyone else, artists included, follows.
+        const amHost = !!artist && payload.new.artist_id === artist.id;
+        if (!amHost && payload.new.mode === 'audio') {
           syncAudio(payload.new);
         }
         if (payload.new.status === 'ended') {
-          navigate('/');
+          audioRef.current.pause();
         }
       })
       .subscribe();
 
-    // Periodic re-sync every 10s for listeners — prevents gradual drift
-    if (!artist) {
+    // Periodic re-sync every 10s for everyone but the host, to stop drift.
+    {
       syncTimerRef.current = setInterval(async () => {
+        if (hostRef.current) return;
         const { data: latest } = await supabase
           .from('listening_sessions')
           .select('is_playing, playback_pos, started_at, current_track_id, mode')
@@ -779,7 +944,8 @@ export default function ListeningSessionPage() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'session_poll_votes' },
         (payload) => {
           // Increment vote count locally for immediate feedback
-          const { poll_id, option_id } = payload.new;
+          const { poll_id, option_id, user_id: voter } = payload.new;
+          if (voter && voter === user?.id) return; // already counted locally
           setPolls(prev => prev.map(p => p.id === poll_id
             ? { ...p, options: p.options.map(o => o.id === option_id ? { ...o, votes: (o.votes || 0) + 1 } : o) }
             : p
@@ -792,7 +958,16 @@ export default function ListeningSessionPage() {
         event: 'INSERT', schema: 'public', table: 'session_messages',
         filter: `session_id=eq.${sessionId}`,
       }, (payload) => {
-        setMessages(prev => [...prev, payload.new]);
+        setMessages(prev => prev.some(m => m.id === payload.new.id) ? prev : [...prev, payload.new]);
+      })
+      .on('postgres_changes', {
+        event: 'DELETE', schema: 'public', table: 'session_messages',
+        filter: `session_id=eq.${sessionId}`,
+      }, (payload) => {
+        const gone = payload.old?.id;
+        if (gone) setMessages(prev => prev.filter(m => m.id !== gone));
+        // Removed by a moderator: check whether that means me.
+        if (payload.old?.user_id && payload.old.user_id === user?.id) loadMyBan();
       })
       .subscribe();
 
@@ -814,6 +989,16 @@ export default function ListeningSessionPage() {
       .eq('session_id', sessionId)
       .order('created_at', { ascending: false });
     if (!data) return;
+
+    // Count the votes. The options column only holds the choices.
+    const ids = data.map(p => p.id);
+    if (ids.length) {
+      const { data: allVotes } = await supabase.from('session_poll_votes')
+        .select('poll_id, option_id').in('poll_id', ids);
+      const tally = {};
+      (allVotes || []).forEach(v => { tally[v.poll_id + ':' + v.option_id] = (tally[v.poll_id + ':' + v.option_id] || 0) + 1; });
+      data.forEach(p => { p.options = (p.options || []).map(o => ({ ...o, votes: tally[p.id + ':' + o.id] || 0 })); });
+    }
 
     // Fetch my votes if logged in
     if (user?.id) {
@@ -846,8 +1031,28 @@ export default function ListeningSessionPage() {
 
 
 
-  useEffect(() => {
+  // Follow the chat while you are at the bottom. Scroll up to read and it
+  // stays put, with a button to jump back down.
+  const chatScrollRef = useRef(null);
+  const atBottomRef   = useRef(true);
+  const [unseen, setUnseen] = useState(0);
+  const onChatScroll = () => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (atBottomRef.current) setUnseen(0);
+  };
+  const jumpToLatest = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    atBottomRef.current = true;
+    setUnseen(0);
+  };
+  const lastCountRef = useRef(0);
+  useEffect(() => {
+    const added = messages.length - lastCountRef.current;
+    lastCountRef.current = messages.length;
+    if (atBottomRef.current) chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    else if (added > 0) setUnseen(n => n + added);
   }, [messages]);
 
   const loadSession = async () => {
@@ -856,6 +1061,8 @@ export default function ListeningSessionPage() {
       .eq('id', sessionId).maybeSingle();
     if (!s || s.status === 'ended') { navigate('/'); return; }
     setSession(s);
+    loadMods(s.artist_id);
+    const amHost = !!artist && s.artist_id === artist.id;
 
     const { data: q } = await supabase
       .from('listening_session_queue')
@@ -868,7 +1075,7 @@ export default function ListeningSessionPage() {
 
     // If host session has queued tracks but no current track set, auto-select the first one
     let activeSession = s;
-    if (artist && loadedQueue.length > 0 && !s.current_track_id) {
+    if (amHost && loadedQueue.length > 0 && !s.current_track_id) {
       const firstTrackId = loadedQueue[0].track_id;
       await supabase
         .from('listening_sessions')
@@ -879,7 +1086,7 @@ export default function ListeningSessionPage() {
     }
 
     // Sync audio for listeners using the freshly-loaded queue (not stale state)
-    if (!artist && activeSession.mode === 'audio') syncAudio(activeSession, loadedQueue);
+    if (!amHost && activeSession.mode === 'audio') syncAudio(activeSession, loadedQueue);
   };
 
   const loadMessages = async () => {
@@ -1028,17 +1235,14 @@ export default function ListeningSessionPage() {
   };
 
   // ── Chat ────────────────────────────────────────────────────────────────────
-  const [tipChatAmount, setTipChatAmount] = useState('');
-  const [showTipChat,   setShowTipChat]   = useState(false);
-
   const sendMessage = async (e, isTip = false, tipAmt = null) => {
     e?.preventDefault();
     if (!isTip && !chatInput.trim()) return;
-    if (!user || sending) return;
+    if (!user || sending || myBan || (slowLeft > 0 && !isMod)) return;
     setSending(true);
     const { data: profile } = await supabase.from('artists').select('artist_name, profile_image_url').eq('user_id', user.id).maybeSingle();
     const { data: listener } = !profile ? await supabase.from('listeners').select('display_name').eq('user_id', user.id).maybeSingle() : { data: null };
-    await supabase.from('session_messages').insert({
+    const { data: sent, error } = await supabase.from('session_messages').insert({
       session_id: sessionId,
       user_id:    user.id,
       content:    chatInput.trim(),
@@ -1046,21 +1250,29 @@ export default function ListeningSessionPage() {
       avatar:     profile?.profile_image_url || null,
       is_tip:     isTip,
       tip_amount: tipAmt,
-    });
-    setChatInput('');
-    setShowTipChat(false);
-    setTipChatAmount('');
+    }).select('*').single();
     setSending(false);
+    if (error) {
+      await loadMyBan();
+      flash(session?.slow_mode_seconds && !isMod
+        ? `Slow mode is on. One message every ${session.slow_mode_seconds} seconds.`
+        : "You can't send messages in this chat right now.");
+      return;
+    }
+    if (sent) setMessages(prev => prev.some(m => m.id === sent.id) ? prev : [...prev, sent]);
+    setChatInput('');
+    atBottomRef.current = true;
+    if (session?.slow_mode_seconds && !isMod) setSlowLeft(session.slow_mode_seconds);
   };
 
   // Called after PayPal tip completes — inject a tip message into chat
-  const onTipSent = async (amount) => {
+  const onTipSent = async (amount, tipMessage) => {
     const { data: profile } = await supabase.from('artists').select('artist_name, profile_image_url').eq('user_id', user.id).maybeSingle();
     const { data: listener } = !profile ? await supabase.from('listeners').select('display_name').eq('user_id', user.id).maybeSingle() : { data: null };
     await supabase.from('session_messages').insert({
       session_id: sessionId,
       user_id:    user.id,
-      content:    chatInput.trim() || '',
+      content:    (tipMessage || chatInput || '').trim(),
       name:       profile?.artist_name || listener?.display_name || 'Listener',
       avatar:     profile?.profile_image_url || null,
       is_tip:     true,
@@ -1068,6 +1280,22 @@ export default function ListeningSessionPage() {
     });
     setChatInput('');
   };
+
+  // How many reactions landed in the last few seconds, for the combo badge.
+  const [combo, setCombo] = useState(0);
+  const comboTimes = useRef([]);
+  const lastReactionId = reactions.length ? reactions[reactions.length - 1].id : 0;
+  useEffect(() => {
+    if (!lastReactionId) return undefined;
+    const now = Date.now();
+    comboTimes.current = [...comboTimes.current.filter(t => now - t < 4000), now];
+    setCombo(comboTimes.current.length);
+    const t = setTimeout(() => {
+      comboTimes.current = comboTimes.current.filter(x => Date.now() - x < 4000);
+      setCombo(comboTimes.current.length);
+    }, 4100);
+    return () => clearTimeout(t);
+  }, [lastReactionId]);
 
   const sendReaction = (emoji) => {
     const id   = ++reactionIdRef.current;
@@ -1095,7 +1323,43 @@ export default function ListeningSessionPage() {
   const host = session.artists || {};
   const isScheduled = session.status === 'scheduled';
   const isEnded = session.status === 'ended';
-  const floating = reactions.map(r => <FloatingReaction key={r.id} emoji={r.emoji} id={r.id} left={r.left} />);
+  const floating = (
+    <>
+      {reactions.map(r => <FloatingReaction key={r.id} emoji={r.emoji} id={r.id} left={r.left} />)}
+      {combo >= 5 && (
+        <div key={combo} className="fm-combo absolute right-3 bottom-16 px-3 py-1.5 rounded-full bg-gradient-to-r from-pink-500 to-amber-400 text-black text-sm font-black shadow-[0_0_30px_rgba(236,72,153,0.6)]">
+          x{combo} HYPE
+        </div>
+      )}
+    </>
+  );
+  const myName = (listeners.find(l => l.user_id === user?.id)?.name) || null;
+  const sheetActions = {
+    mention,
+    pin: (m) => pinMessage(m),
+    remove: (m) => deleteMessage(m),
+    ban: (m, mins) => banUser(m, mins),
+    mod: (m) => makeMod(m),
+    unmod: (m) => removeMod(m.user_id, m.name),
+  };
+  const endPoll = async (poll) => {
+    const { error } = await supabase.from('session_polls').update({ expires_at: new Date().toISOString() }).eq('id', poll.id);
+    if (error) flash('Could not end that poll.'); else loadPolls();
+  };
+  // Open until you vote, then folded, unless you open it again.
+  const mobilePollOpen = polls.length > 0 && (pollFolded === null ? !polls[0].my_vote && new Date(polls[0].expires_at) > new Date() : !pollFolded);
+  const SLOW_STEPS = [0, 5, 15, 30, 60];
+  const slowModeChips = (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <span className="text-[11px] font-bold text-white/50 inline-flex items-center gap-1"><Timer className="w-3.5 h-3.5" /> Slow mode</span>
+      {SLOW_STEPS.map(sec => (
+        <button key={sec} onClick={() => setSlowMode(sec)}
+          className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition ${(session.slow_mode_seconds || 0) === sec ? 'bg-white text-black' : 'bg-white/[0.06] text-white/60 hover:bg-white/[0.1]'}`}>
+          {sec ? `${sec}s` : 'Off'}
+        </button>
+      ))}
+    </div>
+  );
 
   // The strip across the top of the stage: who is live and how many watch.
   const stageTopBar = (
@@ -1149,7 +1413,18 @@ export default function ListeningSessionPage() {
         <div className="flex-shrink-0 lg:min-h-0 lg:overflow-y-auto no-scrollbar">
           <div className="relative pt-safe lg:pt-0">
             <div className="fm-stage-glow lg:rounded-3xl overflow-hidden">
-              {session.mode === 'youtube' && ytId ? (
+              {isEnded ? (
+                <div className="relative aspect-video overflow-hidden bg-black flex flex-col items-center justify-center text-center px-6">
+                  {host.profile_image_url && <img src={host.profile_image_url} alt="" className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-40" />}
+                  <p className="relative text-3xl font-black italic uppercase tracking-tight fm-gradient-text">That's a wrap</p>
+                  <p className="relative mt-2 text-sm text-white/60">{host.artist_name || 'The artist'} has ended the stream. Thanks for being here.</p>
+                  <div className="relative mt-4 flex gap-2">
+                    {host.slug && <button onClick={() => navigate(`/artist/${host.slug}`)} className="px-4 py-2 rounded-full bg-white text-black text-xs font-black">See their music</button>}
+                    <button onClick={() => navigate('/')} className="px-4 py-2 rounded-full bg-white/15 text-white text-xs font-black">Home</button>
+                  </div>
+                  <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent px-3 pt-3 pb-8 text-left">{stageTopBar}</div>
+                </div>
+              ) : session.mode === 'youtube' && ytId ? (
                 <LiveStage
                   videoId={ytId}
                   title={session.title}
@@ -1313,6 +1588,31 @@ export default function ListeningSessionPage() {
                 </button>
               </div>
 
+              {slowModeChips}
+
+              <div>
+                <button onClick={() => setShowMods(v => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-black/30 border border-white/[0.08] text-xs font-bold text-white/70 hover:bg-black/50 transition">
+                  <span className="inline-flex items-center gap-2"><Shield className="w-3.5 h-3.5 text-emerald-400" /> Moderators ({modIds.size})</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMods ? 'rotate-180' : ''}`} />
+                </button>
+                {showMods && (
+                  <div className="mt-2 p-3 rounded-xl bg-black/30 border border-white/[0.06] space-y-2">
+                    {[...modIds].map(id => (
+                      <div key={id} className="flex items-center gap-2">
+                        <span className="px-1.5 py-px rounded bg-emerald-400 text-black text-[9px] font-black">MOD</span>
+                        <span className="text-xs font-bold flex-1 truncate">{modNames[id] || 'Moderator'}</span>
+                        <button onClick={() => removeMod(id, modNames[id])} className="text-[11px] font-bold text-red-300 hover:text-red-200">Remove</button>
+                      </div>
+                    ))}
+                    <p className="text-[11px] text-white/40 leading-relaxed">
+                      To add one, tap their name in the chat and choose Make moderator. Moderators can pin, remove
+                      messages, time people out, run polls and set slow mode, on all your streams.
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {session.mode === 'youtube' && (
                 <>
                   <div className="flex gap-2">
@@ -1326,7 +1626,7 @@ export default function ListeningSessionPage() {
                   </div>
                   <p className="text-[11px] text-white/40 leading-relaxed">
                     Stream from OBS to YouTube as usual. In YouTube Studio, set the stream to allow embedding and
-                    switch monetisation off for it, so no ads play here. Fans watch in Feelz Machine with this chat.
+                    switch monetisation off for it. Fans watch in Feelz Machine with this chat.
                   </p>
                 </>
               )}
@@ -1390,10 +1690,25 @@ export default function ListeningSessionPage() {
             </div>
           )}
 
+          {/* Moderator tools */}
+          {!isHost && isMod && (
+            <div className="mx-4 lg:mx-0 mt-3 p-3 rounded-2xl bg-emerald-400/[0.06] border border-emerald-400/20 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="px-1.5 py-px rounded bg-emerald-400 text-black text-[9px] font-black">MOD</span>
+                <span className="text-xs font-bold text-white/70 flex-1">Tap any message to pin, remove or time someone out.</span>
+                <button onClick={() => setShowPollModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-violet-500/20 text-violet-100 hover:bg-violet-500/30 transition">
+                  <BarChart2 className="w-3.5 h-3.5" /> Poll
+                </button>
+              </div>
+              {slowModeChips}
+            </div>
+          )}
+
           {/* Polls (under the stage on big screens) */}
           {polls.length > 0 && (
             <div className="hidden lg:block mt-3 space-y-2">
-              {polls.map(poll => <SessionPollCard key={poll.id} poll={poll} userId={user?.id} onVote={castVote} />)}
+              {polls.map(poll => <SessionPollCard key={poll.id} poll={poll} userId={user?.id} onVote={castVote} canEnd={isMod} onEnd={endPoll} />)}
             </div>
           )}
         </div>
@@ -1405,30 +1720,75 @@ export default function ListeningSessionPage() {
             <span className="inline-flex items-center gap-1 text-[11px] text-white/40"><Users className="w-3.5 h-3.5" /> {listenerCount}</span>
           </div>
 
+          {/* On phones the newest poll folds into one line, so the chat keeps its room. */}
           {polls.length > 0 && (
-            <div className="lg:hidden flex-shrink-0 max-h-52 overflow-y-auto border-b border-white/[0.05]">
-              {polls.map(poll => <SessionPollCard key={poll.id} poll={poll} userId={user?.id} onVote={castVote} />)}
+            <div className="lg:hidden flex-shrink-0 px-3 pt-2">
+              {mobilePollOpen ? (
+                <div className="relative">
+                  <button onClick={() => setPollFolded(true)} aria-label="Fold poll"
+                    className="absolute right-3 top-3 z-10 w-6 h-6 rounded-full bg-black/40 flex items-center justify-center">
+                    <ChevronDown className="w-3.5 h-3.5 text-white/70 rotate-180" />
+                  </button>
+                  <div className="-m-2 max-h-72 overflow-y-auto">
+                    <SessionPollCard poll={polls[0]} userId={user?.id} onVote={castVote} canEnd={isMod} onEnd={endPoll} />
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setPollFolded(false)}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-gradient-to-r from-violet-500/20 to-pink-500/15 border border-violet-400/25 text-left">
+                  <BarChart2 className="w-4 h-4 text-violet-200 flex-shrink-0" />
+                  <span className="text-xs font-bold text-white truncate flex-1">{polls[0].question}</span>
+                  <span className="text-[10px] font-black text-violet-100 px-2 py-0.5 rounded bg-white/10">{polls[0].my_vote ? 'RESULTS' : 'VOTE'}</span>
+                </button>
+              )}
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto min-h-0">
+          {/* Pinned */}
+          {session.pinned_text && (
+            <div className="flex-shrink-0 mx-3 mt-2 p-3 rounded-2xl bg-amber-400/[0.08] border border-amber-300/25 flex items-start gap-2.5">
+              <Pin className="w-4 h-4 text-amber-300 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-black" style={{ color: nameColour(session.pinned_name) }}>{session.pinned_name || 'Pinned'}</p>
+                <p className="text-sm text-white/90 leading-snug break-words">{session.pinned_text}</p>
+              </div>
+              {isMod && (
+                <button onClick={() => pinMessage(null)} aria-label="Unpin" className="text-white/40 hover:text-white"><X className="w-4 h-4" /></button>
+              )}
+            </div>
+          )}
+
+          <div className="relative flex-1 min-h-0">
+          <div ref={chatScrollRef} onScroll={onChatScroll} className="absolute inset-0 overflow-y-auto">
             <div className="py-2">
               {messages.filter(m => m.is_tip).slice(-3).map((msg, i) => (
-                <ChatMessage key={(msg.id || i) + '-tip'} msg={msg} hostUserId={host.user_id} />
+                <ChatMessage key={(msg.id || i) + '-tip'} msg={msg} hostUserId={host.user_id} isModUser={modIds.has(msg.user_id)} myName={myName} onTap={user ? setSheetMsg : null} />
               ))}
               {messages.filter(m => !m.is_tip).length === 0 && (
                 <p className="text-center text-xs text-white/30 py-8">Say hi. You are first.</p>
               )}
               {messages.filter(m => !m.is_tip).map((msg, i) => (
-                <ChatMessage key={msg.id || i} msg={msg} hostUserId={host.user_id} />
+                <ChatMessage key={msg.id || i} msg={msg} hostUserId={host.user_id} isModUser={modIds.has(msg.user_id)} myName={myName} onTap={user ? setSheetMsg : null} />
               ))}
               <div ref={chatEndRef} />
             </div>
           </div>
+          {unseen > 0 && (
+            <button onClick={jumpToLatest}
+              className="absolute left-1/2 -translate-x-1/2 bottom-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white text-black text-xs font-black shadow-lg">
+              <ArrowDown className="w-3.5 h-3.5" /> {unseen} new
+            </button>
+          )}
+          {notice && (
+            <div className="absolute left-3 right-3 bottom-3 px-3 py-2 rounded-xl bg-black/90 border border-white/10 text-xs font-semibold text-white text-center">
+              {notice}
+            </div>
+          )}
+          </div>
 
           {/* Reactions and the message box */}
           <div className="flex-shrink-0 px-3 pb-safe pb-3 pt-2 border-t border-white/[0.06] space-y-2 bg-[#07060b]/80 backdrop-blur lg:bg-transparent">
-            <div className="flex items-center gap-2">
+            <div className={`flex items-center gap-2 ${isEnded ? 'hidden' : ''}`}>
               {REACTIONS.map(emoji => (
                 <button key={emoji} onClick={() => sendReaction(emoji)} aria-label={`React ${emoji}`}
                   className="flex-1 h-10 text-xl rounded-2xl bg-white/[0.05] hover:bg-white/[0.1] hover:-translate-y-0.5 active:scale-90 transition">
@@ -1437,7 +1797,7 @@ export default function ListeningSessionPage() {
               ))}
             </div>
 
-            {!isHost && user && (
+            {!isHost && user && !isEnded && (
               <button onClick={() => setShowSubmitModal(true)}
                 className="w-full flex items-center justify-center gap-2 py-2 rounded-2xl bg-gradient-to-r from-violet-500/20 to-pink-500/20 border border-pink-500/25 text-xs text-pink-100 font-bold hover:from-violet-500/30 hover:to-pink-500/30 transition">
                 <Music className="w-3.5 h-3.5" /> Send your track in for review
@@ -1445,41 +1805,29 @@ export default function ListeningSessionPage() {
             )}
 
             {user ? (
-              <div className="space-y-2">
-                {showTipChat && (
-                  <div className="rounded-2xl border border-amber-400/30 bg-amber-400/[0.07] p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[11px] font-black text-amber-300 inline-flex items-center gap-1.5"><Gift className="w-3.5 h-3.5" /> Tip with a message</p>
-                      <button onClick={() => setShowTipChat(false)} aria-label="Close" className="text-white/40 hover:text-white"><X className="w-3.5 h-3.5" /></button>
-                    </div>
-                    <div className="flex gap-2">
-                      {['1', '2', '5', '10'].map(amt => (
-                        <button key={amt} onClick={() => setTipChatAmount(amt)}
-                          className={`flex-1 py-1.5 rounded-xl text-xs font-black transition ${tipChatAmount === amt ? 'bg-amber-400 text-black' : 'bg-white/[0.06] text-white/60 hover:bg-white/[0.1]'}`}>
-                          ${amt}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-white/40">Tips go to the artist through PayPal. Your message shows in the chat straight away.</p>
-                  </div>
-                )}
-                <form onSubmit={sendMessage} className="flex gap-2">
-                  {!isHost && host.paypal_email && (
-                    <button type="button" onClick={() => setShowTipChat(p => !p)} aria-label="Tip with a message"
-                      className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 transition ${showTipChat ? 'bg-amber-400 text-black' : 'bg-white/[0.06] text-amber-300 hover:bg-white/[0.1]'}`}>
-                      <Gift className="w-4 h-4" />
-                    </button>
+              isEnded ? (
+                <p className="text-center text-xs text-white/40 py-2">The stream has ended.</p>
+              ) : myBan ? (
+                <p className="text-center text-xs text-white/50 py-2.5 rounded-2xl bg-white/[0.04]">
+                  {myBan.until ? `You can chat again at ${new Date(myBan.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` : "You can't chat in this stream."}
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {session.slow_mode_seconds > 0 && !isMod && (
+                    <p className="text-[10px] text-white/40 inline-flex items-center gap-1"><Timer className="w-3 h-3" /> Slow mode: one message every {session.slow_mode_seconds}s</p>
                   )}
-                  <input value={chatInput} onChange={e => setChatInput(e.target.value)}
-                    placeholder={showTipChat ? 'Add a message to your tip' : 'Say something'}
-                    maxLength={200}
-                    className="flex-1 min-w-0 px-4 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-2xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-pink-500/50" />
-                  <button type="submit" disabled={(!chatInput.trim() && !showTipChat) || sending} aria-label="Send"
-                    className="w-11 h-11 rounded-2xl bg-gradient-to-br from-pink-500 to-violet-500 flex items-center justify-center disabled:opacity-30 hover:brightness-110 active:scale-95 transition flex-shrink-0">
-                    <Send className="w-4 h-4 text-white" />
-                  </button>
-                </form>
-              </div>
+                  <form onSubmit={sendMessage} className="flex gap-2">
+                    <input value={chatInput} onChange={e => setChatInput(e.target.value)}
+                      placeholder="Say something"
+                      maxLength={200}
+                      className="flex-1 min-w-0 px-4 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-2xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-pink-500/50" />
+                    <button type="submit" disabled={!chatInput.trim() || sending || (slowLeft > 0 && !isMod)} aria-label="Send"
+                      className="min-w-[44px] h-11 px-3 rounded-2xl bg-gradient-to-br from-pink-500 to-violet-500 flex items-center justify-center disabled:opacity-30 hover:brightness-110 active:scale-95 transition flex-shrink-0 text-xs font-black">
+                      {slowLeft > 0 && !isMod ? `${slowLeft}s` : <Send className="w-4 h-4 text-white" />}
+                    </button>
+                  </form>
+                </div>
+              )
             ) : (
               <button onClick={() => navigate(`/login?next=/session/${sessionId}`)}
                 className="w-full py-3 rounded-2xl bg-white text-black text-sm font-black">
@@ -1493,11 +1841,22 @@ export default function ListeningSessionPage() {
       {showPollModal && (
         <CreateReviewPollModal
           sessionId={sessionId}
-          artistId={artist?.id}
+          artistId={session.artist_id}
           onClose={() => setShowPollModal(false)}
           onCreated={() => { setShowPollModal(false); loadPolls(); }}
         />
       )}
+
+      <MessageSheet
+        msg={sheetMsg}
+        me={user?.id}
+        isMod={isMod}
+        isHost={!!isHost}
+        hostUserId={host.user_id}
+        isModUser={sheetMsg ? modIds.has(sheetMsg.user_id) : false}
+        onClose={() => setSheetMsg(null)}
+        actions={sheetActions}
+      />
 
       {showSubmitModal && (
         <SubmitForReviewModal
@@ -1523,6 +1882,8 @@ export default function ListeningSessionPage() {
         .fm-sound-pill { animation: fm-bob 1.6s ease-in-out infinite; }
         @keyframes fm-spin { to { transform: rotate(360deg); } }
         @keyframes fm-eq { from { transform: scaleY(0.35); } to { transform: scaleY(1); } }
+        .fm-combo { animation: fm-pop 0.35s cubic-bezier(.2,1.6,.4,1); }
+        @keyframes fm-pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         @keyframes fm-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
         @media (prefers-reduced-motion: reduce) { .fm-spin, .fm-spin-slow, .fm-eq, .fm-sound-pill, .animate-float-up { animation: none; } }
       `}</style>

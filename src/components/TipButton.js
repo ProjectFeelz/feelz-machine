@@ -75,7 +75,7 @@ export default function TipButton({ artist, onTipSent }) {
             if (capData.success) {
               setStep('success');
               // Fire callback so live sessions can inject tip into chat
-              if (onTipSent) onTipSent(amountNum);
+              if (onTipSent) onTipSent(amountNum, message);
               // Affiliate conversion — non-fatal
               try {
                 const ref = sessionStorage.getItem('feelz_ref');

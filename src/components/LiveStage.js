@@ -309,9 +309,6 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
               onChange={(e) => changeVolume(Number(e.target.value))}
               aria-label="Volume"
               className="hidden sm:block w-24 accent-pink-500" />
-            <span className="ml-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-red-500 text-[10px] font-black tracking-wider text-white">
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE
-            </span>
             <span className="flex-1" />
             {canFullscreen() && (
               <button type="button" onClick={toggleFull} aria-label={isFull ? 'Exit full screen' : 'Full screen'}
