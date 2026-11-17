@@ -163,7 +163,7 @@ export default function AdminBugReports() {
   if (!isAdmin) return null;
 
   return (
-    <div className="min-h-screen bg-black text-white pb-32 max-w-4xl mx-auto">
+    <div className="min-h-screen bg-black text-white pb-32">
       {/* Header */}
       <div className="flex items-center space-x-3 px-4 pt-6 pb-4">
         <button onClick={() => navigate('/admin')}

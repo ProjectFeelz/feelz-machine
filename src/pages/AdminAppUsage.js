@@ -145,7 +145,7 @@ export default function AdminAppUsage() {
     <div className="min-h-screen bg-black text-white">
       <Helmet><title>How the app is used · Admin</title><meta name="robots" content="noindex" /></Helmet>
 
-      <div className="max-w-5xl mx-auto px-5 lg:px-8 pt-8 pb-24">
+      <div className="px-5 lg:px-8 pt-8 pb-24">
         <div className="flex items-start gap-3 mb-2">
           <button onClick={() => navigate('/admin')}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06] hover:bg-white/[0.1] transition flex-shrink-0 mt-1">

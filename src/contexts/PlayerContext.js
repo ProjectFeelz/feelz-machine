@@ -1380,7 +1380,30 @@ export function PlayerProvider({ children }) {
         // finalise_stream write the real value. Passed only because the
         // function signature still takes it.
         p_completed: false,
-        p_platform: 'web',
+        // THE PLATFORM PANEL READ "web, 100%" BECAUSE THIS WAS THE WORD "web".
+        //
+        // Not a measurement, a literal. Every play from every device since
+        // this was written has been filed as web, so the panel could only ever
+        // draw one bar at 100%, and there was no way to tell whether the
+        // installed app was being used at all.
+        //
+        // device_type on the next line was always honest, which is why mobile
+        // was never really lost: 1,793 of 4,108 plays, 43.6%. The two together
+        // now answer a question neither could alone, which is whether people
+        // who INSTALL the app listen differently to people who do not.
+        //
+        // standalone is what every install has in common: a PWA added to a
+        // home screen and the APK webview both report it, a browser tab never
+        // does. navigator.standalone is the older iOS spelling of the same
+        // thing. Wrapped because this must never cost somebody their play.
+        p_platform: (() => {
+          try {
+            const installed =
+              window.matchMedia?.('(display-mode: standalone)')?.matches === true ||
+              window.navigator.standalone === true;
+            return installed ? 'app' : 'web';
+          } catch { return 'web'; }
+        })(),
         p_device_type: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
         p_source: playSourceRef.current || 'unknown',
       });

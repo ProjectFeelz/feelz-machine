@@ -155,7 +155,7 @@ export default function AdminDeals() {
           is what "the design language is missed" was about. The other admin
           screens use the width. Company details and the deals list sit side
           by side from `lg` up rather than stacking down a narrow column. */}
-      <div className="max-w-6xl mx-auto px-5 pt-8 space-y-8">
+      <div className="px-5 pt-8 space-y-8">
         <div className="flex items-center space-x-3">
           <button onClick={() => navigate('/hub')} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.06]"><ArrowLeft className="w-4 h-4" /></button>
           <div>

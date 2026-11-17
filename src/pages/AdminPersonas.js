@@ -236,7 +236,7 @@ export default function AdminPersonas() {
         </div>
       )}
 
-      <div className="flex items-center space-x-3 px-5 pt-6 pb-2 max-w-6xl mx-auto w-full">
+      <div className="flex items-center space-x-3 px-5 pt-6 pb-2">
         <button onClick={() => navigate('/hub')}
           className="w-8 h-8 rounded-full bg-white/[0.06] flex items-center justify-center">
           <ArrowLeft className="w-4 h-4 text-white/60" />
@@ -248,14 +248,14 @@ export default function AdminPersonas() {
         </button>
       </div>
 
-      <p className="px-5 text-[11px] text-white/30 leading-relaxed max-w-3xl mx-auto w-full mb-4">
+      <p className="px-5 text-[11px] text-white/30 leading-relaxed max-w-3xl mb-4">
         Platform-owned accounts that fill the catalogue and the Feelz Retail playlists.
         None of them can sell anything or be paid anything, by design. Target is about 30,
         in 10 lanes of 3, roughly 20 tracks each: three per lane is what stops every
         playlist repeating one name.
       </p>
 
-      <div className="px-5 mb-5 grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-6xl mx-auto w-full">
+      <div className="px-5 mb-5 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
         {[
           ['Personas', counts.total], ['Active', counts.active],
           ['Tracks', counts.tracks], ['In Retail', counts.retail],
@@ -324,7 +324,7 @@ export default function AdminPersonas() {
       )}
 
       {/* Roster */}
-      <div className="px-5 space-y-6 max-w-6xl mx-auto w-full">
+      <div className="px-5 space-y-6">
         {loading ? (
           <div className="flex justify-center py-10"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
         ) : roster.length === 0 ? (

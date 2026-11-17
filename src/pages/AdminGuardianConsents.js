@@ -210,7 +210,7 @@ export default function AdminGuardianConsents() {
         </div>
       )}
 
-      <div className="flex items-center space-x-3 px-5 pt-6 pb-2 max-w-5xl mx-auto w-full">
+      <div className="flex items-center space-x-3 px-5 pt-6 pb-2">
         <button onClick={goBack}
           className="w-8 h-8 rounded-full bg-white/[0.06] flex items-center justify-center">
           <ArrowLeft className="w-4 h-4 text-white/60" />
@@ -218,14 +218,14 @@ export default function AdminGuardianConsents() {
         <h1 className="text-lg font-black">Guardian consents</h1>
       </div>
 
-      <p className="px-5 text-[11px] text-white/30 leading-relaxed max-w-3xl mx-auto w-full mb-4">
+      <p className="px-5 text-[11px] text-white/30 leading-relaxed max-w-3xl mb-4">
         An artist under 18 cannot sell until a parent or guardian has consented and someone here
         has confirmed it. Contact the guardian on the details below, then mark it. Nothing else
         about their account is affected either way. Under-18s who entered Sessions, and the
         guardian who approved each entry, are under Sessions entrants.
       </p>
 
-      <div className="flex flex-wrap gap-2 px-5 mb-4 max-w-5xl mx-auto w-full">
+      <div className="flex flex-wrap gap-2 px-5 mb-4">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition ${
@@ -235,7 +235,7 @@ export default function AdminGuardianConsents() {
         ))}
       </div>
 
-      <div className="px-5 max-w-5xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+      <div className="px-5 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 items-start">
         {loading ? (
           <div className="flex justify-center py-10"><Loader className="w-5 h-5 animate-spin text-white/20" /></div>
         ) : rows.length === 0 ? (

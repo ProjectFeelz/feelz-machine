@@ -42,6 +42,17 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth, pendingCreatorRole } from '../contexts/AuthContext';
 import { generateSlug, getUniqueSlug } from '../utils/artistSlug';
+// THE SIGNUP FUNNEL USED TO END HERE WITHOUT SAYING SO.
+//
+// The admin funnel counts four steps. LoginPage fires the first two. The last
+// two were wired to ProfileSetup, which is the SETTINGS screen this flow exists
+// to spare people, so nobody passing through signup ever touched them.
+//
+// The funnel therefore read 100%, 100%, 0%, 0% and called it a cliff. In the
+// same seven days 164 accounts were created and 121 of them finished a profile
+// with a name and a bio or a picture. Nobody was giving up. The last two steps
+// were simply watching a door that signup does not use.
+import { step } from '../utils/track';
 import { Camera, Check, Loader, ArrowRight, ArrowLeft, Sparkles, Upload, Headphones, Mic2, Disc3, Users } from 'lucide-react';
 
 const GENRES = [
@@ -615,6 +626,22 @@ export default function Welcome() {
       }
     }
 
+    // LAST STEP OF SIGNING UP.
+    //
+    // Deliberately not "they pressed the button", and deliberately not a skip.
+    // An account with a name and something on the page is one somebody comes
+    // back to; an empty one is not, and a skip has nothing to show. So this
+    // counts the same thing ProfileSetup was trying to count, from the screen
+    // people really finish on.
+    //
+    // It sits after the completion marker on purpose. Everything above throws
+    // on a refused write and the !silent branch of the catch returns before
+    // reaching here, so a profile that failed to save is never counted as one
+    // that finished.
+    if (!silent && (name.trim() || finalSlug) && (bio.trim() || avatarFile)) {
+      step('signup_profile_done');
+    }
+
     // Local as well, because it is free and it is the common case.
     markWelcomeSeen(user.id);
 
@@ -735,6 +762,12 @@ export default function Welcome() {
                 return (
                   <button type="button" key={k} onClick={() => {
                     setPicked(k);
+                    // THIRD STEP OF SIGNING UP, counted where it actually
+                    // happens. role_confirmed cannot be the signal: AuthContext
+                    // sets it true when it creates the row, before this screen
+                    // renders, so by the time anyone sees these cards it is
+                    // already true for everybody. The press is the choice.
+                    step('signup_role_chosen', k);
                     // Stashed as well as held in state. finish() creates the
                     // artists row for a creator, but if that write is refused
                     // the choice would be gone again, and this is the key

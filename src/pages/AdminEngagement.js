@@ -127,6 +127,8 @@ export default function AdminEngagement({ embedded = false }) {
         { count: activeListeners },
         { count: newListeners },
         { count: totalProfiles },
+        { count: newArtistsActive },
+        { count: newListenersActive },
       ] = await Promise.all([
         supabase.from('artists').select('*', { count: 'exact', head: true }),
         supabase.from('artists').select('*', { count: 'exact', head: true }).gte('last_seen_at', dormantCutoff),
@@ -138,6 +140,12 @@ export default function AdminEngagement({ embedded = false }) {
         // table is owner-scoped: a head count from the browser would come
         // back as 1, which would quietly make every segment wrong.
         supabase.rpc('admin_count_user_profiles'),
+        // The overlap, which is the number the old sum was missing. Counting
+        // it is what lets the three boxes be exclusive instead of guessing.
+        supabase.from('artists').select('*', { count: 'exact', head: true })
+          .gte('created_at', newUserCutoff).gte('last_seen_at', dormantCutoff),
+        supabase.from('listeners').select('*', { count: 'exact', head: true })
+          .gte('created_at', newUserCutoff).gte('last_seen_at', dormantCutoff),
       ]);
 
       // If listeners table is empty (records never inserted), fall back to
@@ -146,13 +154,35 @@ export default function AdminEngagement({ embedded = false }) {
         ? (totalListeners || 0)
         : Math.max(0, (totalProfiles || 0) - (totalArtists || 0));
 
+      // THE THREE BOXES USED TO DESCRIBE MORE PEOPLE THAN EXIST.
+      //
+      // new was "signed up in the last 14 days" and active was "seen in the
+      // last 5 days", and the old sum did active MINUS new, which only works
+      // if every new signup has also been seen this week. Most have not: of
+      // 242 new artists, 152 had not opened the app in five days. So the
+      // subtraction went negative, Math.max clamped it, and Active Artists
+      // read exactly 0 for as long as signups outran returning users. It was
+      // not a quiet week, it was an impossible sum.
+      //
+      // dormant had the matching half of the same mistake: total MINUS active
+      // still counts every new signup, so the same person was being shown in
+      // New and in Dormant at once. The three boxes claimed 506 artists on a
+      // platform with 362.
+      //
+      // Fixed by making the three mutually exclusive, which is what somebody
+      // reading three boxes already assumes. A person is NEW if they just
+      // arrived; otherwise ACTIVE if they have been back this week; otherwise
+      // DORMANT. They now add up to the total, exactly, every time.
+      const newArtistsSeen   = newArtistsActive   || 0;  // new AND back this week
+      const newListenersSeen = newListenersActive || 0;
+
       setSegmentCounts({
         new_artist:       newArtists || 0,
-        active_artist:    Math.max(0, (activeArtists || 0) - (newArtists || 0)),
-        dormant_artist:   Math.max(0, (totalArtists || 0) - (activeArtists || 0)),
+        active_artist:    Math.max(0, (activeArtists || 0) - newArtistsSeen),
+        dormant_artist:   Math.max(0, (totalArtists || 0) - (newArtists || 0) - Math.max(0, (activeArtists || 0) - newArtistsSeen)),
         new_listener:     newListeners || 0,
-        active_listener:  Math.max(0, (activeListeners || 0) - (newListeners || 0)),
-        dormant_listener: Math.max(0, effectiveListeners - (activeListeners || 0)),
+        active_listener:  Math.max(0, (activeListeners || 0) - newListenersSeen),
+        dormant_listener: Math.max(0, effectiveListeners - (newListeners || 0) - Math.max(0, (activeListeners || 0) - newListenersSeen)),
         total_artists:    totalArtists || 0,
         total_listeners:  effectiveListeners,
       });

@@ -1491,6 +1491,18 @@ export default function TrackUploadPanel() {
   const { artist, user, refreshProfile, isBeatmaker } = useAuth();
   const { isPremium, canAddDownloadSale, downloadSalesRemaining, downloadSalesLimit, beatLicences, maxBeats, canUploadStems, canUseBeatAnalytics, canUseExclusive } = useTier();
 
+  // STEP ONE OF THE UPLOAD FUNNEL, FIRED WHERE ITS NAME SAYS.
+  //
+  // upload_opened used to be the first line of uploadTrack(), which only runs
+  // when somebody presses SUBMIT. So the step called "opened" was the last
+  // thing to happen, not the first, and the funnel's 100% was measured against
+  // people who had already finished filling the form in.
+  //
+  // Everyone who opened this panel and walked away was invisible, and that is
+  // the single group a drop-off funnel exists to find. Firing it on mount
+  // costs one line and makes every percentage below it mean what it says.
+  useEffect(() => { step('upload_opened'); }, []);
+
   useEffect(() => {
     if (user && !artist) {
       const t = setTimeout(() => refreshProfile(), 800);
@@ -1767,7 +1779,8 @@ export default function TrackUploadPanel() {
     // The three steps of an upload, recorded as each one PASSES. The place
     // everybody stops then shows up as the gap between two numbers, with
     // nobody having to guess which rule is the annoying one.
-    step('upload_opened');
+    // upload_opened now fires on mount, where its name says it does. The two
+    // steps below stay here: they are about passing a rule, not opening a form.
     // Also here, not only on blur: a title typed and submitted without leaving
     // the field has never been through the blur handler.
     {
@@ -2909,7 +2922,9 @@ export default function TrackUploadPanel() {
             <div className="bg-white/[0.03] rounded-xl p-5 border border-white/[0.06] space-y-4">
               <h3 className="text-sm font-semibold text-white">
                 {isAlbumRelease
-                  ? albumTrackQueue.length === 0 ? 'First Track' : `Track ${albumTrackQueue.length + 1}`
+                  ? albumTrackQueue.length === 0
+                      ? `Track 1${minTracksFor(release.release_type) > 1 ? ` of ${minTracksFor(release.release_type)}` : ''}`
+                      : `Track ${albumTrackQueue.length + 1}${minTracksFor(release.release_type) > albumTrackQueue.length ? ` of ${minTracksFor(release.release_type)}` : ''}`
                   : 'Track Details'}
               </h3>
 
@@ -3215,16 +3230,22 @@ export default function TrackUploadPanel() {
                     : isBeat ? 'Upload Beat'
                       : isAlbumRelease
                       ? albumTrackQueue.length === 0
-                        ? `Create ${release.release_type.toUpperCase()} & Add Track`
+                        ? `Save first track to the ${release.release_type.toUpperCase()}`
                         : 'Add Track'
                       : 'Upload Track'}
                 </span>
               </button>
 
+              {isAlbumRelease && (
+                <p className="text-[11px] text-white/30 text-center">
+                  Nothing goes live until you press Done. You can keep adding tracks.
+                </p>
+              )}
+
               {addingAnother && (
                 <button type="button" onClick={() => setAddingAnother(false)}
                   className="w-full py-2 text-xs text-white/30 hover:text-white/50 transition">
-                  Cancel, I'm done adding tracks
+                  Back to the album
                 </button>
               )}
             </div>

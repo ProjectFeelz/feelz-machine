@@ -364,7 +364,7 @@ export default function AdminFeed() {
   ] : [];
 
   return (
-    <div className="pt-4 pb-32 px-4 md:px-8 max-w-6xl mx-auto">
+    <div className="pt-4 pb-32 px-4 md:px-8">
       <Helmet><title>Feed Weights</title><meta name="robots" content="noindex, nofollow" /></Helmet>
 
       {/* Range inputs are styled here rather than with accent-color. On this
