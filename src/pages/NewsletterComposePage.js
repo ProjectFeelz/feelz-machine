@@ -9,7 +9,7 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import { Loader, Send, Users, Store, Headphones, Plus, X, ArrowLeft, Mail, Check, AlertTriangle, FileText, Save, Clock } from 'lucide-react';
+import { Loader, Send, Users, Store, Headphones, Plus, X, ArrowLeft, Mail, Check, AlertTriangle, FileText, Save, Clock, Globe } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import PlatformStoryComposer from '../components/admin/PlatformStoryComposer';
@@ -151,7 +151,11 @@ export default function NewsletterComposePage() {
   // instead, which is also where they are useful.
   const loadPosts = React.useCallback(async () => {
     const { data, error } = await supabase
-      .from('newsletter_posts').select('*').order('created_at', { ascending: false }).limit(20);
+      // 200, not 20. The search switch below is on every row in this list,
+      // and the 118 older posts are exactly the ones that need deciding on.
+      // A list that stops at 20 is a list where the back catalogue cannot
+      // be reached.
+      .from('newsletter_posts').select('*').order('created_at', { ascending: false }).limit(200);
 
     if (error) {
       console.error('[newsletter] could not list posts:', error.code, error.message);
@@ -422,6 +426,48 @@ export default function NewsletterComposePage() {
     );
   }
 
+  // ── The search switch ───────────────────────────────────────────────────
+  //
+  // Writes through an RPC rather than straight to the table. newsletter_posts
+  // has one policy for admins and one for public reads, so a newsletter editor
+  // cannot UPDATE it, and the fix is not to let them: row level security
+  // cannot be narrowed to a single column, so an editor policy would hand over
+  // the title, body and audience of every post ever sent in order to change a
+  // boolean.
+  //
+  // set_newsletter_search_indexable writes that one column and asks who is
+  // calling. Migration 251.
+  const [searchBusy, setSearchBusy] = React.useState({});
+
+  const toggleSearch = async (post) => {
+    const next = !post.search_indexable;
+    setSearchBusy(prev => ({ ...prev, [post.id]: true }));
+
+    // Moved on screen before the round trip, and put back if it fails. Going
+    // through 118 posts is tedious enough without waiting for each one.
+    setPosts(prev => prev.map(x => (x.id === post.id ? { ...x, search_indexable: next } : x)));
+
+    const { error } = await supabase.rpc('set_newsletter_search_indexable', {
+      p_post_id: post.id,
+      p_value: next,
+    });
+
+    setSearchBusy(prev => ({ ...prev, [post.id]: false }));
+
+    if (error) {
+      setPosts(prev => prev.map(x => (x.id === post.id ? { ...x, search_indexable: !next } : x)));
+      console.error('[newsletter] search switch failed:', error.code, error.message);
+      showToast(
+        error.code === 'PGRST202'
+          ? 'Run migration 251 first, the switch does not exist yet.'
+          : 'Could not change that. Nothing was saved.'
+      );
+      return;
+    }
+
+    showToast(next ? 'Added to Google' : 'Removed from Google');
+  };
+
   const canSend = title.trim() && excerpt.trim() && body.trim() && audience;
 
   return (
@@ -648,6 +694,31 @@ export default function NewsletterComposePage() {
                         </span>
                       </div>
                     </div>
+
+                    {/* Show in Google.
+                        Off by default, because 118 of the 119 posts on the
+                        platform are announcements and they were crowding the
+                        music out of the crawl. On means this post goes in
+                        sitemap.xml. Off is not hidden and not deleted: the
+                        page still works and anything already in Google stays
+                        there, it is just not submitted. */}
+                    <button
+                      onClick={() => toggleSearch(p)}
+                      disabled={!!searchBusy[p.id]}
+                      title={p.search_indexable
+                        ? 'This post is submitted to Google. Tap to stop submitting it.'
+                        : 'Tap if this one is worth finding in a search.'}
+                      className={`text-[11px] px-2 py-1 rounded-md flex items-center transition disabled:opacity-40 ${
+                        p.search_indexable
+                          ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+                          : 'bg-white/[0.06] text-white/40 hover:bg-white/[0.1] hover:text-white/70'
+                      }`}
+                    >
+                      {searchBusy[p.id]
+                        ? <Loader className="w-3 h-3 mr-1 animate-spin" />
+                        : <Globe className="w-3 h-3 mr-1" />}
+                      {p.search_indexable ? 'In Google' : 'Not in Google'}
+                    </button>
 
                     {/* Emailing needs admins or newsletter_senders.
                         newsletter_editors can publish in-app but not mail a list,

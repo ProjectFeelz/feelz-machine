@@ -355,6 +355,124 @@ exports.handler = async (event) => {
       });
     }
 
+    // ── Sessions ────────────────────────────────────────────────────────────
+    //
+    // WHY THIS PAGE AND NOT ANOTHER
+    //
+    // 90 days of Search Console on this domain returned thirteen queries.
+    // Eleven are somebody spelling "feelz machine". One is an artist's name.
+    // The thirteenth is "competition music", and /sessions is the page that
+    // answered it, at position 37.
+    //
+    // That is the only non-brand query this site has ever appeared for, and
+    // the page it landed on was serving 162 characters of body text, no
+    // anchors, and the title "Sessions on Feelz Machine", which does not
+    // contain the word competition at all.
+    //
+    // Everything else on this site that shows up in search shows up as a
+    // sitelink under the brand result. This is the one page already in the
+    // index for a query a stranger typed, and moving something from page four
+    // is a different and much smaller job than ranking something new.
+    //
+    //
+    // THE DATES COME FROM THE DATABASE
+    //
+    // A competition page whose dates are wrong is worse than one with no
+    // dates, and dates written into code go stale the morning after the
+    // round closes. If the read fails the page still answers, with the
+    // sentence about dates left out.
+    if (type === 'schoolsessions') {
+      let comp = null;
+      try {
+        const { data, error } = await supabase
+          .from('competitions')
+          .select('prize_breakdown_text, prize_description, entries_close_at, voting_open_at, voting_close_at, winner_announced_at')
+          .eq('is_school_sessions', true)
+          .maybeSingle();
+        if (error) console.error('[seo-links] sessions lookup:', error.code, error.message);
+        comp = data || null;
+      } catch (err) {
+        console.error('[seo-links] sessions lookup threw:', err.message);
+      }
+
+      // Africa/Johannesburg on purpose. The entrants are here, and a deadline
+      // shown in UTC is a deadline two hours earlier than the one on the
+      // entry form.
+      const day = (v) => {
+        if (!v) return null;
+        try {
+          return new Date(v).toLocaleDateString('en-ZA', {
+            day: 'numeric', month: 'long', timeZone: 'Africa/Johannesburg',
+          });
+        } catch {
+          return null;
+        }
+      };
+
+      const closes    = day(comp && comp.entries_close_at);
+      const voteOpens = day(comp && comp.voting_open_at);
+      const announced = day(comp && comp.winner_announced_at);
+      const prize = (comp && (comp.prize_breakdown_text || comp.prize_description))
+        || 'R5,000 in cash and R5,000 in studio equipment.';
+
+      // Two sentences of what it is, then the dates if we have them. Written
+      // for somebody who has never heard of Feelz Machine and typed
+      // "music competition" into Google.
+      const introParts = [
+        'Sessions is a music competition anyone can enter. There are no auditions and no entry fee.',
+        'You pick a song from the shortlist, record your own version of it, and upload it. The public votes, and the song with the most votes wins.',
+        `The prize is ${prize}`,
+      ];
+      if (closes)    introParts.push(`Entries close on ${closes}.`);
+      if (voteOpens) introParts.push(`Voting opens on ${voteOpens}.`);
+      if (announced) introParts.push(`The winner is announced on ${announced} on a live stream.`);
+      const intro = introParts.join(' ');
+
+      const description = closes
+        ? `A music competition open to any South African artist. Cover a song from the shortlist and the public votes for the winner. R5,000 cash plus R5,000 in studio gear. Entries close ${closes}.`
+        : 'A music competition open to any South African artist. Cover a song from the shortlist and the public votes for the winner. R5,000 cash plus R5,000 in studio gear.';
+
+      // Event rather than anything cleverer. It is a competition with a date,
+      // a prize and somewhere to enter, and Event is the type Google reads for
+      // those. eventAttendanceMode is online because the whole thing happens
+      // on the site, which is also the honest answer to "where is it".
+      const jsonLd = {
+        '@context': 'https://schema.org',
+        '@type': 'Event',
+        name: 'Feelz Machine Sessions',
+        description,
+        url: `${BASE_URL}/sessions`,
+        eventAttendanceMode: 'https://schema.org/OnlineEventAttendanceMode',
+        eventStatus: 'https://schema.org/EventScheduled',
+        location: { '@type': 'VirtualLocation', url: `${BASE_URL}/sessions` },
+        organizer: { '@type': 'Organization', name: 'Feelz Machine', url: BASE_URL },
+        inLanguage: 'en-ZA',
+        isAccessibleForFree: true,
+      };
+      if (comp && comp.voting_open_at)       jsonLd.startDate = comp.voting_open_at;
+      if (comp && comp.winner_announced_at)  jsonLd.endDate   = comp.winner_announced_at;
+
+      return json(200, {
+        // Leads with the words somebody would actually type. "Sessions on
+        // Feelz Machine" is a label for people who already know what Sessions
+        // is, which is the opposite of who this page is for.
+        title: 'Music Competition South Africa: Enter Feelz Machine Sessions',
+        description,
+        // Always /sessions, never /schoolsessions. Both routes reach this
+        // branch and the old path must not claim to be its own page.
+        canonical: `${BASE_URL}/sessions`,
+        heading: 'Feelz Machine Sessions, a music competition anyone can enter',
+        intro,
+        jsonLd,
+        sections: [
+          { heading: 'Guides for independent artists', links: guideLinks() },
+          newestTracks,
+          { heading: 'Browse by genre', links: genreSection.links },
+          { heading: 'Artists on Feelz Machine', links: [{ href: '/artists', label: 'All artists', sub: `${cat.artists.length} artists` }] },
+        ],
+      });
+    }
+
     // ── The comparison pages ────────────────────────────────────────────────
     //
     // /vs/spotify, /vs/soundcloud, /vs/bandcamp, /vs/apple-music. Search

@@ -59,8 +59,22 @@ const ROUTE_PATTERNS = [
   { re: /^\/track\/([^/]+)\/?$/, type: 'track', meta: true, links: true },
   { re: /^\/beat\/([^/]+)\/?$/, type: 'beat', meta: true, links: true },
   { re: /^\/album\/([^/]+\/[^/]+)\/?$/, type: 'album', meta: true, links: true },
-  { re: /^\/sessions\/?$/, type: 'schoolsessions', meta: true, links: false },
-  { re: /^\/schoolsessions\/?$/, type: 'schoolsessions', meta: true, links: false },
+  // meta: false, links: true, changed from the other way round.
+  //
+  // og-meta's sessions branch returns the title 'Sessions on Feelz Machine'
+  // and the prize text, and nothing else. That is a fine social card and a
+  // poor search result: the title does not contain the word competition, and
+  // the page went out with 162 characters of body and not one anchor.
+  //
+  // Search Console, 90 days: /sessions appears for "competition music" at
+  // position 37. It is in the index for the one non-brand query this site
+  // has ever seen, four pages down where nobody looks. seo-links now writes
+  // this page the way it writes the comparison pages.
+  //
+  // social-preview.js still serves /sessions to WhatsApp and the rest from
+  // og-meta, so the share card is unchanged.
+  { re: /^\/sessions\/?$/, type: 'schoolsessions', meta: false, links: true },
+  { re: /^\/schoolsessions\/?$/, type: 'schoolsessions', meta: false, links: true },
 
   // ── The hubs, and why they are the whole point of this change ────────────
   //
@@ -210,7 +224,10 @@ export default async (request, context) => {
         description: linkData.description || '',
         pageUrl: linkData.canonical || null,
         cardImage: null,
-        jsonLd: null,
+        // Carried through rather than dropped. A page whose words come from
+        // seo-links had no way to describe itself in structured data, which
+        // is the difference between an event page and a page about an event.
+        jsonLd: linkData.jsonLd || null,
       };
     }
 

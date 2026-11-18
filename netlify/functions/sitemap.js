@@ -187,8 +187,20 @@ async function buildSitemap() {
     // to. `.not('slug','is',null)` matters: without it a draft with no slug
     // produced <loc>.../newsletter/null</loc>, a URL that 404s and gets
     // reported as "Submitted URL not found".
+    // .eq('search_indexable', true) is the whole of migration 251 on this
+    // side. 117 of the 396 URLs in this file were newsletter posts, and
+    // 118 of the 119 posts on the platform are product announcements
+    // written for people who already use Feelz Machine. Nobody searches
+    // for "Feelz Just Got Better", and while they sat in the queue 154
+    // track pages behind them stayed "Discovered, currently not indexed".
+    //
+    // The column defaults to false and Davu turns it on from the compose
+    // screen when a post is worth it. A post left off is not blocked and
+    // not deindexed, just not submitted, and switching it on puts it back
+    // in this file within the hour.
     supabase.from('newsletter_posts')
       .select('slug, created_at')
+      .eq('search_indexable', true)
       .not('slug', 'is', null)
       .limit(5000),
   ]);
