@@ -4,7 +4,6 @@ import { getTrackAvailability } from '../utils/trackAccess';
 import { useMediaSession } from '../hooks/useMediaSession';
 import { playbackSrc, assignPlaybackSrc, isSavedOfflineSync, offlineSrcFor, offlineCopyIsStale } from '../utils/offlineStore';
 import { resolveStreamLater, warmStreamUrls } from '../utils/streamUrl';
-import { TRACK_COLUMNS, flattenTrack, isPlayableRow } from '../constants/trackColumns';
 import { buildOfflinePlayRow, queueOfflinePlay, flushOfflinePlays } from '../utils/offlinePlayQueue';
 import { sendNotification, sendStreamDigest } from '../utils/notify';
 
@@ -93,23 +92,6 @@ export function resolvePlaySource() {
 // visit, not brand somebody an external visitor for the rest of the year.
 const EXTERNAL_KEY = 'fm_entry_from';
 
-// ── Picking up where you left off ───────────────────────────────────────────
-//
-// The first version of this saved one track id and handed that track to
-// playTrack on its own. playTrack with no list makes a queue of exactly one,
-// so the song played and then the feed had nowhere to go: swiping brought the
-// same song back every time. See claude/player-context-scoped-18-nov.md.
-//
-// This saves the QUEUE. The unit of playback in this app is a list, so the
-// unit of resuming has to be a list too.
-const RESUME_KEY = 'feelz_resume';
-// Older than this and it is yesterday's listening. Offering that back is
-// strange rather than helpful.
-const RESUME_MAX_AGE_MS = 12 * 60 * 60 * 1000;
-// Ids only, and only from the current track forward, so this stays a few
-// hundred bytes rather than a copy of somebody's feed. Resuming means carry
-// on, not go back, so what was already played is not worth storing.
-const RESUME_MAX_IDS = 60;
 
 export function readExternalEntry() {
   try {
@@ -287,11 +269,6 @@ export function PlayerProvider({ children }) {
   // Why a blocked tap did nothing. Rendered by this provider itself (see the
   // bottom of the file) rather than wired into a page, so every one of the 39
   // playTrack call sites gets the explanation for free.
-  // What was playing when the phone took the app away, and the queue it was
-  // playing from. Deliberately NOT currentTrack: setting that arms the
-  // listening-event guard for a play that is not happening, and would bank a
-  // listen nobody made.
-  const [resumeCandidate, setResumeCandidate] = useState(null);
   const [playbackNotice, setPlaybackNotice] = useState(null);
   // Which tab the desktop docked player panel opens on when triggered,
   // shared so DesktopPlayer's Queue button and FullPlayer's own tabs
@@ -1801,127 +1778,6 @@ export function PlayerProvider({ children }) {
     return () => { if (window.showToast === showNotice) window.showToast = null; };
   }, [showNotice]);
 
-  // ── Writing it down ──────────────────────────────────────────────────
-  //
-  // On a timer rather than on timeupdate, which fires several times a second
-  // when this only needs to be roughly right. localStorage and not
-  // sessionStorage, because sessionStorage dies with the tab and the tab
-  // dying is the whole reason this exists.
-  useEffect(() => {
-    if (!currentTrack?.id || !isPlaying) return undefined;
-
-    const write = () => {
-      const at = audioRef.current?.currentTime || 0;
-      // Nothing worth coming back to in the first few seconds.
-      if (at < 5) return;
-
-      const q = queueRef.current || [];
-      const i = Math.max(0, queueIndexRef.current || 0);
-      // From the current track forward. If the queue is somehow empty, the
-      // one track is still better than nothing, and the read below copes.
-      const ids = q.slice(i, i + RESUME_MAX_IDS).map(t => t && t.id).filter(Boolean);
-
-      try {
-        localStorage.setItem(RESUME_KEY, JSON.stringify({
-          ids: ids.length ? ids : [currentTrack.id],
-          at: Math.floor(at),
-          ts: Date.now(),
-        }));
-      } catch { /* private mode, or storage is full. Not worth a crash. */ }
-    };
-
-    write();
-    const timer = setInterval(write, 5000);
-    return () => { write(); clearInterval(timer); };
-  }, [currentTrack?.id, isPlaying]);
-
-  // ── Reading it back ──────────────────────────────────────────────────
-  //
-  // Same columns and the same flattening as the feed, from the one file that
-  // owns both. The old version selected '*' and passed the raw row through,
-  // which is how a real song by a real artist came back captioned "Unknown
-  // artist" with no sound.
-  //
-  // Once, on mount, which is the load that follows being killed.
-  useEffect(() => {
-    let cancelled = false;
-    const drop = () => { try { localStorage.removeItem(RESUME_KEY); } catch {} };
-
-    (async () => {
-      let saved = null;
-      try { saved = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null'); } catch { return; }
-
-      const ids = Array.isArray(saved?.ids) ? saved.ids.filter(Boolean) : null;
-      if (!ids?.length || !saved.ts) return;
-      if (Date.now() - saved.ts > RESUME_MAX_AGE_MS) { drop(); return; }
-
-      const { data, error } = await supabase
-        .from('tracks')
-        .select(TRACK_COLUMNS)
-        .in('id', ids);
-
-      // Said out loud. A card that never appears and a card that appears
-      // broken are the same silence from outside.
-      if (error) {
-        console.error('[player] resume lookup failed:', error.code, error.message);
-        return;
-      }
-
-      // Back into the saved order. `in` returns whatever order it likes, and
-      // the order IS the queue.
-      const byId = new Map((data || []).map(r => [r.id, r]));
-      const list = ids
-        .map(id => byId.get(id))
-        .filter(isPlayableRow)
-        .map(flattenTrack);
-
-      if (!list.length) { drop(); return; }
-
-      // The saved song may be gone: unpublished since, deleted, or a
-      // pre-order that has not landed. Then the next one in the queue is
-      // offered instead, and the saved position is dropped with it. Seeking
-      // ninety seconds into a different song is worse than starting it.
-      const sameSong = list[0].id === ids[0];
-
-      if (!cancelled) {
-        setResumeCandidate({ track: list[0], list, at: sameSong ? (saved.at || 0) : 0 });
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, []);
-
-  const dismissResume = useCallback(() => {
-    setResumeCandidate(null);
-    try { localStorage.removeItem(RESUME_KEY); } catch {}
-  }, []);
-
-  // Through playTrack WITH THE LIST, like every other path in the app. That
-  // second argument is the entire fix: it is what gives the feed somewhere to
-  // go when you swipe. The availability gate, the queue rule and the
-  // listening-event arming then all behave exactly as they do for a tap.
-  const resumeLast = useCallback(() => {
-    const c = resumeCandidate;
-    if (!c?.track) return;
-    setResumeCandidate(null);
-    try { localStorage.removeItem(RESUME_KEY); } catch {}
-
-    playTrack(c.track, c.list);
-
-    const audio = audioRef.current;
-    if (!audio || !c.at) return;
-    // A position means nothing until the element knows how long the track is.
-    const onMeta = () => {
-      audio.removeEventListener('loadedmetadata', onMeta);
-      try {
-        if (!audio.duration || c.at < audio.duration) audio.currentTime = c.at;
-      } catch { /* landed wherever it landed, still the right song */ }
-    };
-    audio.addEventListener('loadedmetadata', onMeta);
-    // Metadata already in means the event has been and gone.
-    if (audio.readyState >= 1) onMeta();
-  }, [resumeCandidate, playTrack]);
-
   // The notice clears itself. Tying it to a dismiss button would mean every
   // page that can play a track also has to render one.
   useEffect(() => {
@@ -2141,7 +1997,6 @@ export function PlayerProvider({ children }) {
     removeFromQueue, moveInQueue, playNextInQueue, clearQueue, closePlayer, toggleShuffle, toggleRepeat,
     replaceQueue, jumpToIndex,
     playbackNotice, showNotice, dismissPlaybackNotice: () => setPlaybackNotice(null),
-    resumeCandidate, resumeLast, dismissResume,
     setDrivingMode,
   };
 
@@ -2177,53 +2032,6 @@ export function PlayerProvider({ children }) {
           >
             <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#fbbf24' }} />
             <p className="text-xs text-white/80">{playbackNotice.message}</p>
-          </div>
-        </div>
-      )}
-      {/* Offered, never forced. The song comes back paused because the page
-          it reopens on has had no gesture, and browsers will not start audio
-          without one. One tap and it is exactly where it was, with the rest
-          of the queue behind it. */}
-      {resumeCandidate?.track && (
-        <div
-          className="fixed left-1/2 -translate-x-1/2 z-[420] px-4 w-full max-w-sm"
-          style={{ bottom: 'calc(112px + var(--safe-area-bottom, 0px))' }}
-        >
-          <div
-            className="flex items-center gap-3 px-3 py-2.5 rounded-2xl shadow-2xl"
-            style={{
-              backgroundColor: 'rgba(20,20,28,0.96)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              backdropFilter: 'blur(12px)',
-            }}
-          >
-            {resumeCandidate.track.cover_artwork_url && (
-              <img
-                src={resumeCandidate.track.cover_artwork_url}
-                alt=""
-                className="w-9 h-9 rounded-lg object-cover flex-shrink-0"
-              />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-wide text-white/35">Pick up where you left off</p>
-              <p className="text-xs text-white truncate">{resumeCandidate.track.title}</p>
-              <p className="text-[10px] text-white/40 truncate">{resumeCandidate.track.artist_name}</p>
-            </div>
-            <button
-              type="button"
-              onClick={resumeLast}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-black flex-shrink-0"
-            >
-              Resume
-            </button>
-            <button
-              type="button"
-              onClick={dismissResume}
-              aria-label="Dismiss"
-              className="text-white/30 hover:text-white/60 text-lg leading-none px-1 flex-shrink-0"
-            >
-              ×
-            </button>
           </div>
         </div>
       )}
