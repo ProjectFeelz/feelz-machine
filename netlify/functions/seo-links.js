@@ -251,6 +251,43 @@ exports.handler = async (event) => {
       if (artist) sections.push({ heading: 'Artist', links: [{ href: artistHref(artist), label: artist.artist_name || artist.slug }] });
       if (siblings.length && artist) sections.push({ heading: `More from ${artist.artist_name || artist.slug}`, links: trackLinks(siblings, artistById) });
       if (genre) sections.push({ heading: 'Genre', links: [{ href: `/genres/${genreSlug(genre)}`, label: genre }] });
+
+      // ── Same genre, other artists ───────────────────────────────────
+      //
+      // The reason this exists is in Search Console, not in a best practice
+      // list. A track page's crawlable body was 254 characters and five links:
+      // the artist, one sibling, the genre, and two hubs. 33 track and
+      // newsletter URLs came back as "Duplicate, Google chose different
+      // canonical than user" and 307 as "Discovered, currently not indexed".
+      // Google had every URL from the sitemap and decided they were not worth
+      // fetching.
+      //
+      // The canonical tags were never the problem. They are unique and correct
+      // on every page. What was missing is a path between pages that is not
+      // the sitemap. With this, a crawl that reaches one Amapiano track can
+      // reach the rest without going back to a hub and spending another crawl
+      // allowance to get there.
+      //
+      // cat.tracks for beats too, not `pool`. There are eight beats and 154
+      // tracks, and the point is to get into the catalogue, not to circle
+      // eight pages.
+      //
+      // Capped at 12 rather than SECTION_CAP. These are other people's songs
+      // on somebody's track page: enough to be a path, not enough to bury the
+      // song the page is about.
+      if (genre) {
+        const sameGenre = cat.tracks.filter(t =>
+          (t.genre || '').trim() === genre &&
+          t.slug !== item.slug &&
+          t.artist_id !== item.artist_id
+        ).slice(0, 12);
+        if (sameGenre.length) {
+          sections.push({
+            heading: `More ${genre} on Feelz Machine`,
+            links: trackLinks(sameGenre, artistById),
+          });
+        }
+      }
       sections.push({ heading: 'More on Feelz Machine', links: [{ href: '/artists', label: 'All artists' }, { href: '/browse', label: 'Browse everything' }] });
 
       return json(200, { sections });

@@ -35,9 +35,15 @@ Disallow: /upgrade
 Disallow: /for-you
 Disallow: /feed
 Disallow: /home
+Disallow: /settings
+Disallow: /reset-password
+Disallow: /deal/
+Disallow: /splits
+Disallow: /live/studio
 
 # ── Private: admin ───────────────────────────────────────────────────────────
 Disallow: /admin
+Disallow: /retail-admin
 
 # ── Private: retail (the landing page above is public, the rest is not) ──────
 Disallow: /retail/player

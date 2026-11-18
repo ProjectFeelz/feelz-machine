@@ -1560,6 +1560,8 @@ export default function ForYouPage() {
   // again, and the songs skipped in the last day, which stay out of the feed.
   const seenIdsRef = React.useRef(new Set());
   const skippedIdsRef = React.useRef(new Set());
+  // Tracks played three or more times in the last week. Lead picks only.
+  const heardOftenRef = React.useRef(new Set());
 
   const loadTracks = useCallback(async (offset = 0) => {
     if (offset === 0) setLoading(true); else setLoadingMore(true);
@@ -1599,6 +1601,29 @@ export default function ForYouPage() {
             .eq('signal', 'skip')
             .order('updated_at', { ascending: false })
             .limit(500);
+          // TRACKS THIS LISTENER HAS ALREADY HEARD, REPEATEDLY, THIS WEEK.
+          //
+          // Used below to keep them out of the curated lead block. A cold
+          // start pick exists to introduce somebody to something. Once they
+          // have played it five times it is not an introduction any more, it
+          // is the song that opens the app every morning whether they want it
+          // or not.
+          supabase
+            .from('listening_events')
+            .select('track_id')
+            .eq('user_id', user.id)
+            .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+            .limit(2000)
+            .then(({ data }) => {
+              const tally = {};
+              (data || []).forEach(r => {
+                if (r.track_id) tally[r.track_id] = (tally[r.track_id] || 0) + 1;
+              });
+              heardOftenRef.current = new Set(
+                Object.keys(tally).filter(id => tally[id] >= 3)
+              );
+            });
+
           const nowMs = Date.now();
           const REST_DAYS = [1, 7, 30];   // 1st, 2nd, 3rd skip; 4th is forever
           (skipData || []).forEach(r => {
@@ -1741,7 +1766,12 @@ export default function ForYouPage() {
 
         const pickTracks = (picks || [])
           .map(p => p.tracks)
-          .filter(t => t && t.is_published && !hiddenIdsRef.current.has(t.id))
+          // Not hidden, and not something they have already heard to death.
+          // See heardOftenRef: a pick that keeps opening the app for somebody
+          // who has played it five times is not introducing them to anything.
+          .filter(t => t && t.is_published
+            && !hiddenIdsRef.current.has(t.id)
+            && !heardOftenRef.current.has(t.id))
           .map(t => ({
             ...t,
             artist_name:  t.artists?.artist_name || 'Unknown',
@@ -1773,7 +1803,22 @@ export default function ForYouPage() {
             // Nothing from the recommender: the curated list is the feed.
             fetched = rotated.slice(0, PAGE_SIZE);
           } else {
-            leadPicks = rotated.slice(0, LEAD_PICKS);
+            // THE ROTATION ONLY WORKS IF THE WINDOW IS SMALLER THAN THE LIST.
+            //
+            // The note above is right that the window should move so no pick
+            // is permanently first. It quietly assumed a long list. With five
+            // active picks and a window of four, every load leads with four of
+            // the same five songs: the rotation changes their ORDER and almost
+            // nothing else.
+            //
+            // That is how one track opened the app six times in a day for the
+            // same listener. Nothing was rigged and nothing was broken; the
+            // window had simply grown to nearly the size of the list.
+            //
+            // Never more than half the list, so there is always something to
+            // rotate THROUGH, and at least one so a short list still leads.
+            const window = Math.max(1, Math.min(LEAD_PICKS, Math.floor(rotated.length / 2)));
+            leadPicks = rotated.slice(0, window);
             // A pick the recommender also chose must not appear twice, and the
             // curated position wins.
             const leadIds = new Set(leadPicks.map(t => t.id));
@@ -1912,9 +1957,38 @@ export default function ForYouPage() {
       // order they were chosen, then mark the swipe hint, so the hint lands on
       // whatever card actually ends up first. The picks are deliberately not
       // shuffled and not dealt out by artist: an ordered opening is the point.
-      const spread = leadPicks.length > 0
-        ? [...leadPicks, ...spreadByArtist(fetched)]
-        : spreadByArtist(fetched);
+      // THE CURATED PICKS ARE THE FALLBACK, NOT THE FRONT PAGE.
+      //
+      // cold_start_picks exists for the listener the recommender cannot help
+      // yet: brand new, no history, nothing to go on. For everybody else the
+      // algorithm is supposed to drive discovery, and a hand-picked list sat
+      // in front of it was quietly overriding that every single load.
+      //
+      // The fallback branch above already does the right thing: with nothing
+      // from the recommender the curated list simply IS the feed. This is the
+      // other half. When the recommender DID return something, its choices
+      // lead, and a pick is slipped in a few cards down as seasoning rather
+      // than as the opening statement.
+      //
+      // AFTER_LEAD is deliberately past the first screen. A pick that lands at
+      // position one is the thing somebody opens the app to, which is how one
+      // track opened it six times in a day for the same listener.
+      const AFTER_LEAD = 3;
+      const ordered = spreadByArtist(fetched);
+      let spread;
+      if (leadPicks.length === 0) {
+        spread = ordered;
+      } else if (ordered.length <= AFTER_LEAD) {
+        // Too little from the recommender to bury anything behind. Fall back
+        // to the old behaviour rather than hiding the picks completely.
+        spread = [...leadPicks, ...ordered];
+      } else {
+        spread = [
+          ...ordered.slice(0, AFTER_LEAD),
+          ...leadPicks,
+          ...ordered.slice(AFTER_LEAD),
+        ];
+      }
       if (offset === 0 && spread.length > 0) spread[0]._isFirst = true;
       if (offset === 0) setTracks(spread);
       else setTracks(prev => [...prev, ...spread]);
