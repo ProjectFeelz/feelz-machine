@@ -92,13 +92,6 @@ export function resolvePlaySource() {
 // visit, not brand somebody an external visitor for the rest of the year.
 const EXTERNAL_KEY = 'fm_entry_from';
 
-// Where the last playing track is written so it can be offered back after
-// the phone evicts the app. See the two effects in the provider.
-const RESUME_KEY = 'feelz_resume';
-// Older than this and it is yesterday's listening. Offering that back is
-// strange rather than helpful.
-const RESUME_MAX_AGE_MS = 12 * 60 * 60 * 1000;
-
 export function readExternalEntry() {
   try {
     const q = new URLSearchParams(window.location.search);
@@ -276,17 +269,6 @@ export function PlayerProvider({ children }) {
   // bottom of the file) rather than wired into a page, so every one of the 39
   // playTrack call sites gets the explanation for free.
   const [playbackNotice, setPlaybackNotice] = useState(null);
-  // WHAT WAS PLAYING WHEN THE PHONE TOOK THE APP AWAY.
-  //
-  // Android evicts a backgrounded PWA to reclaim memory, and tapping the
-  // media notification relaunches it cold: a blank player, For You rebuilt
-  // from the top, and the song somebody was in the middle of simply gone.
-  // Nothing anywhere wrote down what was playing.
-  //
-  // This holds what was found in storage on load. It is deliberately NOT
-  // currentTrack: setting that arms the listening-event guard for a play
-  // that is not happening, and would bank a listen nobody made.
-  const [resumeCandidate, setResumeCandidate] = useState(null);
   // Which tab the desktop docked player panel opens on when triggered,
   // shared so DesktopPlayer's Queue button and FullPlayer's own tabs
   // drive the same single panel instead of two competing ones.
@@ -1795,165 +1777,6 @@ export function PlayerProvider({ children }) {
     return () => { if (window.showToast === showNotice) window.showToast = null; };
   }, [showNotice]);
 
-  // ── Remembering the song, and offering it back ───────────────────────
-  //
-  // Written on a timer rather than on timeupdate, which fires several times a
-  // second when this only needs to be roughly right. localStorage and not
-  // sessionStorage, because sessionStorage dies with the tab and the tab
-  // dying is the entire case this exists for.
-  useEffect(() => {
-    if (!currentTrack?.id || !isPlaying) return undefined;
-    const write = () => {
-      const at = audioRef.current?.currentTime || 0;
-      // Nothing worth coming back to in the first few seconds.
-      if (at < 5) return;
-      try {
-        localStorage.setItem(RESUME_KEY, JSON.stringify({
-          id: currentTrack.id, at: Math.floor(at), ts: Date.now(),
-        }));
-      } catch { /* private mode, or storage is full. Not worth a crash. */ }
-    };
-    write();
-    const timer = setInterval(write, 5000);
-    return () => { write(); clearInterval(timer); };
-  }, [currentTrack?.id, isPlaying]);
-
-  // ── Reading it back ──────────────────────────────────────────────────
-  //
-  // WHAT WAS WRONG: "Unknown artist", and no sound
-  //
-  // This handed playTrack the raw database row. Every other path in the app
-  // flattens the joined artist before passing a track anywhere:
-  //
-  //     artist_name:  t.artists?.artist_name || 'Unknown',
-  //     artist_slug:  t.artists?.slug || null,
-  //     artist_image: t.artists?.profile_image_url || null,
-  //
-  // Without that the card reads track.artist_name, finds nothing, falls
-  // through to its last resort and prints "Unknown artist" across a real song
-  // by a real artist. ForYouPage.js is where that string comes from.
-  //
-  // The column list is spelled out now instead of '*', and it is the same list
-  // the feed selects, so a resumed track and a tapped track are the same shape
-  // and cannot drift apart again. '*' looked safer and was not: it depends on
-  // the table never gaining a column the client is not granted, and it hides
-  // which fields playback actually needs.
-  //
-  //
-  // WHY IT RUNS ON RETURN AND NOT ONLY ON MOUNT
-  //
-  // It read once, on mount. That covers the app being killed and started
-  // again, which is the case it was written for, and it is the case that
-  // works.
-  //
-  // It does not cover coming back to a page the phone froze rather than
-  // killed. There is no mount, so there is no read, so there is no card.
-  // Tapping the media card in the notification shade is usually exactly that:
-  // the page is still there, it was simply not running.
-  //
-  // pageshow with persisted set is the browser saying this page came back
-  // rather than loaded. visibilitychange catches the rest. Both are cheap and
-  // both bail immediately when something is already playing, which is the
-  // normal case and must stay silent.
-  const resumeReadRef = useRef(false);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const read = async () => {
-      // Something is already playing. There is nothing to offer and a card
-      // over a playing song is just in the way.
-      if (currentTrackRef.current?.id) return;
-      if (resumeReadRef.current) return;
-      resumeReadRef.current = true;
-
-      let saved = null;
-      try { saved = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null'); } catch { return; }
-      if (!saved?.id || !saved.ts) return;
-      if (Date.now() - saved.ts > RESUME_MAX_AGE_MS) {
-        try { localStorage.removeItem(RESUME_KEY); } catch {}
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('tracks')
-        .select('id, title, slug, short_code, is_podcast, is_competition_entry, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
-        .eq('id', saved.id)
-        .maybeSingle();
-
-      // Said out loud rather than swallowed. A card that never appears and a
-      // card that appears broken are the same silence from the outside.
-      if (error) {
-        console.error('[player] resume lookup failed:', error.code, error.message);
-        resumeReadRef.current = false;
-        return;
-      }
-
-      // Unpublished, deleted, or missing the one field playback needs.
-      // Nothing to offer, and the stale key goes with it.
-      if (!data || data.is_published === false || !data.file_url) {
-        try { localStorage.removeItem(RESUME_KEY); } catch {}
-        return;
-      }
-
-      // The flattening. This is the fix.
-      const track = {
-        ...data,
-        artist_name:  data.artists?.artist_name || 'Unknown',
-        artist_slug:  data.artists?.slug || null,
-        artist_image: data.artists?.profile_image_url || null,
-      };
-
-      if (!cancelled) setResumeCandidate({ track, at: saved.at || 0 });
-    };
-
-    read();
-
-    const onShow = (e) => { if (e.persisted) { resumeReadRef.current = false; read(); } };
-    const onVisible = () => {
-      if (document.visibilityState !== 'visible') return;
-      if (currentTrackRef.current?.id) return;
-      resumeReadRef.current = false;
-      read();
-    };
-
-    window.addEventListener('pageshow', onShow);
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      cancelled = true;
-      window.removeEventListener('pageshow', onShow);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, []);
-
-  const dismissResume = useCallback(() => {
-    setResumeCandidate(null);
-    try { localStorage.removeItem(RESUME_KEY); } catch {}
-  }, []);
-
-  // Through playTrack like every other path, so the availability gate, the
-  // queue and the listening-event arming behave exactly as they do for a
-  // normal tap. The seek waits for metadata, because a position means
-  // nothing until the element knows how long the track is.
-  const resumeLast = useCallback(() => {
-    const c = resumeCandidate;
-    if (!c?.track) return;
-    setResumeCandidate(null);
-    try { localStorage.removeItem(RESUME_KEY); } catch {}
-    playTrack(c.track);
-    const audio = audioRef.current;
-    if (!audio || !c.at) return;
-    const onMeta = () => {
-      audio.removeEventListener('loadedmetadata', onMeta);
-      try {
-        if (!audio.duration || c.at < audio.duration) audio.currentTime = c.at;
-      } catch { /* landed wherever it landed, still the right song */ }
-    };
-    audio.addEventListener('loadedmetadata', onMeta);
-    // Metadata already in means the event has been and gone.
-    if (audio.readyState >= 1) onMeta();
-  }, [resumeCandidate, playTrack]);
-
   // The notice clears itself. Tying it to a dismiss button would mean every
   // page that can play a track also has to render one.
   useEffect(() => {
@@ -2173,7 +1996,6 @@ export function PlayerProvider({ children }) {
     removeFromQueue, moveInQueue, playNextInQueue, clearQueue, closePlayer, toggleShuffle, toggleRepeat,
     replaceQueue, jumpToIndex,
     playbackNotice, showNotice, dismissPlaybackNotice: () => setPlaybackNotice(null),
-    resumeCandidate, resumeLast, dismissResume,
     setDrivingMode,
   };
 
@@ -2209,51 +2031,6 @@ export function PlayerProvider({ children }) {
           >
             <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#fbbf24' }} />
             <p className="text-xs text-white/80">{playbackNotice.message}</p>
-          </div>
-        </div>
-      )}
-      {/* Offered, never forced. The song comes back paused because the page
-          it reopens on has had no gesture, and browsers will not start audio
-          without one. One tap and it is exactly where it was. */}
-      {resumeCandidate?.track && (
-        <div
-          className="fixed left-1/2 -translate-x-1/2 z-[420] px-4 w-full max-w-sm"
-          style={{ bottom: 'calc(112px + var(--safe-area-bottom, 0px))' }}
-        >
-          <div
-            className="flex items-center gap-3 px-3 py-2.5 rounded-2xl shadow-2xl"
-            style={{
-              backgroundColor: 'rgba(20,20,28,0.96)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              backdropFilter: 'blur(12px)',
-            }}
-          >
-            {resumeCandidate.track.cover_artwork_url && (
-              <img
-                src={resumeCandidate.track.cover_artwork_url}
-                alt=""
-                className="w-9 h-9 rounded-lg object-cover flex-shrink-0"
-              />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-wide text-white/35">Pick up where you left off</p>
-              <p className="text-xs text-white truncate">{resumeCandidate.track.title}</p>
-            </div>
-            <button
-              type="button"
-              onClick={resumeLast}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-black flex-shrink-0"
-            >
-              Resume
-            </button>
-            <button
-              type="button"
-              onClick={dismissResume}
-              aria-label="Dismiss"
-              className="text-white/30 hover:text-white/60 text-lg leading-none px-1 flex-shrink-0"
-            >
-              ×
-            </button>
           </div>
         </div>
       )}
