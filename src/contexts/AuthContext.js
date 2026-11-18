@@ -389,12 +389,42 @@ export function AuthProvider({ children }) {
     })();
 
     try {
-      await Promise.all([
+      // THE BLACK SCREEN, THIRD CAUSE.
+      //
+      // The effect below guards getSession with a deadline and explains why at
+      // length. It then says loadUser is still awaited in full, deliberately,
+      // because cutting it short is what sent returning accounts to /setup.
+      // That reasoning is right and these four reads stay awaited online.
+      //
+      // What it did not cover is these four reads THEMSELVES hanging. With no
+      // connection they do not fail fast: supabase-js sits and retries. So
+      // loadUser never returns, the .finally that clears loading never runs,
+      // and the gate stays shut. The call above was guarded and the very next
+      // step was not, which is the same black screen by a different road.
+      //
+      // Only offline, and only when the browser is certain of it. Racing these
+      // online is what causes the flicker, so online nothing changes at all.
+      // Offline there is nothing to flicker TO: these queries cannot succeed,
+      // so waiting on them buys a black screen and no data.
+      //
+      // Starting thin is the right answer here. Saved music does not need any
+      // of this: the right to play it offline rides on the lease stored beside
+      // the audio. And onAuthStateChange fills everything in the moment the
+      // network comes back.
+      const profileReads = Promise.all([
         fetchProfile(sessionUser.id),
         fetchArtist(sessionUser.id, sessionUser),
         fetchListener(sessionUser.id),
         checkAdmin(sessionUser.id),
       ]);
+      if (navigator.onLine === false) {
+        await Promise.race([
+          profileReads,
+          new Promise(resolve => setTimeout(resolve, 2000)),
+        ]);
+      } else {
+        await profileReads;
+      }
     } catch (err) {
       console.error('Failed to load user profile data:', err);
     }
