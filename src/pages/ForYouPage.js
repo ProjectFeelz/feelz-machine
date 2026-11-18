@@ -2109,14 +2109,24 @@ export default function ForYouPage() {
         // a hidden song: this upsert shares its row with "not interested", and
         // writing "skip" over it is what brought hidden songs back.
         skippedIdsRef.current.add(currentItem.id);
-        reportFeedbackWrite('skip', supabase.from('listener_feedback').upsert({
-          user_id:    user.id,
-          track_id:   currentItem.id,
-          artist_id:  currentItem.artist_id,
-          signal:     'skip',
-          listen_pct: pct,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,track_id' }));
+        // THROUGH record_skip SO REPEATS ACCUMULATE.
+        //
+        // This was an upsert, which overwrites. The row holds one skip per
+        // listener per track, so skipping the same song twenty times left the
+        // same single row behind and the engine could not tell the twentieth
+        // from the first.
+        //
+        // Incrementing from here would mean reading the row, adding one and
+        // writing it back, and skips arrive in bursts, so the next one lands
+        // in the gap and the count drifts low with nothing reporting it. The
+        // function does it in one statement instead, and refuses to write over
+        // a 'not_interested' row, which is the guard the ref below is also
+        // doing. Belt and braces on the bug that brought hidden songs back.
+        reportFeedbackWrite('skip', supabase.rpc('record_skip', {
+          p_track_id:   currentItem.id,
+          p_artist_id:  currentItem.artist_id,
+          p_listen_pct: pct,
+        }));
       } else if (pct >= 70 && !hiddenIdsRef.current.has(currentItem.id)) {
         // Deep listen, positive signal
         reportFeedbackWrite('deep listen', supabase.from('listener_feedback').upsert({

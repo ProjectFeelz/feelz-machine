@@ -236,7 +236,7 @@ exports.handler = async (event) => {
         // Downloads
         supabase.from('downloads').select('user_id, track_id').in('user_id', userIds),
         // Explicit feedback
-        supabase.from('listener_feedback').select('user_id, track_id, artist_id, signal').in('user_id', userIds),
+        supabase.from('listener_feedback').select('user_id, track_id, artist_id, signal, listen_pct, skip_count').in('user_id', userIds),
         // THEIR OWN ARTIST PROFILES.
         //
         // A listener who is also an artist was being recommended their own
@@ -296,11 +296,18 @@ exports.handler = async (event) => {
 
       const feedbackByUser = {};
       (feedbackData || []).forEach(f => {
-        if (!feedbackByUser[f.user_id]) feedbackByUser[f.user_id] = { notInterested: new Set(), deepListen: new Set(), skipped: new Set(), hiddenArtists: new Set() };
+        if (!feedbackByUser[f.user_id]) feedbackByUser[f.user_id] = { notInterested: new Set(), deepListen: new Set(), skipped: new Set(), hiddenArtists: new Set(), skipDetail: {} };
         const fb = feedbackByUser[f.user_id];
         if (f.signal === 'not_interested') { fb.notInterested.add(f.track_id); fb.hiddenArtists.add(f.artist_id); }
         if (f.signal === 'deep_listen') fb.deepListen.add(f.track_id);
-        if (f.signal === 'skip') fb.skipped.add(f.track_id);
+        if (f.signal === 'skip') {
+          fb.skipped.add(f.track_id);
+          // How badly and how often, which the Set alone cannot carry.
+          fb.skipDetail[f.track_id] = {
+            pct:   typeof f.listen_pct === 'number' ? f.listen_pct : 0,
+            times: f.skip_count > 0 ? f.skip_count : 1,
+          };
+        }
       });
 
       const upsertRows = [];
@@ -320,7 +327,7 @@ exports.handler = async (event) => {
         const downloadedArtists = new Set();
         downloaded.forEach(tid => { const a = artistByTrack[tid]; if (a) downloadedArtists.add(a); });
         const isColdstart  = streams.length === 0;
-        const feedback     = feedbackByUser[user_id] || { notInterested: new Set(), deepListen: new Set(), skipped: new Set(), hiddenArtists: new Set() };
+        const feedback     = feedbackByUser[user_id] || { notInterested: new Set(), deepListen: new Set(), skipped: new Set(), hiddenArtists: new Set(), skipDetail: {} };
         const ownArtists   = ownArtistsByUser[user_id] || new Set();
 
         // Build taste profile from stream history
@@ -510,7 +517,39 @@ exports.handler = async (event) => {
             if (streamedIds.has(track.id)) score -= 60;
             if (recentIds.has(track.id))   score -= 30;
             if (feedback.deepListen.has(track.id)) score += 40;
-            if (feedback.skipped.has(track.id))    score -= 40;
+            // A SKIP THAT MEANS WHAT IT SAYS.
+            //
+            // This was a flat -40 for any skip. It could not be anything else:
+            // listen_pct was never selected, and the row is upserted, so a
+            // repeated skip looked identical to a single one.
+            //
+            // Steve's skips average 2% of a song. Five tracks he left after
+            // about one second were still being recommended to him, because
+            // from_following is worth 63 and a skip cost 40. Following an
+            // artist outweighed walking out of their song, every time, however
+            // many times he walked out.
+            //
+            // Two multipliers now, both bounded:
+            //
+            //   severity  how little was heard. Leaving at 1% is a verdict;
+            //             leaving at 65% is nearly a full play and barely
+            //             counts. Zero at or past 70%, which is the same
+            //             threshold ForYouPage uses to call it a deep listen,
+            //             so the two can never disagree about one play.
+            //
+            //   times     how often, capped at 4. A bad afternoon should not
+            //             bury a track for good, but the fourth skip of the
+            //             same song is not an accident.
+            //
+            // Worst case is -160 against a best case of about +63, so a track
+            // skipped fast and repeatedly now loses to anything. One fast skip
+            // demotes; the second removes.
+            if (feedback.skipped.has(track.id)) {
+              const d        = feedback.skipDetail[track.id] || { pct: 0, times: 1 };
+              const severity = Math.max(0, Math.min(1, (70 - d.pct) / 70));
+              const times    = Math.max(1, Math.min(4, d.times));
+              score -= 40 * severity * times;
+            }
           }
 
           if (score <= 0) return null;
