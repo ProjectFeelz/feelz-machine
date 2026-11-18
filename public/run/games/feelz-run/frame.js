@@ -7,6 +7,18 @@ const rawFillText = ctx.fillText.bind(ctx);
 
 function mirroredText(t, x, y, w) { ctx.save(); ctx.translate(x, y); ctx.scale(-1, 1); if (w !== undefined) rawFillText(t, 0, 0, w); else rawFillText(t, 0, 0); ctx.restore(); }
 
+// The look (3D buildings, weather, light) never stops a frame: if any of it
+// fails, it is skipped and the game draws on. A part that keeps failing is
+// switched off for the visit.
+const fxFails = {};
+function safeFx(fn) {
+  const key = fn.toString();
+  if (fxFails[key] > 5) return;
+  ctx.save();
+  try { fn(); } catch (e) { fxFails[key] = (fxFails[key] || 0) + 1; if (fxFails[key] === 1) console.warn("[fx] skipped:", e && e.message); }
+  ctx.restore();
+}
+
 function render() {
   if (inward.active) { renderInward(); return; }
   ctx.save();
@@ -14,8 +26,8 @@ function render() {
   const mirror = mission && mission.mirror;
   if (mirror) { ctx.translate(W, 0); ctx.scale(-1, 1); ctx.fillText = mirroredText; }
   drawBackground();
-  if (typeof World3D !== "undefined") World3D.draw();
-  if (typeof Atmos !== "undefined") Atmos.back();
+  safeFx(() => World3D.draw());
+  safeFx(() => Atmos.back());
   drawDecor();
   drawSetDressing();
   drawTunnels();
@@ -25,7 +37,7 @@ function render() {
     if (s.kind === "awning" && level.stalls.length) continue;   // drawn with the stalls
     drawSolid(s);
   }
-  if (typeof Atmos !== "undefined") Atmos.reflect();
+  safeFx(() => Atmos.reflect());
   drawBeatSolids();
   drawValves();
   drawClimbs();
@@ -48,7 +60,7 @@ function render() {
   drawStallFronts();
   drawHedges();
   drawCrowds("front");
-  if (typeof Atmos !== "undefined") Atmos.front();
+  safeFx(() => Atmos.front());
   drawDebris();
   drawStormFront();
   drawParticles();
@@ -58,7 +70,7 @@ function render() {
   const baseRain = mission.weather && mission.weather.rain !== undefined ? mission.weather.rain : 0.15;
   drawRain(indoors ? 0 : baseRain + storm.strength * 0.9);
   if (mirror) { ctx.restore(); ctx.save(); ctx.fillText = rawFillText; }
-  if (typeof Atmos !== "undefined") Atmos.grade();
+  safeFx(() => Atmos.grade());
   drawScreenFx();
   ctx.restore();
   ctx.fillText = rawFillText;

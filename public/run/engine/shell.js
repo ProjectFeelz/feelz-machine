@@ -239,7 +239,8 @@ function gameLoop(now) {
   lastTime = now;
   frameTime += dt;
   update(dt);
-  render();
+  // A drawing error never stops the run: the next frame still comes.
+  try { render(); } catch (e) { if (!gameLoop.warned) { gameLoop.warned = true; console.warn("[render]", e); } }
   updateHud();
   if (gameState === "playing") requestAnimationFrame(gameLoop);
   else if (gameState === "finished") requestAnimationFrame(finishedLoop);

@@ -919,10 +919,11 @@ function mudFill(x0, y0, w, h, alpha) {
 }
 // Sludge along the top of the Lower City street (Mission 1's dusty mud).
 function drawSludge(s, h) {
-  if (!mission || !(typeof ATMOS !== "undefined" && (ATMOS.missions || []).includes(mission.id))) return;
+  if (!mission || typeof ATMOS === "undefined" || (ATMOS.missions !== "all" && !(ATMOS.missions || []).includes(mission.id))) return;
   const X0 = Math.max(sx(s.x), 0), X1 = Math.min(sx(s.x) + s.w, W), Y = sy(s.y);
   if (X1 <= X0) return;
   const band = Math.min(h, m(0.55)), top = Y + 5;      // under the gold lip, which always stays clear
+  if (!(band > 2)) return;
   ctx.save();
   ctx.beginPath(); ctx.rect(X0, top, X1 - X0, band); ctx.clip();
   // patchy, soft-edged pools of sludge: thick in places, none in others
