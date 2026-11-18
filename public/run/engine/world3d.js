@@ -116,6 +116,9 @@ const World3D = (() => {
       const deck = hits.length ? hits[Math.floor(hits.length * 0.5)] : box.max.y;
       root.traverse(o => {
         if (!o.isMesh || !o.material) return;
+        // Send its pictures to the graphics card now, while nothing is moving,
+        // rather than the first time it comes on screen (a visible hitch).
+        for (const k of ["map", "normalMap", "roughnessMap", "metalnessMap", "emissiveMap"]) if (o.material[k]) { try { renderer.initTexture(o.material[k]); } catch (e) { /* drawn on first use instead */ } }
         o.material.envMapIntensity = 0.55;
         // rain soaked: a little more sheen than Meshy gives them
         if (o.material.roughness !== undefined) o.material.roughness = Math.min(o.material.roughness, 0.78);
@@ -217,7 +220,7 @@ const World3D = (() => {
     scene.fog.color.setHex(set.fog);
     lights.sky.intensity = 1.6 - sk * 0.5;
     lights.key.intensity = 2.0 - sk * 0.9;
-    lights.flash.intensity = Math.min(1, flash || 0) * 2.4 + (lightningBolt ? 1.2 : 0);
+    lights.flash.intensity = Math.min(1, flash || 0) * 0.9;   // a touch: the game's own flash does the rest
     // The roofs on screen (and a little either side).
     const live = new Set();
     for (const s of level.solids) {

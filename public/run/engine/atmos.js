@@ -168,7 +168,7 @@ const Atmos = (() => {
       ctx.globalCompositeOperation = "source-over";
     }
     // Far fog: two sheets at different depths, drifting with the wind.
-    fogLayer(0.18, H * 0.3, 260, L.fog * (0.7 + sk * 0.5), 6);
+    fogLayer(0.18, H * 0.3, 260, L.fog * (0.7 + sk * 0.15), 6);
     if (quality === 0) fogLayer(0.42, H * 0.5, 220, L.fog * 0.8, 14);
     // Distant rain: fine, slow, behind everything.
     const rain = rainAmount();
@@ -183,9 +183,7 @@ const Atmos = (() => {
       }
       ctx.stroke();
     }
-    // The lightning lights the far city for a moment.
-    const fk = flashK();
-    if (fk > 0.02) { ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = `rgba(150, 170, 220, ${fk * 0.1})`; ctx.fillRect(0, 0, W, H * 0.75); }
+    // (The lightning's flash is the game's own: nothing added here, so it never strobes twice.)
     ctx.restore();
   }
 
@@ -331,13 +329,6 @@ const Atmos = (() => {
     // lightning's cold white for a beat.
     if (L.grade && quality === 0) { ctx.globalCompositeOperation = "multiply"; ctx.fillStyle = L.grade; ctx.fillRect(0, 0, W, H); }
     if (L.lift && quality === 0) { ctx.globalCompositeOperation = "screen"; ctx.fillStyle = L.lift; ctx.fillRect(0, 0, W, H); }
-    const fk = flashK();
-    if (fk > 0.02) {
-      ctx.globalCompositeOperation = "lighter";
-      const g = ctx.createLinearGradient(0, 0, 0, H);
-      g.addColorStop(0, `rgba(170, 190, 255, ${fk * 0.14})`); g.addColorStop(1, `rgba(170, 190, 255, ${fk * 0.03})`);
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    }
     // Vignette: the corners fall away into the dark.
     ctx.globalCompositeOperation = "source-over";
     const v = ctx.createRadialGradient(W / 2, H * 0.55, H * 0.35, W / 2, H * 0.55, W * 0.75);

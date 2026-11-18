@@ -414,8 +414,9 @@ function closeReading() {
   // A button still held from closing the page doesn't count as a new jump or hit; one already let go does.
   players.forEach((p, i) => { const c = rawControls(i); p.jumpPressed = !!c.jump; p.attackPressed = !!c.attack; });
   if (gameState !== "playing") return;
-  try { songAudio.currentTime = songClock; } catch (e) { /* not seekable yet */ }
-  if (soundOn) songAudio.play().then(() => { musicBlocked = false; }).catch(() => { musicBlocked = true; });
+  // The song waited where the page opened: start it again in place (jumping in the
+  // file when it's already there makes iPhone stall for a moment).
+  if (soundOn) resumeSong();
 }
 
 // A runner reaches the goal.
