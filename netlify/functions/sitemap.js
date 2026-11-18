@@ -171,6 +171,13 @@ async function buildSitemap() {
       .select('slug, artist_id, updated_at, genre')
       .eq('is_published', true)
       .eq('is_beat', false)
+      // The 19 Sessions entries are 19 covers of one song. They are real
+      // pages and they still answer, with their own title and canonical, and
+      // an entrant can still share the link. They are simply not submitted:
+      // crawl is the scarce thing on this domain and 19 near-identical covers
+      // is not what it should be spent on. Same decision as migration 233 and
+      // seoCatalogue.js.
+      .is('competition_id', null)
       .not('slug', 'is', null)
       .limit(20000),
 

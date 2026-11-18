@@ -239,9 +239,13 @@ exports.handler = async (event) => {
     }
 
     if (type === 'track' || type === 'beat') {
-      const pool = type === 'beat' ? cat.beats : cat.tracks;
-      const item = pool.find(t => t.slug === slug);
+      // Looked up in everyTrack, which still contains the Sessions entries, so
+      // an entrant's own page keeps its title and its canonical. The lists
+      // below are built from cat.tracks, which does not, so no entry is linked
+      // to from anywhere else. See seoCatalogue.js.
+      const item = cat.everyTrack.find(t => t.slug === slug && Boolean(t.is_beat) === (type === 'beat'));
       if (!item) return json(404, { error: 'unknown_track' });
+      const pool = type === 'beat' ? cat.beats : cat.tracks;
 
       const artist = artistById.get(item.artist_id);
       const siblings = pool.filter(t => t.artist_id === item.artist_id && t.slug !== item.slug);

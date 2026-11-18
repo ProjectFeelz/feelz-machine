@@ -101,7 +101,7 @@ async function loadCatalogue(supabase) {
     // live at different routes (/beat/:slug and /track/:slug) and the one
     // query is cheaper than two.
     supabase.from('tracks')
-      .select('id, slug, title, artist_id, genre, is_beat, created_at')
+      .select('id, slug, title, artist_id, genre, is_beat, competition_id, created_at')
       .eq('is_published', true)
       .not('slug', 'is', null)
       .order('created_at', { ascending: false })
@@ -133,8 +133,36 @@ async function loadCatalogue(supabase) {
     .filter(([, e]) => e)
     .forEach(([name, e]) => console.error(`[seo-catalogue] ${name} query failed:`, e.message));
 
-  const tracks = (allTracks || []).filter(t => !t.is_beat && usableSlug(t.slug));
-  const beats  = (allTracks || []).filter(t => t.is_beat && usableSlug(t.slug));
+  // -- Competition entries stay out of the catalogue -------------------------
+  //
+  // Found by reading a live track page after the genre cross-links shipped.
+  // /track/zero-2-hero gained 12 links to other Hip Hop tracks, and 8 of them
+  // were covers of the same song: Started from Zero, Started From Zero,
+  // Zero to Hero, Zero to Hero (Cover), Started from 0.
+  //
+  // Migration 233 took the Sessions entries out of the FEED for exactly this
+  // reason. Nothing took them out of the SEO catalogue, so they were still
+  // filling the Hip Hop genre page, the browse links, and now every Hip Hop
+  // track page's cross-links. One song, nineteen near-identical pages, each
+  // one linking to the other eighteen.
+  //
+  // The entries are not hidden: /track/<slug> still answers and the entrant
+  // can still share it. They are simply not used to build the map of the
+  // catalogue, which is what 233 decided and this is the other half of.
+  const inCompetition = t => t.competition_id != null;
+
+  const tracks = (allTracks || []).filter(t => !t.is_beat && !inCompetition(t) && usableSlug(t.slug));
+  const beats  = (allTracks || []).filter(t => t.is_beat && !inCompetition(t) && usableSlug(t.slug));
+
+  // An entry's OWN page still needs its own title, description and canonical.
+  // Taking entries out of `tracks` above keeps them from being listed on
+  // other pages, which is the point. It must not also leave /track/<entry>
+  // serving the home page's title and the home page's canonical, because 19
+  // pages all claiming to be the home page is the exact thing the canonical
+  // work was fixing.
+  //
+  // So lookups use this, lists use the two above.
+  const everyTrack = (allTracks || []).filter(t => usableSlug(t.slug));
 
   const hasMusic = new Set([...tracks, ...beats].map(t => t.artist_id).filter(Boolean));
 
@@ -163,7 +191,7 @@ async function loadCatalogue(supabase) {
 
   const posts = (newsletters || []).filter(n => usableSlug(n.slug));
 
-  return { artists: liveArtists, tracks, beats, albums: liveAlbums, genres, posts };
+  return { artists: liveArtists, tracks, beats, everyTrack, albums: liveAlbums, genres, posts };
 }
 
 module.exports = {
