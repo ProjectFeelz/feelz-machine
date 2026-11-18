@@ -228,7 +228,7 @@ h1 span, h2 span { color: var(--gold); }
 }
 .primary-button:hover { background: var(--gold-light); transform: translateY(-2px); }
 .primary-button:active { transform: translateY(0); }
-.play-icon { margin-right: 8px; }
+.play-icon { margin-right: 8px; display: inline-block; vertical-align: -1px; }
 
 .track-line {
   margin: 10px 0 0;
@@ -1381,3 +1381,16 @@ html.rotated .rotate-hint { display: none !important; }
 :where(html.rotated) .journal-card h2 { font-size: 26px; margin: 0; }
 :where(html.rotated) .journal-mission h3 { margin: 8px 0 5px; font-size: 12px; }
 :where(html.rotated) .journal-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+
+
+/* iPhone: no double-tap zoom, no text selection or grey highlight when the
+   touch buttons are held, no "copy / look up" pop-up on a long press. */
+html, body, #gameFrame, canvas, button, .touch-button {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.touch-button, #gameCanvas { touch-action: none; }
+input, textarea, select { -webkit-user-select: text; user-select: text; touch-action: auto; }

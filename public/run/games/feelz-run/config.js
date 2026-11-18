@@ -412,24 +412,46 @@ const WORLD_DRESSING = {
    rate instead of 4 to 10 sprite frames. Exported from
    FILL_Game/08_Blender/FEELZ_RUN_sprites_meshy.blend (KN_Armature, the KN_
    actions), slimmed for phones. Any move left out of `clips` uses the sprite.
-   metres: how tall he stands on screen. holdY: the game does the climbing.
+   metres: how tall he stands on screen. y: how the clip's own up and down is
+   handled where the game already moves him (see stripRootMotion in
+   engine/char3d.js). from/to: the part of the clip a move uses, in seconds.
 --------------------------------------------------------------------------- */
+// The runner's moves, the same for Koda and Zora (their files use the same names).
+const RUNNER_CLIPS = {
+  idle: "idle", run: "run", sprint: "sprint", jump: { clip: "jump", loop: false }, fall: "fall",
+  flip: { clip: "flip", loop: false }, crouch_idle: "crouch_idle", crouch_walk: "crouch_walk",
+  slide: { clip: "slide", loop: false }, climb: { clip: "climb", y: "level" },
+  // mantle: the pull-up only; the game lifts him onto the ledge.
+  mantle: { clip: "mantle", loop: false, y: "hold", from: 0.5, to: 3.2 },
+  // vault: the dive and roll without the run-up; the game's arc is the height.
+  vault: { clip: "vault", loop: false, y: "cap", from: 0.45, to: 1.95 },
+  punch: { clip: "punch", loop: false }, kick: { clip: "kick", loop: false },
+  hurt: { clip: "hurt", loop: false }, stun: "stun",
+  takedown: { clip: "takedown", loop: false }, smash: { clip: "smash", loop: false },
+  flykick: { clip: "flykick", loop: false }, spinkick: { clip: "spinkick", loop: false },
+  dash: { clip: "dash", loop: false }, pound: { clip: "pound", loop: false },
+  wallkick: { clip: "wallkick", loop: false }
+};
+
+// Every warden shares one set of moves (exported from the KY_w_ actions).
+const WARDEN_CLIPS = {
+  walk: "walk", run: "run", fight_idle: "fight_idle",
+  alert: { clip: "alert", loop: false }, punch: { clip: "punch", loop: false },
+  hit: { clip: "hit", loop: false }, ko: { clip: "ko", loop: false }
+};
+const warden3D = (id, metres) => ({ id, src: "assets/models/" + id + ".glb", metres, clips: WARDEN_CLIPS });
+
 const CHAR3D = {
-  koda: {
-    id: "koda",
-    src: "assets/models/koda.glb",
-    metres: 1.62,
-    clips: {
-      idle: "idle", run: "run", sprint: "sprint", jump: { clip: "jump", loop: false }, fall: "fall",
-      flip: { clip: "flip", loop: false }, crouch_idle: "crouch_idle", crouch_walk: "crouch_walk",
-      slide: { clip: "slide", loop: false }, climb: { clip: "climb", holdY: true },
-      mantle: { clip: "mantle", loop: false }, vault: { clip: "vault", loop: false },
-      punch: { clip: "punch", loop: false }, kick: { clip: "kick", loop: false },
-      hurt: { clip: "hurt", loop: false }, stun: "stun",
-      takedown: { clip: "takedown", loop: false }, smash: { clip: "smash", loop: false },
-      flykick: { clip: "flykick", loop: false }, spinkick: { clip: "spinkick", loop: false },
-      dash: { clip: "dash", loop: false }, pound: { clip: "pound", loop: false },
-      wallkick: { clip: "wallkick", loop: false }
-    }
+  koda: { id: "koda", src: "assets/models/koda.glb", metres: 1.62, clips: RUNNER_CLIPS },
+  zora: { id: "zora", src: "assets/models/zora.glb", metres: 1.58, clips: RUNNER_CLIPS },
+  // By SPRITES.enemies kind; "warden" is the Street Warden.
+  enemies: {
+    warden:   warden3D("street-warden", 1.96),
+    sentinel: warden3D("sentinel", 2.29),
+    gilded:   warden3D("gilded", 2.24),
+    hunter:   warden3D("hunter", 2.03),
+    dock:     warden3D("dock", 2.07),
+    guard:    warden3D("guard", 2.15),
+    handler:  warden3D("handler", 2.04)
   }
 };

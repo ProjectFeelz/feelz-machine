@@ -51,7 +51,10 @@ const Char3D = (() => {
       THREE = three; LIB = lib;
       glCanvas = document.createElement("canvas");
       glCanvas.width = SIZE; glCanvas.height = SIZE;
-      renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, alpha: true, premultipliedAlpha: false, powerPreference: "high-performance" });
+      // Phones skip the edge smoothing: it is the costliest part and the
+      // screens are dense enough not to need it (keeps the phone cooler).
+      const phone = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
+      renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: !phone, alpha: true, premultipliedAlpha: false, powerPreference: "high-performance" });
       renderer.setPixelRatio(1);
       renderer.setSize(SIZE, SIZE, false);
       renderer.setClearColor(0x000000, 0);
@@ -130,11 +133,14 @@ const Char3D = (() => {
           act.paused = true;               // we set the time ourselves, every frame
           act.enabled = false;
           const o = typeof spec === "object" ? spec : {};
-          actions[anim] = { act, clip, loop: o.loop !== false, inPlace: !o.rootMotion, holdY: !!o.holdY };
+          actions[anim] = { act, clip, loop: o.loop !== false, inPlace: !o.rootMotion,
+            y: o.y || (o.holdY ? "hold" : "free"), from: o.from || 0, to: o.to || 0 };
         }
         Object.assign(m, { state: "ready", root, holder, mixer, actions, height: def.metres || 1.8 });
         // Keep the run in place: the game moves him, not the clip.
-        for (const a of Object.values(actions)) if (a.inPlace) stripRootMotion(a.clip, a.holdY);
+        // His standing hip height, from the idle: the level the game's feet line is drawn against.
+        const standY = hipsStart(actions.idle && actions.idle.clip) || hipsStart(actions.run && actions.run.clip) || 1;
+        for (const a of Object.values(actions)) if (a.inPlace) stripRootMotion(a.clip, a.y, standY);
       }, undefined, err => {
         console.warn("[char3d] could not load", def.src, err && err.message);
         m.state = "failed";
@@ -144,18 +150,33 @@ const Char3D = (() => {
 
   // The hips track carries the clip's travel forward; the game already moves
   // the runner, so keep only the up and down bob.
-  // holdY also takes out any steady rise over the clip (a climb cycle that
-  // climbs), keeping the bob, because the game does the climbing.
-  function stripRootMotion(clip, holdY) {
-    for (const t of clip.tracks) {
-      if (!/hips\.position$/i.test(t.name)) continue;
-      const v = t.values, n = v.length / 3;
-      const x0 = v[0], z0 = v[2], rise = n > 1 ? v[v.length - 2] - v[1] : 0;
-      for (let i = 0; i < n; i++) {
-        v[i * 3] = x0; v[i * 3 + 2] = z0;
-        if (holdY) v[i * 3 + 1] -= rise * (i / (n - 1));
-      }
+  //
+  // The up and down is set per move (config `y`), because for some moves the
+  // game already carries him up or over and the clip must not do it twice:
+  //   free   leave it (run, idle, attacks)
+  //   hold   take out the steady rise from start to end (mantle: the game
+  //          lifts him onto the ledge)
+  //   level  hold, and set the hips at standing height (climb: the clip
+  //          hangs him far above his feet)
+  //   cap    never above standing height (vault: the game's arc is the jump,
+  //          the clip keeps the tuck and the roll)
+  const hipsTrack = clip => clip && clip.tracks.find(t => /hips\.position$/i.test(t.name));
+  function hipsStart(clip) { const t = hipsTrack(clip); return t ? t.values[1] : 0; }
+  function stripRootMotion(clip, mode, standY) {
+    const t = hipsTrack(clip);
+    if (!t) return;
+    const v = t.values, n = v.length / 3;
+    const x0 = v[0], z0 = v[2], rise = n > 1 ? v[v.length - 2] - v[1] : 0;
+    for (let i = 0; i < n; i++) {
+      v[i * 3] = x0; v[i * 3 + 2] = z0;
+      if (mode === "hold" || mode === "level") v[i * 3 + 1] -= rise * (i / Math.max(1, n - 1));
     }
+    if (mode === "level") {
+      let sum = 0; for (let i = 0; i < n; i++) sum += v[i * 3 + 1];
+      const shift = standY - sum / n;
+      for (let i = 0; i < n; i++) v[i * 3 + 1] += shift;
+    }
+    if (mode === "cap") for (let i = 0; i < n; i++) v[i * 3 + 1] = Math.min(v[i * 3 + 1], standY);
   }
 
   // A phone that cannot keep up goes back to the sprites by itself: if the
@@ -172,7 +193,14 @@ const Char3D = (() => {
   }
 
   const ready = id => !tooSlow && !!(models[id] && models[id].state === "ready" && libState === "ready");
-  const has = (id, anim) => ready(id) && !!models[id].actions[anim];
+  // Models the game knows about but has not needed yet: each loads the
+  // first time something asks for it (the sprite stands in until it is in).
+  const known = {};
+  function register(def) { if (def && def.id) known[def.id] = def; }
+  function has(id, anim) {
+    if (!models[id] && known[id]) preload(known[id]);
+    return ready(id) && !!models[id].actions[anim];
+  }
 
 
   /** Lights per world: { sky, ground, key, rim, exposure } as hex numbers. */
@@ -198,8 +226,11 @@ const Char3D = (() => {
     const m = models[id], a = m.actions[anim];
     if (!a) return null;
     for (const other of Object.values(m.actions)) other.act.enabled = other === a;
-    const d = a.clip.duration || 1;
-    const tt = a.loop ? (((t % 1) + 1) % 1) * d : Math.max(0, Math.min(0.999, t)) * d;
+    // A move can use just part of its clip (from/to, in seconds): the leap
+    // and roll of the vault without the run-up before it.
+    const d = a.clip.duration || 1, t0 = Math.min(a.from, d), t1 = a.to > t0 ? Math.min(a.to, d) : d;
+    const k = a.loop ? (((t % 1) + 1) % 1) : Math.max(0, Math.min(0.999, t));
+    const tt = t0 + k * (t1 - t0);
     a.act.enabled = true;
     a.act.setEffectiveWeight(1);
     a.act.time = tt;
@@ -224,8 +255,11 @@ const Char3D = (() => {
   const VIEW_METRES = 3.2;           // world metres across each runner's canvas
   const FOOT = 0.86;                 // how far down the canvas the feet sit
 
-  return { preload, ready, has, render, mood, SIZE, VIEW_METRES, FOOT };
+  return { preload, register, ready, has, render, mood, SIZE, VIEW_METRES, FOOT };
 })();
 
-// Start loading as soon as the game has a model with at least one move set up.
-if (typeof CHAR3D !== "undefined" && CHAR3D.koda && Object.keys(CHAR3D.koda.clips || {}).length) Char3D.preload(CHAR3D.koda);
+// Koda loads straight away; Zora and the enemies the first time they appear.
+if (typeof CHAR3D !== "undefined") {
+  for (const def of [CHAR3D.koda, CHAR3D.zora, ...Object.values(CHAR3D.enemies || {})]) Char3D.register(def);
+  if (CHAR3D.koda && Object.keys(CHAR3D.koda.clips || {}).length) Char3D.preload(CHAR3D.koda);
+}

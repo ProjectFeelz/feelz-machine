@@ -212,11 +212,11 @@ function drawPlayers() {
     // The 3D Koda when his model has this move (engine/char3d.js); otherwise the
     // sprite sheet. Outfit colours and co-op tints are still sprite-only, so
     // those runners keep the sprite for now.
-    const plain = img === art.koda;
-    const [anim3, t3] = typeof Char3D !== "undefined" && plain ? kodaPose3D(p) : [null, 0];
+    const modelId = img === art.koda ? "koda" : img === art.zora ? "zora" : null;
+    const [anim3, t3] = typeof Char3D !== "undefined" && modelId ? kodaPose3D(p) : [null, 0];
     const facing3 = p.climb ? -p.climb.side : p.facing;
-    const model = anim3 && Char3D.has("koda", anim3)
-      ? Char3D.render("koda", "p" + p.id + (p.coopName || ""), anim3, t3, facing3) : null;
+    const model = anim3 && Char3D.has(modelId, anim3)
+      ? Char3D.render(modelId, "p" + p.id + (p.coopName || ""), anim3, t3, facing3) : null;
     if (!art.koda.ready && !model) continue;
     const floor = p.ground ? p.ground.y : (floorBelow(p.x, p.y, true) || { y: p.y }).y;
     const lift = Math.max(0, floor - p.y);
@@ -266,6 +266,17 @@ function drawPlayers() {
   }
 }
 
+// How far through a warden's move he is, 0..1, for the 3D model (the same
+// states the sprite frames above are picked from).
+function wardenPose3D(wd, anim) {
+  if (anim === "ko") return Math.min(0.999, wd.animT / 1.6);
+  if (anim === "hit") return Math.min(0.999, (0.38 - Math.min(0.38, wd.stagger)) / 0.38);
+  if (anim === "punch") return wd.windUp > 0 ? 0.22 : Math.min(0.999, 0.3 + (0.3 - wd.punchT) / 0.3 * 0.7);
+  if (anim === "fight_idle") return wd.animT / 2.4;
+  if (anim === "run") return wd.walkPhase / (26 * 8);
+  return wd.walkPhase / (22 * 8);
+}
+
 function drawWardens() {
   for (const wd of level.wardens) {
     const def = SPRITES.enemies[wd.kind] || SPRITES.warden;
@@ -290,8 +301,12 @@ function drawWardens() {
       const b = sheetBottoms(sheet, sdef, "ko");
       if (b && b[frame] > 0) drop = Math.max(0, sdef.footY * sdef.cell - 1 - b[frame]) / sdef.cell * sdef.metres * PX;
     }
-    drawSheetFrame(sheet, sdef, anim, frame, wd.x, wd.y + drop, wd.facing,
-      { glow, blur: wd.windUp > 0 ? 16 : 5, alpha: wd.alive ? 1 : Math.max(0, 1 - (wd.animT - 2) ) });
+    const wOpts = { glow, blur: wd.windUp > 0 ? 16 : 5, alpha: wd.alive ? 1 : Math.max(0, 1 - (wd.animT - 2) ) };
+    // The 3D warden when his model is in (engine/char3d.js), at full frame rate.
+    const w3 = typeof CHAR3D !== "undefined" && CHAR3D.enemies ? (CHAR3D.enemies[wd.kind] || CHAR3D.enemies.warden) : null;
+    const wModel = w3 && Char3D.has(w3.id, anim) ? Char3D.render(w3.id, "w", anim, wardenPose3D(wd, anim), wd.facing) : null;
+    if (wModel) drawModelFrame(wModel, wd.x, wd.y, wOpts);
+    else drawSheetFrame(sheet, sdef, anim, frame, wd.x, wd.y + drop, wd.facing, wOpts);
     // Rank: one gold chevron for a veteran, two for an elite.
     const tier = wd.alive ? enemyKind(wd).tier : 0;
     if (tier > 0) {

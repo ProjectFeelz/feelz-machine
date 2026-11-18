@@ -3,7 +3,19 @@
 <head>
   <script>if (/\/run$/.test(location.pathname)) location.replace(location.pathname + "/" + location.search);</script>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <script>
+    // iPhone only: Safari zooms on a double tap or pinch and ignores the
+    // viewport for it, which mid-run zoomed the whole game. Android never does.
+    document.addEventListener("gesturestart", e => e.preventDefault(), { passive: false });
+    document.addEventListener("dblclick", e => e.preventDefault(), { passive: false });
+    let lastTouchEnd = 0;
+    document.addEventListener("touchend", e => {
+      const now = Date.now();
+      if (now - lastTouchEnd < 350 && !e.target.closest("input, textarea, select")) e.preventDefault();
+      lastTouchEnd = now;
+    }, { passive: false });
+  </script>
   <meta name="theme-color" content="#000000">
   <!-- Installed like the Feelz Machine app: full screen, no browser bar -->
   <link rel="manifest" href="manifest.json">
@@ -93,7 +105,7 @@
             <button type="button" data-ai="hard">HARD</button>
           </div>
           <div class="start-actions" id="playActions">
-            <button class="primary-button start-play" id="playButton" type="button"><span class="play-icon">▶</span> PLAY</button>
+            <button class="primary-button start-play" id="playButton" type="button"><svg class="play-icon" viewBox="0 0 12 14" width="12" height="14" aria-hidden="true"><path d="M1 1.2v11.6c0 .6.7 1 1.2.7l9.2-5.8c.5-.3.5-1 0-1.3L2.2.5C1.7.2 1 .6 1 1.2z" fill="currentColor"/></svg> PLAY</button>
             <button class="secondary-button" id="skillsButton" type="button">SKILLS</button>
             <button class="secondary-button" id="journalButton" type="button">JOURNAL</button>
             <button class="secondary-button hidden" id="leaderboardButton" type="button">LEADERBOARD</button>
@@ -196,7 +208,7 @@
               <p class="auth-error" id="p2Error" role="alert"></p>
             </div>
           </div>
-          <button class="primary-button start-play" id="joinStart" type="button" disabled><span class="play-icon">▶</span> START RACE</button>
+          <button class="primary-button start-play" id="joinStart" type="button" disabled><svg class="play-icon" viewBox="0 0 12 14" width="12" height="14" aria-hidden="true"><path d="M1 1.2v11.6c0 .6.7 1 1.2.7l9.2-5.8c.5-.3.5-1 0-1.3L2.2.5C1.7.2 1 .6 1 1.2z" fill="currentColor"/></svg> START RACE</button>
         </div>
       </div>
 
@@ -229,7 +241,7 @@
               <div class="join-slot" id="coopThem"><span class="join-tag" id="coopThemTag">PARTNER</span><strong id="coopThemName">WAITING...</strong></div>
             </div>
             <p class="coop-status" id="coopStatus"></p>
-            <button class="primary-button start-play" id="coopStart" type="button" disabled><span class="play-icon">▶</span> START TOGETHER</button>
+            <button class="primary-button start-play" id="coopStart" type="button" disabled><svg class="play-icon" viewBox="0 0 12 14" width="12" height="14" aria-hidden="true"><path d="M1 1.2v11.6c0 .6.7 1 1.2.7l9.2-5.8c.5-.3.5-1 0-1.3L2.2.5C1.7.2 1 .6 1 1.2z" fill="currentColor"/></svg> START TOGETHER</button>
           </div>
           <p class="auth-error" id="coopError" role="alert"></p>
         </div>
@@ -266,7 +278,7 @@
           <h1 class="start-title pause-title"><span class="st-big">PAUSED</span><span class="st-run">TAKE FIVE<span>.</span></span></h1>
           <p class="track-line" id="pauseTrack"></p>
           <div class="pause-actions">
-            <button class="primary-button" id="resumeButton" type="button">RESUME ▶</button>
+            <button class="primary-button" id="resumeButton" type="button">RESUME ▶︎</button>
             <button class="secondary-button" id="restartRunButton" type="button">RESTART MISSION ↻</button>
             <button class="secondary-button" id="soundButton" type="button">SOUND: ON</button>
             <button class="secondary-button" id="lyricsButton" type="button">LYRICS: ON</button>
@@ -337,8 +349,8 @@
 
       <div class="touch-controls" aria-label="Touch controls">
         <div class="touch-left">
-          <button class="touch-button" id="leftButton" aria-label="Move left">◀</button>
-          <button class="touch-button" id="rightButton" aria-label="Move right">▶</button>
+          <button class="touch-button" id="leftButton" aria-label="Move left">◀︎</button>
+          <button class="touch-button" id="rightButton" aria-label="Move right">▶︎</button>
         </div>
         <div class="touch-right">
           <button class="touch-button small" id="downButton" aria-label="Crouch or slide">▼</button>
