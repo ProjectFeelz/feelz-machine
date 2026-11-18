@@ -113,7 +113,12 @@ function kodaPose3D(p) {
   if (p.fightWith && p.ground) return ["punch", 0];
   if (p.state === "stun") return ["stun", clock("stun", p.animClock)];
   if (p.state === "hurt") return ["hurt", clock("hurt", p.animClock)];
-  if (p.state === "slide") return ["slide", Math.min(0.999, clock("slide", p.animClock))];
+  // The slide: down and along for as long as the slide lasts, never the clip's get-up (the game
+  // decides that: standing, or straight into a crouch if you hold down).
+  if (p.state === "slide") {
+    if (!p.slideDur || p.animClock < 0.05) p.slideDur = Math.max(0.3, (p.stateT || 0) + p.animClock);
+    return ["slide", Math.min(0.999, p.animClock / p.slideDur)];
+  }
   if (!p.ground) {
     if (p.flipTime > 0) return ["flip", 1 - p.flipTime / 0.45];
     if (p.vy < 0) return ["jump", Math.max(0, Math.min(0.999, 1 + p.vy / JUMP_SPEED))];
@@ -217,9 +222,9 @@ function drawPlayers() {
     const facing3 = p.climb ? -p.climb.side : p.facing;
     const model = anim3 && Char3D.has(modelId, anim3)
       ? Char3D.render(modelId, "p" + p.id + (p.coopName || ""), anim3, t3, facing3,
-          // On a ladder or a pipe he faces into the picture, back to us, turned a touch so his
-          // side reads. (The climb clip itself turns him round, so the turn here is small.)
-          p.climb && anim3 === "climb" ? { turn: 0.18 } : undefined) : null;
+          // On a ladder he faces into the picture, back to us. (The climb clip itself turns him
+          // round, so no extra turn here.)
+          p.climb && anim3 === "climb" ? { turn: 0 } : undefined) : null;
     if (!art.koda.ready && !model) continue;
     const floor = p.ground ? p.ground.y : (floorBelow(p.x, p.y, true) || { y: p.y }).y;
     const lift = Math.max(0, floor - p.y);
@@ -256,7 +261,8 @@ function drawPlayers() {
       ctx.restore();
     }
     const mainGlow = { glow: p.id === 1 ? "rgba(255, 186, 70, 0.22)" : "rgba(110, 220, 255, 0.4)", blur: 3 };
-    if (model) drawModelFrame(model, p.x, p.y, mainGlow);
+    // On a ladder the game holds him beside it; the model goes on the ladder itself.
+    if (model) drawModelFrame(model, p.climb && anim3 === "climb" ? p.climb.x : p.x, p.y, mainGlow);
     else drawSheetFrame(img, SPRITES.koda, anim, frame, p.x, p.y + (p.state === "slide" ? 3 : 0), facing, mainGlow);
     if (twoPlayer) {
       ctx.fillStyle = p.id === 1 ? "#f1ca78" : "#7fe3ff";
@@ -355,13 +361,19 @@ function drawDrones() {
       const turning = Math.abs(goal - dr.yaw);
       const lean = dr.facing * 0.16 * (1 - Math.min(1, turning));
       const sway = Math.cos(dr.t * 2.2) * 0.07;
-      const c = Char3D.renderProp(def.id, dr.yaw + (def.yaw || 0), sway, -lean);
-      if (c) {
-        const size = m(Char3D.VIEW_METRES);
+      // Baked once into 32 turned frames, then drawn like a sprite: no 3D work per frame.
+      const strip = Char3D.bake(def.id, -2.59, -0.55, 32, def.yaw || 0);
+      if (strip) {
+        const k = Math.max(0, Math.min(1, (dr.yaw + 2.59) / 2.04)), f = Math.round(k * (strip.frames - 1));
+        const size = m(Char3D.VIEW_METRES) * 0.56;
         const eye = ctx.createRadialGradient(X, Y, 2, X, Y, m(0.9));
         eye.addColorStop(0, "rgba(255, 70, 50, 0.32)"); eye.addColorStop(1, "rgba(255, 70, 50, 0)");
         ctx.fillStyle = eye; ctx.fillRect(X - m(0.9), Y - m(0.9), m(1.8), m(1.8));
-        ctx.drawImage(c, X - size / 2, Y - size / 2, size, size);
+        ctx.save();
+        ctx.translate(X, Y);
+        ctx.rotate(lean + sway * 0.5);
+        ctx.drawImage(strip.canvas, f * strip.cell, 0, strip.cell, strip.cell, -size / 2, -size / 2, size, size);
+        ctx.restore();
         continue;
       }
     }

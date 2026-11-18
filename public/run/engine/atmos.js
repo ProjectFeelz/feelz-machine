@@ -21,6 +21,18 @@
 const Atmos = (() => {
   const flag = (() => { try { return new URLSearchParams(location.search).get("fx"); } catch (e) { return null; } })();
   const phone = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
+  // How much it draws: 0 everything, 1 the lighter set, 2 the bare minimum.
+  // Phones start on 1. Any device that falls under about 48 frames a second
+  // for two seconds steps down a level (and stays there for the visit), so the
+  // look never costs the game its speed. ?fx=full keeps 0 for testing.
+  let quality = phone ? 1 : 0, slowMs = 0, lastAt = 0;
+  function pace() {
+    const now = performance.now(), dt = now - lastAt;
+    lastAt = now;
+    if (flag === "full" || dt <= 0 || dt > 250) return;
+    slowMs = dt > 21 ? slowMs + dt : Math.max(0, slowMs - dt * 0.5);
+    if (slowMs > 2000 && quality < 2) { quality += 1; slowMs = 0; console.warn("[atmos] lighter effects for this device, level", quality); }
+  }
   let fogArt = null, blurArt = null, moteArt = null;
   const splashes = [];
 
@@ -95,10 +107,11 @@ const Atmos = (() => {
   function back() {
     const L = look();
     if (!L) return;
+    pace();
     const sk = stormK();
     ctx.save();
     // Light shafts down through the cloud, swaying slowly; fewer as the storm closes in.
-    if (L.shafts && !phone) {
+    if (L.shafts && quality === 0) {
       ctx.globalCompositeOperation = "lighter";
       const n = 4;
       for (let i = 0; i < n; i++) {
@@ -117,10 +130,10 @@ const Atmos = (() => {
     }
     // Far fog: two sheets at different depths, drifting with the wind.
     fogLayer(0.18, H * 0.3, 260, L.fog * (0.7 + sk * 0.5), 6);
-    if (!phone) fogLayer(0.42, H * 0.5, 220, L.fog * 0.8, 14);
+    if (quality === 0) fogLayer(0.42, H * 0.5, 220, L.fog * 0.8, 14);
     // Distant rain: fine, slow, behind everything.
     const rain = rainAmount();
-    if (rain > 0.05) {
+    if (rain > 0.05 && quality < 2) {
       ctx.strokeStyle = `rgba(190, 205, 225, ${0.12 + rain * 0.1})`; ctx.lineWidth = 1;
       ctx.beginPath();
       const count = Math.round((phone ? 40 : 90) * rain);
@@ -158,42 +171,56 @@ const Atmos = (() => {
   }
 
   // Wet floors: what stands above them, mirrored in the water, rippling.
+  // Wet floors: what stands above them, mirrored in the water, rippling.
+  // The strip above the floor is copied once into a small buffer, then laid
+  // down upside down in a few slices from there (copying the game canvas onto
+  // itself slice by slice is very slow on some devices).
+  let refBuf = null;
   function reflect() {
     const L = look();
-    if (!L || !L.wet || mission.mirror) return;
-    const rain = rainAmount(), fk = flashK();
-    const floors = floorsOnScreen(phone ? 0 : 3);
-    for (const f of floors) {
-      const depth = Math.min(46, H - f.Y);
-      if (depth < 8) continue;
-      ctx.save();
-      ctx.beginPath(); ctx.rect(f.x0, f.Y + 3, f.x1 - f.x0, depth); ctx.clip();
-      ctx.globalAlpha = L.wet * (0.45 + fk * 0.6);
-      // in slices, each nudged sideways a little: the rain on the water
-      for (let y = 0; y < depth; y += 4) {
-        const wob = Math.sin(frameTime * 6 + y * 0.7 + f.x0 * 0.01) * (1 + rain * 2) * (y / depth + 0.3);
-        const srcY = f.Y - y - 4;
-        if (srcY < 0) break;
-        ctx.drawImage(canvas, f.x0, srcY, f.x1 - f.x0, 4, f.x0 + wob, f.Y + 3 + y, f.x1 - f.x0, 4);
+    if (!L || mission.mirror) { return; }
+    if (L.wet && quality === 0) {
+      const rain = rainAmount(), fk = flashK();
+      for (const f of floorsOnScreen(2)) {
+        const depth = Math.min(40, H - f.Y - 3), w = Math.round(f.x1 - f.x0);
+        if (depth < 8 || f.Y - depth < 0 || w < 8) continue;
+        if (!refBuf) { refBuf = document.createElement("canvas"); }
+        if (refBuf.width < w || refBuf.height < depth) { refBuf.width = Math.max(refBuf.width, w); refBuf.height = Math.max(refBuf.height, depth); }
+        const g2 = refBuf.getContext("2d");
+        g2.clearRect(0, 0, w, depth);
+        g2.drawImage(canvas, f.x0, f.Y - depth, w, depth, 0, 0, w, depth);
+        ctx.save();
+        ctx.globalAlpha = L.wet * (0.45 + fk * 0.6);
+        const step = 8;
+        for (let y = 0; y < depth; y += step) {
+          const wob = Math.sin(frameTime * 6 + y * 0.7 + f.x0 * 0.01) * (1 + rain * 2) * (y / depth + 0.3);
+          // row y below the floor mirrors row (depth - y) above it
+          const sy0 = depth - y - step;
+          if (sy0 < 0) break;
+          ctx.save();
+          ctx.translate(0, f.Y + 3 + y + step);
+          ctx.scale(1, -1);
+          ctx.drawImage(refBuf, 0, sy0, w, step, f.x0 + wob, 0, w, step);
+          ctx.restore();
+        }
+        ctx.restore();
+        const g = ctx.createLinearGradient(0, f.Y + 3, 0, f.Y + 3 + depth);
+        g.addColorStop(0, "rgba(6, 8, 12, 0)"); g.addColorStop(1, "rgba(6, 8, 12, 0.5)");
+        ctx.fillStyle = g; ctx.fillRect(f.x0, f.Y + 3, w, depth);
       }
-      ctx.restore();
-      // fade it into the dark of the floor
-      const g = ctx.createLinearGradient(0, f.Y + 3, 0, f.Y + 3 + depth);
-      g.addColorStop(0, "rgba(6, 8, 12, 0)"); g.addColorStop(1, "rgba(6, 8, 12, 0.5)");
-      ctx.fillStyle = g; ctx.fillRect(f.x0, f.Y + 3, f.x1 - f.x0, depth);
     }
     if (typeof drawSludgeAll === "function") drawSludgeAll();
   }
 
   function front() {
     const L = look();
-    if (!L) return;
+    if (!L || quality >= 2) return;
     const rain = rainAmount();
     ctx.save();
     // Splashes where the rain lands on the floors.
     if (rain > 0.1) {
       const floors = floorsOnScreen(4);
-      const want = Math.round((phone ? 10 : 26) * rain);
+      const want = Math.round((quality ? 10 : 26) * rain);
       while (splashes.length < want && floors.length) {
         const f = floors[Math.floor(Math.random() * floors.length)];
         splashes.push({ x: f.x0 + Math.random() * (f.x1 - f.x0) + cameraX, y: f.s.y, t: 0, life: 0.25 + Math.random() * 0.2 });
@@ -212,7 +239,7 @@ const Atmos = (() => {
     } else splashes.length = 0;
     // Dust (or spray) floating in the light.
     if (L.motes) {
-      const art = motes(), n = phone ? 10 : 24;
+      const art = motes(), n = quality ? 10 : 24;
       ctx.globalCompositeOperation = "lighter";
       for (let i = 0; i < n; i++) {
         const par = 0.6 + seeded(i * 3.3) * 0.8, size = 3 + seeded(i * 1.9) * 9;
@@ -224,7 +251,7 @@ const Atmos = (() => {
       ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
     }
     // Close to the lens: things slide past faster than the world, out of focus.
-    if (L.foreground) {
+    if (L.foreground && quality === 0) {
       const art = blurKit(), gap = 1500, par = 1.45;
       const first = Math.floor((cameraX * par) / gap) - 1;
       for (let k = first; k <= first + 2; k++) {
@@ -249,8 +276,8 @@ const Atmos = (() => {
     ctx.save();
     // The world's colour: a soft wash over everything (multiply), then the
     // lightning's cold white for a beat.
-    if (L.grade) { ctx.globalCompositeOperation = "multiply"; ctx.fillStyle = L.grade; ctx.fillRect(0, 0, W, H); }
-    if (L.lift) { ctx.globalCompositeOperation = "screen"; ctx.fillStyle = L.lift; ctx.fillRect(0, 0, W, H); }
+    if (L.grade && quality === 0) { ctx.globalCompositeOperation = "multiply"; ctx.fillStyle = L.grade; ctx.fillRect(0, 0, W, H); }
+    if (L.lift && quality === 0) { ctx.globalCompositeOperation = "screen"; ctx.fillStyle = L.lift; ctx.fillRect(0, 0, W, H); }
     const fk = flashK();
     if (fk > 0.02) {
       ctx.globalCompositeOperation = "lighter";
@@ -266,5 +293,5 @@ const Atmos = (() => {
     ctx.restore();
   }
 
-  return { back, reflect, front, grade };
+  return { back, reflect, front, grade, quality: () => quality };
 })();

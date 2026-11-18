@@ -34,7 +34,7 @@ const World3D = (() => {
 
   const flag = (() => { try { return new URLSearchParams(location.search).get("world3d"); } catch (e) { return null; } })();
   const phone = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
-  const QUALITY = phone ? 0.6 : 1;    // render size against the game canvas
+  const QUALITY = phone ? 0.5 : 0.75;   // render size against the game canvas
 
   function config() { return typeof WORLD3D !== "undefined" ? WORLD3D : null; }
   function worldSet(world) {
@@ -201,8 +201,8 @@ const World3D = (() => {
     // A device that can't keep up goes back to the painted buildings by itself.
     const now = performance.now(), dt = now - lastAt;
     lastAt = now;
-    if (dt > 0 && dt < 250) slow = dt > 28 ? slow + dt : Math.max(0, slow - dt * 0.5);
-    if (slow > 4000 && flag !== "1") { console.warn("[world3d] too slow on this device, using the painted buildings"); state = "failed"; hideAll(); drawn.clear(); return; }
+    if (dt > 0 && dt < 250) slow = dt > 22 ? slow + dt : Math.max(0, slow - dt * 0.5);
+    if ((slow > 2500 || (typeof Atmos !== "undefined" && Atmos.quality() >= 2)) && flag !== "1") { console.warn("[world3d] too slow on this device, using the painted buildings"); state = "failed"; hideAll(); drawn.clear(); return; }
     const camXm = (cameraX + W / 2) / PX, camYm = -(cameraY + H / 2) / PX, viewW = W / PX;
     camera.position.set(camXm, camYm, D);
     camera.lookAt(camXm, camYm, 0);

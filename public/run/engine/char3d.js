@@ -311,13 +311,36 @@ const Char3D = (() => {
     m.holder.visible = false;
     return glCanvas;
   }
+  /**
+   * Bake a prop into a flat strip of frames, turned from yaw0 to yaw1 (once),
+   * so it can be drawn every frame like a sprite with no 3D work at all.
+   * Answers { canvas, frames, cell } (cell px square, the prop centred and
+   * shown at the same scale as render()) or null until the model is in.
+   */
+  const baked = {};
+  function bake(id, yaw0, yaw1, frames, extraYaw) {
+    const key = id + ":" + yaw0 + ":" + yaw1 + ":" + frames;
+    if (baked[key]) return baked[key];
+    if (!ready(id)) return null;
+    const cell = Math.round(SIZE * 0.56), off = Math.round((SIZE - cell) / 2);
+    const strip = document.createElement("canvas");
+    strip.width = cell * frames; strip.height = cell;
+    const g = strip.getContext("2d");
+    for (let i = 0; i < frames; i++) {
+      const yaw = yaw0 + (yaw1 - yaw0) * (i / Math.max(1, frames - 1));
+      const c = renderProp(id, yaw + (extraYaw || 0), 0, 0);
+      if (c) g.drawImage(c, off, off, cell, cell, i * cell, 0, cell, cell);
+    }
+    return (baked[key] = { canvas: strip, frames, cell, yaw0, yaw1 });
+  }
+
   // Load a model the game knows about, without drawing it yet.
   function want(id) { if (!models[id] && known[id]) preload(known[id]); return ready(id); }
 
   const VIEW_METRES = 3.2;           // world metres across each runner's canvas
   const FOOT = 0.86;                 // how far down the canvas the feet sit
 
-  return { preload, register, ready, has, want, render, renderProp, mood, SIZE, VIEW_METRES, FOOT };
+  return { preload, register, ready, has, want, render, renderProp, bake, mood, SIZE, VIEW_METRES, FOOT };
 })();
 
 // Koda loads straight away; Zora and the enemies the first time they appear.
