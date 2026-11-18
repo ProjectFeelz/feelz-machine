@@ -79,6 +79,9 @@ const ROUTE_PATTERNS = [
   // /t/<code> is resolved in the browser by ShortLinkPage, which a crawler
   // never runs, so every shared short link showed the generic homepage card
   // with no artwork on it. og-meta resolves the code server side instead.
+  // Live streams, their countdowns and replays, as handed out by the share
+  // button on the stream page.
+  { re: /^\/session\/([0-9a-f-]{36})\/?$/i, type: 'session' },
   { re: /^\/t\/([^/]+)\/?$/, type: 'short' },
   { re: /^\/a\/([^/]+)\/?$/, type: 'short' },
 
@@ -225,5 +228,5 @@ export default async (request, context) => {
 // If you ever want to put it back, deploy it on its own and paste a track
 // link into WhatsApp before anything else ships behind it.
 export const config = {
-  path: ['/artist/*', '/track/*', '/beat/*', '/album/*', '/sessions', '/schoolsessions', '/t/*', '/a/*'],
+  path: ['/artist/*', '/track/*', '/beat/*', '/album/*', '/sessions', '/schoolsessions', '/t/*', '/a/*', '/session/*'],
 };

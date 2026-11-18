@@ -32,7 +32,7 @@ export default function WatchedStreamsPage() {
       const ids = (views || []).map(v => v.session_id);
       if (!ids.length) { setRows([]); setLoading(false); return; }
       let { data: sessions, error: sErr } = await supabase.from('listening_sessions')
-        .select('id, title, status, mode, youtube_url, cf_live_uid, artist_id, replay_hidden, started_at').in('id', ids);
+        .select('id, title, status, mode, youtube_url, cf_live_uid, thumbnail_url, artist_id, replay_hidden, started_at').in('id', ids);
       if (sErr) {
         // Before live_direct.sql has run there is no cf_live_uid column.
         ({ data: sessions } = await supabase.from('listening_sessions')
@@ -76,7 +76,7 @@ export default function WatchedStreamsPage() {
           {rows.map(({ session_id, s, a, watched_live, last_watched_at }) => (
             <button key={session_id} onClick={() => navigate(`/session/${session_id}`)} className="group text-left">
               <div className="relative aspect-video rounded-2xl overflow-hidden bg-gradient-to-br from-violet-700 via-fuchsia-600 to-amber-500 ring-1 ring-white/[0.07] group-hover:ring-pink-400/50 transition">
-                {ytThumb(s.youtube_url) && <img src={ytThumb(s.youtube_url)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />}
+                {(s.thumbnail_url || ytThumb(s.youtube_url)) && <img src={s.thumbnail_url || ytThumb(s.youtube_url)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
                 <span className="absolute top-2 left-2">
                   {s.status === 'live'

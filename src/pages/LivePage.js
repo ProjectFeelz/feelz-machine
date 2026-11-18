@@ -23,6 +23,7 @@ import useDirectLive, { cfThumb } from '../hooks/useDirectLive';
 const YT = /(?:youtube\.com\/(?:watch\?v=|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
 const ytId = (url) => { const m = (url || '').match(YT); return m ? m[1] : null; };
 const thumb = (s, big) => {
+  if (s.thumbnail_url) return s.thumbnail_url;   // the host's own, Feelz Machine only
   if (s.cfThumb) return s.cfThumb;
   const id = ytId(s.youtube_url);
   if (id) return `https://i.ytimg.com/vi/${id}/${big ? 'maxresdefault' : 'hqdefault'}.jpg`;
@@ -221,7 +222,7 @@ export default function LivePage() {
     // live_direct.sql has run) the page still shows every YouTube stream.
     const base = 'id, title, status, mode, youtube_url, scheduled_at, started_at, ended_at, artist_id, replay_hidden';
     const fetchAll = (withDirect) => {
-      const cols = withDirect ? `${base}, cf_live_uid, cf_replay_uid` : base;
+      const cols = withDirect ? `${base}, cf_live_uid, cf_replay_uid, thumbnail_url` : base;
       return Promise.all([
         supabase.from('listening_sessions').select(cols).eq('status', 'live').order('started_at', { ascending: false }).limit(30),
         supabase.from('listening_sessions').select(cols).eq('status', 'scheduled')

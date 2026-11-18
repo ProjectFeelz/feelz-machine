@@ -18,6 +18,7 @@ import useGoBack from '../hooks/useGoBack';
 import TipButton from '../components/TipButton';
 import LiveStage from '../components/LiveStage';
 import DirectStage from '../components/DirectStage';
+import StreamThumbPicker from '../components/StreamThumbPicker';
 import useDirectLive from '../hooks/useDirectLive';
 import { supabase } from '../supabaseClient';
 import { resolveStreamSrc, resolveStreamLater, playableFallback } from '../utils/streamUrl';
@@ -1906,7 +1907,7 @@ export default function ListeningSessionPage() {
                     src={direct.replayHls}
                     onAir={direct.replayReady}
                     replay
-                    poster={direct.poster}
+                    poster={session.thumbnail_url || direct.poster}
                     title={session.title}
                     hostName={host.artist_name}
                     hostImage={host.profile_image_url}
@@ -1922,6 +1923,7 @@ export default function ListeningSessionPage() {
                     hostImage={host.profile_image_url}
                     isHost={isHost}
                     replay
+                    poster={session.thumbnail_url || null}
                     topBar={stageTopBar}
                     overlay={floating}
                     onTime={onReplayTime}
@@ -1929,7 +1931,9 @@ export default function ListeningSessionPage() {
                 )
               ) : isScheduled ? (
                 <div className="relative aspect-video overflow-hidden bg-black flex flex-col items-center justify-center text-center px-6">
-                  {host.profile_image_url && <img src={host.profile_image_url} alt="" className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-40" />}
+                  {session.thumbnail_url
+                    ? <img src={session.thumbnail_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-60" />
+                    : host.profile_image_url && <img src={host.profile_image_url} alt="" className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-40" />}
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-black/30" />
                   <p className="relative text-[10px] font-black tracking-[0.3em] text-amber-300 uppercase">Going live</p>
                   <p className="relative mt-1 text-sm sm:text-base font-bold text-white/80">
@@ -2106,6 +2110,18 @@ export default function ListeningSessionPage() {
               className="mx-4 lg:mx-0 mt-3 w-[calc(100%-2rem)] lg:w-full py-3 rounded-2xl bg-red-500 hover:bg-red-400 text-white text-sm font-black inline-flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(239,68,68,0.45)]">
               <span className="w-2 h-2 rounded-full bg-white animate-pulse" /> Go live now
             </button>
+          )}
+          {/* The stream's own thumbnail: Feelz Live, Home, Library, the replay
+              and shared links. The video's thumbnail on YouTube is not touched. */}
+          {isHost && (
+            <div className="mx-4 lg:mx-0 mt-3 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.07]">
+              <StreamThumbPicker compact artistId={session.artist_id} value={session.thumbnail_url || null}
+                fallback={ytId ? `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` : null}
+                onChange={async (url) => {
+                  await updateSession({ thumbnail_url: url });
+                  flash(url ? 'Thumbnail updated' : 'Thumbnail removed');
+                }} />
+            </div>
           )}
           {isHost && isEnded && (
             <div className="mx-4 lg:mx-0 mt-3 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.07] flex items-center gap-3">

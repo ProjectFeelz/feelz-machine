@@ -434,7 +434,7 @@ export default function HomePage() {
       // Live now first, then streams scheduled in the next week.
       const { data: sessions, error: sessErr } = await supabase
         .from('listening_sessions')
-        .select('id, title, artist_id, status, scheduled_at, youtube_url')
+        .select('id, title, artist_id, status, scheduled_at, youtube_url, thumbnail_url')
         .or(`status.eq.live,and(status.eq.scheduled,scheduled_at.gte.${new Date(Date.now() - 3600e3).toISOString()},scheduled_at.lte.${new Date(Date.now() + 7 * 86400e3).toISOString()})`)
         .order('status', { ascending: true })
         .order('scheduled_at', { ascending: true, nullsFirst: true })
@@ -1191,7 +1191,9 @@ export default function HomePage() {
                 className="flex-shrink-0 w-40 md:w-52 text-left group"
               >
                 <div className="relative aspect-square rounded-xl overflow-hidden bg-white/[0.06] mb-2">
-                  {session.artist_image
+                  {session.thumbnail_url
+                    ? <img src={session.thumbnail_url} alt={session.title || session.artist_name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    : session.artist_image
                     ? <img src={coverUrl(session.artist_image, 400)} alt={session.artist_name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     : <div className="w-full h-full flex items-center justify-center"><Radio className="w-8 h-8 text-white/20" /></div>
                   }

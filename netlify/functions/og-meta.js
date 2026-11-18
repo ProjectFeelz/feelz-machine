@@ -9,6 +9,7 @@
 //        /.netlify/functions/og-meta?type=track&slug=xxx
 //        /.netlify/functions/og-meta?type=beat&slug=xxx
 //        /.netlify/functions/og-meta?type=schoolsessions   (serves /sessions)
+//        /.netlify/functions/og-meta?type=session&slug=<stream id>   (serves /session/<id>)
 
 const { createClient } = require('@supabase/supabase-js');
 
@@ -271,6 +272,43 @@ async function buildMeta(type, slug) {
     } else {
       pageUrl = `${SITE_URL}/album/${slug}`;
     }
+  }
+
+  // A live stream, a stream that is coming up, or its replay. The card says
+  // which, names the host and shows the host's own thumbnail when they set
+  // one in the app, otherwise the video's, otherwise the host's picture.
+  if (type === 'session' && slug && /^[0-9a-f-]{36}$/i.test(slug)) {
+    const { data: s } = await supabase
+      .from('listening_sessions')
+      .select('id, title, status, mode, scheduled_at, youtube_url, thumbnail_url, replay_hidden, artists(artist_name, profile_image_url)')
+      .eq('id', slug)
+      .maybeSingle();
+    if (s) {
+      const host = s.artists?.artist_name || 'Feelz Machine';
+      const show = s.title || 'Live stream';
+      const yt = (s.youtube_url || '').match(/(?:youtube\.com\/(?:watch\?v=|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+      if (s.status === 'live') {
+        title = `LIVE NOW: ${host} on Feelz Machine`;
+        description = `${show}. Watch, chat and get your track reviewed live.`;
+      } else if (s.status === 'scheduled') {
+        const when = s.scheduled_at
+          ? new Date(s.scheduled_at).toLocaleString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Johannesburg' }) + ' SAST'
+          : 'soon';
+        title = `${host} goes live ${when}`;
+        description = `${show}. Set a reminder and catch it live on Feelz Machine.`;
+      } else if (!s.replay_hidden) {
+        title = `Replay: ${show}`;
+        description = `${host} on Feelz Machine. Watch the replay, with the chat as it happened.`;
+      } else {
+        title = `${host} on Feelz Machine`;
+        description = 'Live shows, track reviews and listening parties on Feelz Machine.';
+      }
+      // The host's own thumbnail first (set in the app, YouTube's is untouched).
+      image = s.thumbnail_url
+        || (yt && !s.replay_hidden ? `https://i.ytimg.com/vi/${yt[1]}/hqdefault.jpg` : null)
+        || s.artists?.profile_image_url || DEFAULT_IMAGE;
+    }
+    pageUrl = `${SITE_URL}/session/${slug}`;
   }
 
   if (type === 'schoolsessions') {

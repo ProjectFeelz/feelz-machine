@@ -18,6 +18,7 @@ import MerchParked from './MerchParked';
 import { MERCH_PARKED } from '../config/features';
 import { tap } from '../utils/track';
 import { searchTracks } from '../utils/searchTracks';
+import StreamThumbPicker from './StreamThumbPicker';
 import CreateMenuSection, { MENU_TINTS } from './CreateMenuSection';
 import {
   Trophy, Camera, Mic, TrendingUp, HeartHandshake, Store, Coins, Wallet,
@@ -205,6 +206,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
   const [liveSessions, setLiveSessions] = useState(false);
   const [liveSlow, setLiveSlow] = useState(0);
   const [titleTouched, setTitleTouched] = useState(false);
+  const [liveThumb, setLiveThumb] = useState(null);
   const kindTitle = (k) => k === 'review' ? `${artist?.artist_name || 'Live'} Live Reviews`
     : k === 'party' ? `${artist?.artist_name || 'Live'} Listening Party` : `${artist?.artist_name || 'Live'} Live`;
   useEffect(() => { if (artist && !titleTouched) setLiveTitle(kindTitle(liveKind)); }, [artist?.id, liveKind]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -265,6 +267,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
         ...(liveMode === 'youtube' && liveYoutubeUrl ? { youtube_url: liveYoutubeUrl } : {}),
         ...(cfLiveUid ? { cf_live_uid: cfLiveUid } : {}),
         reviews_open: liveReviews,
+        ...(liveThumb ? { thumbnail_url: liveThumb } : {}),
         slow_mode_seconds: liveSlow,
       }).select().single();
       if (error) throw error;
@@ -785,6 +788,11 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                 <input value={liveTitle} onChange={e => { setLiveTitle(e.target.value); setTitleTouched(true); }}
                   placeholder="Live Reviews Night, Beat Session, Q and A" maxLength={80}
                   className="w-full px-4 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-2xl text-base text-white placeholder-white/25 focus:outline-none focus:border-white/25" />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-white/50 font-black uppercase tracking-[0.15em]">Thumbnail (optional)</label>
+                <StreamThumbPicker artistId={artist?.id} value={liveThumb} onChange={setLiveThumb} />
               </div>
 
               {liveMode === 'youtube' && (

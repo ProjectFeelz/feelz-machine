@@ -27,6 +27,7 @@
  *   topBar      the bar across the top of the stage (LIVE pill, viewers)
  *   replay      a past stream: starts paused, plays from the start, no live edge
  *   onTime      replays only: called with the video position in seconds
+ *   poster      replays only: the stream's own thumbnail, shown until it is played
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -57,11 +58,12 @@ const canFullscreen = () =>
   typeof document !== 'undefined' &&
   !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
 
-export default function LiveStage({ videoId, title, hostName, hostImage, isHost = false, overlay = null, topBar = null, replay = false, onTime = null }) {
+export default function LiveStage({ videoId, title, hostName, hostImage, isHost = false, overlay = null, topBar = null, replay = false, onTime = null, poster = null }) {
   const wrapRef   = useRef(null);
   const mountRef  = useRef(null);
   const playerRef = useRef(null);
   const hideTimer = useRef(null);
+  const playedOnce = useRef(false);
 
   const [phase, setPhase]     = useState('loading'); // loading | playing | paused | ended | error
   const [muted, setMuted]     = useState(true);
@@ -124,7 +126,7 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
           onStateChange: (e) => {
             if (cancelled) return;
             const S = YT.PlayerState;
-            if (e.data === S.PLAYING) setPhase('playing');
+            if (e.data === S.PLAYING) { playedOnce.current = true; setPhase('playing'); }
             else if (e.data === S.PAUSED) setPhase('paused');
             else if (e.data === S.ENDED) {
               setPhase('ended');
@@ -248,7 +250,9 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
       {phase === 'paused' && (
         <button type="button" onClick={togglePlay}
           className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 backdrop-blur-xl">
-          {backdrop}
+          {replay && poster && !playedOnce.current
+            ? <><img src={poster} alt="" className="absolute inset-0 w-full h-full object-cover" /><span className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/40" /></>
+            : backdrop}
           <span className="relative w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-[0_0_40px_rgba(236,72,153,0.5)]">
             <Play className="w-7 h-7 text-black ml-1" />
           </span>
