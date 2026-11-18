@@ -50,7 +50,11 @@ export function entryCta(comp, { signedIn } = {}) {
   const phase = currentPhase(comp);
   if (!signedIn) return { label: 'Get started', to: '/login' };
   if (phase === 'awareness')   return { label: 'Get ready to enter', to: '/sessions#what-you-need' };
-  if (phase === 'submissions') return { label: 'Upload your entry',  to: '/dashboard?tab=upload' };
+  // sessions=1 is the whole point of this link. It is what tells the upload
+  // panel that this person arrived meaning to ENTER, so the entry form opens
+  // already on instead of waiting at the bottom of a long page to be found.
+  // Nothing else sets it, so an ordinary upload can never pick it up.
+  if (phase === 'submissions') return { label: 'Upload your entry',  to: '/dashboard?tab=upload&sessions=1' };
   if (phase === 'voting')      return { label: "Vote, People's Choice", to: '/sessions/vote' };
   return { label: 'See the results', to: '/sessions/vote' };
 }

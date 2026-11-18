@@ -17,6 +17,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import TipButton from '../components/TipButton';
 import LiveStage from '../components/LiveStage';
+import DirectStage from '../components/DirectStage';
+import useDirectLive from '../hooks/useDirectLive';
 import { supabase } from '../supabaseClient';
 import { resolveStreamSrc, resolveStreamLater, playableFallback } from '../utils/streamUrl';
 import { assignPlaybackSrc } from '../utils/offlineStore';
@@ -25,7 +27,8 @@ import {
   Play, Pause, SkipForward, X, Users, Music, Radio,
   Plus, Search, Loader, Send,
   ChevronDown, Star, Trash2, BarChart2,
-  Pin, Shield, Ban, Clock, AtSign, Check, ArrowDown, Timer, Bell, CalendarPlus
+  Pin, Shield, Ban, Clock, AtSign, Check, ArrowDown, Timer, Bell, CalendarPlus,
+  Mic, Disc3, Crown
 } from 'lucide-react';
 
 const YOUTUBE_REGEX = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
@@ -249,7 +252,19 @@ function MessageSheet({ msg, me, isMod, isHost, hostUserId, isModUser, onClose, 
 // ── Track Review Submission Queue ────────────────────────────────────────────
 
 // Listener: pick one of their own tracks to submit for review
-function SubmitForReviewModal({ sessionId, user, onClose, onSubmitted }) {
+// Gifts that move a track up the live review queue. Each is a tip that goes
+// straight to the host through the normal tip flow; bigger gifts go first.
+const REVIEW_GIFTS = [
+  { id: 'mic',   name: 'Mic',   amount: 2,  line: 'Move up the queue', icon: Mic,   tint: 'from-sky-400 to-violet-500' },
+  { id: 'vinyl', name: 'Vinyl', amount: 5,  line: 'Jump ahead',        icon: Disc3, tint: 'from-pink-500 to-violet-500' },
+  { id: 'crown', name: 'Crown', amount: 10, line: 'Front of the line', icon: Crown, tint: 'from-amber-300 to-pink-500' },
+];
+const giftFor = (amount) => [...REVIEW_GIFTS].reverse().find(g => Number(amount) >= g.amount) || null;
+
+function SubmitForReviewModal({ sessionId, user, onClose, onSubmitted, host, onGiftSent }) {
+  const [picked, setPicked] = useState(null);   // the track, while choosing free or a gift
+  const [gift, setGift]     = useState(null);   // the gift being paid for
+  const canGift = !!host?.paypal_email;
   const [tracks, setTracks]         = useState([]);
   const [loading, setLoading]       = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -335,6 +350,23 @@ function SubmitForReviewModal({ sessionId, user, onClose, onSubmitted }) {
         </div>
         <p className="text-[11px] text-white/40 mb-4 flex-shrink-0">Pick one of your tracks. It joins the queue and gets rated live by everyone watching. Up to two at a time.</p>
 
+        {gift && picked && (
+          <TipButton
+            artist={host}
+            autoOpen
+            presetAmount={gift.amount}
+            presetMessage={`${gift.name} for "${picked.title}"`}
+            onTipSent={async (amount, msg) => {
+              const { error: gErr } = await supabase.rpc('submit_review_with_gift', { p_session: sessionId, p_track: picked.id });
+              if (gErr) { setError('Your gift went through, but the queue did not update. Tell the host in the chat.'); return; }
+              if (onGiftSent) onGiftSent(amount, msg);
+              setSubmitted(picked);
+              setTimeout(() => { onSubmitted(); onClose(); }, 1800);
+            }}
+            onClose={(paid) => { if (!paid) setGift(null); }}
+          />
+        )}
+
         {submitted ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
@@ -342,6 +374,39 @@ function SubmitForReviewModal({ sessionId, user, onClose, onSubmitted }) {
               <p className="text-sm font-bold text-white mb-1">You're in the queue</p>
               <p className="text-xs text-white/40">"{submitted.title}" will be rated live. Stay close, we'll tell you when it's on.</p>
             </div>
+          </div>
+        ) : picked ? (
+          <div className="flex-1 overflow-y-auto space-y-2">
+            <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/[0.05] border border-white/[0.07] mb-1">
+              <div className="w-11 h-11 rounded-xl bg-white/[0.06] overflow-hidden flex-shrink-0">
+                {picked.cover_artwork_url ? <img src={picked.cover_artwork_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-4 h-4 text-white/30 m-auto mt-3.5" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-black text-white truncate">{picked.title}</p>
+                <button onClick={() => setPicked(null)} className="text-[11px] text-white/40 hover:text-white">Pick another</button>
+              </div>
+            </div>
+            <p className="text-[10px] font-black tracking-[0.2em] text-white/40 uppercase pt-1">Send a gift to move up</p>
+            {REVIEW_GIFTS.map(g => (
+              <button key={g.id} onClick={() => setGift(g)} disabled={submitting}
+                className="w-full flex items-center gap-3 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.07] hover:border-pink-400/40 hover:bg-white/[0.07] transition text-left">
+                <span className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${g.tint} flex items-center justify-center flex-shrink-0`}>
+                  <g.icon className="w-5 h-5 text-white" />
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-black text-white">{g.name}</span>
+                  <span className="block text-[11px] text-white/50">{g.line}</span>
+                </span>
+                <span className="text-sm font-black text-white">${g.amount}</span>
+              </button>
+            ))}
+            <button onClick={() => submit(picked)} disabled={submitting}
+              className="w-full py-3 rounded-2xl bg-white/[0.08] text-white text-sm font-bold hover:bg-white/[0.12] transition disabled:opacity-40">
+              {submitting ? 'Sending...' : 'Join the queue free'}
+            </button>
+            <p className="text-[10px] text-white/35 text-center leading-relaxed">
+              Gifts go straight to {host?.artist_name || 'the host'} through PayPal. Bigger gifts are reviewed first.
+            </p>
           </div>
         ) : loading ? (
           <div className="flex-1 flex items-center justify-center">
@@ -395,7 +460,7 @@ function SubmitForReviewModal({ sessionId, user, onClose, onSubmitted }) {
             )}
 
             {tracks.map(track => (
-              <button key={track.id} onClick={() => !submitting && submit(track)}
+              <button key={track.id} onClick={() => !submitting && (canGift ? setPicked(track) : submit(track))}
                 disabled={submitting}
                 className="w-full flex items-center space-x-3 p-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.05] transition text-left active:scale-[0.98] disabled:opacity-50">
                 <div className="w-10 h-10 rounded-xl bg-white/[0.06] flex-shrink-0 overflow-hidden">
@@ -510,7 +575,9 @@ function ReviewQueuePanel({ queue, reviewsOpen, onToggleOpen, onChanged, flash, 
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-white truncate">
                 {item.track_title}
-                {item.is_priority && <span className="ml-1.5 text-[9px] font-black px-1.5 py-px rounded bg-violet-500/30 text-violet-200">BOOST</span>}
+                {item.gift_amount
+                  ? <span className="ml-1.5 text-[9px] font-black px-1.5 py-px rounded bg-amber-400 text-black">{(giftFor(item.gift_amount)?.name || 'GIFT').toUpperCase()} ${Number(item.gift_amount)}</span>
+                  : item.is_priority && <span className="ml-1.5 text-[9px] font-black px-1.5 py-px rounded bg-violet-500/30 text-violet-200">BOOST</span>}
               </p>
               <p className="text-[10px] text-white/40 truncate">{item.artist_name}</p>
             </div>
@@ -928,6 +995,44 @@ export default function ListeningSessionPage() {
     return () => clearInterval(t);
   }, [loadReviewQueue]);
 
+  // Direct streams (Cloudflare Stream): is the host sending video, and where
+  // the replay is once it has ended. Polled, since Cloudflare has no push.
+  const directCfg = useDirectLive();
+  const [direct, setDirect] = useState({ onAir: false, hls: null, poster: null, replayHls: null, replayReady: false });
+  const directMode = session?.mode === 'direct' && !!session?.cf_live_uid;
+  const directStatus = session?.status;
+  useEffect(() => {
+    if (!directMode) return undefined;
+    let stop = false;
+    const tick = async () => {
+      try {
+        if (directStatus === 'ended') {
+          const r = await fetch(`/.netlify/functions/cf-live?action=replay&session=${sessionId}`).then(x => x.json());
+          if (!stop) setDirect(d => ({ ...d, replayHls: r.hls || null, replayReady: !!r.ready, poster: r.thumbnail || d.poster }));
+          return !!r.ready;
+        }
+        const r = await fetch(`/.netlify/functions/cf-live?action=status&session=${sessionId}`).then(x => x.json());
+        if (!stop) setDirect(d => ({ ...d, onAir: !!r.live, hls: r.hls || null, poster: r.thumbnail || d.poster }));
+      } catch { /* try again next tick */ }
+      return false;
+    };
+    tick();
+    const t = setInterval(async () => { const done = await tick(); if (done) clearInterval(t); }, directStatus === 'ended' ? 20000 : 10000);
+    return () => { stop = true; clearInterval(t); };
+  }, [directMode, directStatus, sessionId]);
+
+  // Switch this stream to direct: makes sure the artist has a Cloudflare
+  // live input and points the stream at it.
+  const switchToDirect = async () => {
+    const { data: { session: auth } } = await supabase.auth.getSession();
+    const r = await fetch('/.netlify/functions/cf-live', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'setup', token: auth?.access_token }),
+    }).then(x => x.json()).catch(() => ({}));
+    if (!r.uid) { flash('Direct streaming is not set up yet.'); return; }
+    await updateSession({ mode: 'direct', cf_live_uid: r.uid });
+  };
+
   // Scheduled streams: "Remind me" and how many are coming.
   const [reminded, setReminded]       = useState(false);
   const [reminderCount, setReminderCount] = useState(0);
@@ -1172,9 +1277,11 @@ export default function ListeningSessionPage() {
       .eq('id', sessionId).maybeSingle();
     // An ended stream stays up as a replay while its video is there, unless
     // the host hid it.
-    if (!s || (s.status === 'ended' && (!extractYouTubeId(s.youtube_url || '') || s.replay_hidden))) { navigate('/'); return; }
+    if (!s || (s.status === 'ended' && ((!extractYouTubeId(s.youtube_url || '') && !(s.mode === 'direct' && s.cf_live_uid)) || s.replay_hidden))) { navigate('/'); return; }
     setSession(s);
     loadMods(s.artist_id);
+    // Your watch history (Library, Streams).
+    if (user?.id) supabase.rpc('mark_stream_watched', { p_session: s.id }).then(() => {}, () => {});
     const amHost = !!artist && s.artist_id === artist.id;
 
     const { data: q } = await supabase
@@ -1436,7 +1543,7 @@ export default function ListeningSessionPage() {
   const host = session.artists || {};
   const isScheduled = session.status === 'scheduled';
   const isEnded = session.status === 'ended';
-  const isReplay = isEnded && !!ytId && !session.replay_hidden;
+  const isReplay = isEnded && !session.replay_hidden && (!!ytId || (session.mode === 'direct' && !!session.cf_live_uid));
   const onStage = reviewQueue.find(q => q.status === 'reviewing');
   const waitingReviews = reviewQueue.filter(q => q.status === 'pending');
   const myPlace = waitingReviews.find(q => q.is_mine)?.place || null;
@@ -1574,15 +1681,28 @@ export default function ListeningSessionPage() {
           <div className="relative pt-safe lg:pt-0">
             <div className="fm-stage-glow lg:rounded-3xl overflow-hidden">
               {isReplay ? (
-                <LiveStage
-                  videoId={ytId}
-                  title={session.title}
-                  hostName={host.artist_name}
-                  hostImage={host.profile_image_url}
-                  isHost={isHost}
-                  replay
-                  topBar={stageTopBar}
-                />
+                session.mode === 'direct' ? (
+                  <DirectStage
+                    src={direct.replayHls}
+                    onAir={direct.replayReady}
+                    replay
+                    poster={direct.poster}
+                    title={session.title}
+                    hostName={host.artist_name}
+                    hostImage={host.profile_image_url}
+                    topBar={stageTopBar}
+                  />
+                ) : (
+                  <LiveStage
+                    videoId={ytId}
+                    title={session.title}
+                    hostName={host.artist_name}
+                    hostImage={host.profile_image_url}
+                    isHost={isHost}
+                    replay
+                    topBar={stageTopBar}
+                  />
+                )
               ) : isScheduled ? (
                 <div className="relative aspect-video overflow-hidden bg-black flex flex-col items-center justify-center text-center px-6">
                   {host.profile_image_url && <img src={host.profile_image_url} alt="" className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-40" />}
@@ -1620,6 +1740,17 @@ export default function ListeningSessionPage() {
                   </div>
                   <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent px-3 pt-3 pb-8 text-left">{stageTopBar}</div>
                 </div>
+              ) : directMode ? (
+                <DirectStage
+                  src={direct.hls}
+                  onAir={direct.onAir}
+                  poster={direct.poster}
+                  title={session.title}
+                  hostName={host.artist_name}
+                  hostImage={host.profile_image_url}
+                  overlay={floating}
+                  topBar={stageTopBar}
+                />
               ) : session.mode === 'youtube' && ytId ? (
                 <LiveStage
                   videoId={ytId}
@@ -1772,8 +1903,14 @@ export default function ListeningSessionPage() {
                 </button>
                 <button onClick={() => updateSession({ mode: 'youtube' })}
                   className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition ${session.mode === 'youtube' ? 'bg-gradient-to-r from-pink-500 to-violet-500 text-white' : 'bg-white/[0.06] text-white/60 hover:bg-white/[0.1]'}`}>
-                  <Radio className="w-3.5 h-3.5" /> Video stream
+                  <Radio className="w-3.5 h-3.5" /> YouTube stream
                 </button>
+                {directCfg.canHost && (
+                  <button onClick={switchToDirect}
+                    className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition ${session.mode === 'direct' ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white' : 'bg-white/[0.06] text-white/60 hover:bg-white/[0.1]'}`}>
+                    <Radio className="w-3.5 h-3.5" /> Direct from OBS
+                  </button>
+                )}
                 <button onClick={() => setShowPollModal(true)}
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-violet-500/15 text-violet-200 hover:bg-violet-500/25 transition">
                   <BarChart2 className="w-3.5 h-3.5" /> Poll
@@ -1826,6 +1963,15 @@ export default function ListeningSessionPage() {
                 )}
               </div>
 
+              {directMode && (
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-black/30 border border-white/[0.08]">
+                  <span className={`w-2.5 h-2.5 rounded-full ${direct.onAir ? 'bg-red-500 animate-pulse' : 'bg-white/30'}`} />
+                  <p className="text-xs text-white/70 flex-1">
+                    {direct.onAir ? 'Your video is reaching fans.' : 'Waiting for your video. Start streaming in OBS with your settings from Live Studio.'}
+                  </p>
+                  <button onClick={() => navigate('/live/studio')} className="px-3 py-1.5 rounded-lg bg-white/10 text-[11px] font-black">OBS settings</button>
+                </div>
+              )}
               {session.mode === 'youtube' && (
                 <>
                   <div className="flex gap-2">
@@ -1942,6 +2088,7 @@ export default function ListeningSessionPage() {
                   {myPlace ? `You're number ${myPlace} in the queue. Stay close.`
                     : waitingReviews.length ? `${waitingReviews.length} ${waitingReviews.length === 1 ? 'track' : 'tracks'} waiting. Get yours rated live.`
                     : 'Send a track and the room rates it live.'}
+                  {session.artists?.paypal_email ? ' Gifts move you up.' : ''}
                 </p>
               </div>
               {user && session.reviews_open !== false && (
@@ -2131,6 +2278,8 @@ export default function ListeningSessionPage() {
         <SubmitForReviewModal
           sessionId={sessionId}
           user={user}
+          host={session.artists}
+          onGiftSent={(amount, msg) => onTipSent(amount, msg)}
           onClose={() => setShowSubmitModal(false)}
           onSubmitted={() => { setShowSubmitModal(false); loadReviewQueue(); }}
         />

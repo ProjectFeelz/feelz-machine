@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useContext } from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import React, { useEffect, useState, useContext, useRef } from 'react';
+import { Outlet, useNavigate, useLocation, useNavigationType } from 'react-router-dom';
 import MobileNav from './MobileNav';
 import WindowControlsOverlay from './WindowControlsOverlay';
 import DesktopSidebar from './DesktopSidebar';
@@ -12,7 +12,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { myAvatar } from '../../utils/me';
 import { useAppThemeInit } from '../../hooks/useAppTheme';
 import { ListenerThemeProvider } from '../../contexts/ListenerThemeContext';
-import { Bell, Flame, UserCircle, Compass } from 'lucide-react';
+import { Bell, Flame, UserCircle, Compass, Plus } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
 import { OfflineBanner } from '../../hooks/useOffline';
 import ErrorBoundary from '../ErrorBoundary';
@@ -169,11 +169,82 @@ function MobileBellButton() {
 
 // ── Main layout ───────────────────────────────────────────────────────────────
 export default function AppLayout() {
-  const { currentTrack, isMinimized }            = usePlayer();
+  const { currentTrack, isMinimized, isPlaying } = usePlayer();
   const { user, artist, loading, isArtist, isBeatmaker, viewAs, setViewAs } = useAuth();
   const location                    = useLocation();
   const [splashDone, setSplashDone] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
+  // Any page can open the create menu, optionally on a panel:
+  //   window.dispatchEvent(new CustomEvent('fm:open-create', { detail: { tab: 'live' } }))
+  const [createTab, setCreateTab] = useState('menu');
+  useEffect(() => {
+    const onOpen = (e) => { setCreateTab(e.detail?.tab || 'menu'); setShowCreateMenu(true); };
+    window.addEventListener('fm:open-create', onOpen);
+    return () => window.removeEventListener('fm:open-create', onOpen);
+  }, []);
+
+  // ONE BACK PRESS SHOULD NOT END THE MUSIC.
+  //
+  // People back out of the app and then report that playback does not
+  // continue in the background. Backing out is not minimising: it closes the
+  // page, and a closed page has no audio to continue. The app had no way to
+  // say so at the only moment it matters.
+  //
+  // This asks once, and only when it is actually about to cost something.
+  //
+  // WHY IT CANNOT EAT NORMAL NAVIGATION, WHICH WOULD BE WORSE THAN THE BUG:
+  //
+  //   depthRef counts how deep into the app they have navigated. Above zero
+  //   there is somewhere to go back TO, so back is ordinary navigation and
+  //   this stays out of the way entirely.
+  //
+  //   It only speaks when depth is zero AND something is playing. Not
+  //   playing, nothing to lose, they leave with one press as always.
+  //
+  //   The second press inside two and a half seconds always goes through, so
+  //   even if the depth count is ever wrong the cost is one extra press, not
+  //   a trapped user.
+  const navType    = useNavigationType();
+  const depthRef   = useRef(0);
+  const lastBackRef = useRef(0);
+  const isPlayingRef = useRef(false);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  useEffect(() => {
+    if (navType === 'PUSH') depthRef.current += 1;
+    else if (navType === 'POP') depthRef.current = Math.max(0, depthRef.current - 1);
+  }, [location.key, navType]);
+
+  useEffect(() => {
+    // Standalone only. In a browser tab, back belongs to the tab and the
+    // person has other ways out; interfering there is rude.
+    let standalone = false;
+    try {
+      standalone = window.matchMedia?.('(display-mode: standalone)')?.matches === true
+        || window.navigator.standalone === true;
+    } catch { standalone = false; }
+    if (!standalone) return undefined;
+
+    let armed = true;
+    // One sentinel, pushed once. Pushing per state change would pile up
+    // entries and take several presses to escape.
+    try { window.history.pushState({ feelzBackGuard: true }, ''); } catch {}
+
+    const onPop = () => {
+      if (!armed) return;
+      if (depthRef.current > 0) return;
+      if (!isPlayingRef.current) return;
+      const now = Date.now();
+      if (now - lastBackRef.current < 2500) return;   // they meant it
+      lastBackRef.current = now;
+      try {
+        window.showToast?.('Press back again to leave. Minimise instead and the music keeps playing.');
+      } catch {}
+      try { window.history.pushState({ feelzBackGuard: true }, ''); } catch {}
+    };
+
+    window.addEventListener('popstate', onPop);
+    return () => { armed = false; window.removeEventListener('popstate', onPop); };
+  }, []);
 
   // Load and apply saved listener theme on startup
   useAppThemeInit();
@@ -340,7 +411,32 @@ export default function AppLayout() {
         {location.pathname !== "/" && <FullPlayer />}
         {location.pathname !== "/" && <DesktopPlayer />}
         {location.pathname !== "/" && <MiniPlayer />}
-        <MobileNav onOpenCreateMenu={() => setShowCreateMenu(true)} />
+        <MobileNav onOpenCreateMenu={() => { setCreateTab('menu'); setShowCreateMenu(true); }} />
+
+        {/* Create, on a computer: the same menu as the + in the phone's
+            bottom bar (go live, upload, stories, chat rooms and the rest).
+            Top right, and it moves left of the docked player when that is open. */}
+        <button
+          type="button"
+          onClick={() => { setCreateTab('menu'); setShowCreateMenu(true); }}
+          aria-label="Create"
+          className="fm-create-fab hidden md:flex fixed top-5 z-[70] items-center h-12 rounded-full text-black font-black shadow-lg transition-all duration-200"
+          style={{
+            right: currentTrack && !isMinimized ? 424 : 24,
+            backgroundColor: '#90AF2F',
+            boxShadow: '0 6px 24px rgba(144,175,47,0.45)',
+          }}
+        >
+          <span className="w-12 h-12 flex items-center justify-center flex-shrink-0">
+            <Plus className="w-6 h-6" strokeWidth={2.75} />
+          </span>
+          <span className="fm-create-label overflow-hidden whitespace-nowrap text-sm">Create</span>
+        </button>
+        <style>{`
+          .fm-create-fab .fm-create-label { max-width: 0; opacity: 0; transition: max-width .2s ease, opacity .15s ease, padding .2s ease; }
+          .fm-create-fab:hover .fm-create-label, .fm-create-fab:focus-visible .fm-create-label { max-width: 90px; opacity: 1; padding-right: 18px; }
+          .fm-create-fab:hover { transform: translateY(-1px); }
+        `}</style>
 
         {/* Rendered as a sibling of MobileNav, not a child, MobileNav
             unmounts itself when the on-screen keyboard opens (sensible for
@@ -350,7 +446,8 @@ export default function AppLayout() {
           <CreateMenuModal
             artist={artist}
             user={user}
-            onClose={() => setShowCreateMenu(false)}
+            initialTab={createTab}
+            onClose={() => { setShowCreateMenu(false); setCreateTab('menu'); }}
           />
         )}
         {showCreateMenu && !isArtist && !isBeatmaker && (

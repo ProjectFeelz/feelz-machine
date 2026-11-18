@@ -6,6 +6,8 @@ import { sendArtistBroadcast } from '../utils/notify';
 import { useTier, FEATURE_LABELS } from '../contexts/useTier';
 import { useAuth } from '../contexts/AuthContext';
 import useSchoolSessions from '../hooks/useSchoolSessions';
+import useLiveStreams, { liveStreamsLine } from '../hooks/useLiveStreams';
+import useDirectLive from '../hooks/useDirectLive';
 import {
   X, ChevronDown, Loader, Check, Send, Music, Youtube, Search, Radio, Plus, Disc3,
 } from 'lucide-react';
@@ -30,10 +32,16 @@ import {
 // Groups that are always open: what's running right now, and making music.
 const ALWAYS_OPEN = ['Happening now', 'Create'];
 
-export default function CreateMenuModal({ artist, user, onClose, primaryColor = '#90AF2F', bgColor = '#000000' }) {
+export default function CreateMenuModal({ artist, user, onClose, primaryColor = '#90AF2F', bgColor = '#000000', initialTab = 'menu' }) {
   const navigate = useNavigate();
   const sessionsGate = useSchoolSessions();
+  const liveNow = useLiveStreams();
+  const directCfg = useDirectLive();
+  // Once direct streaming is switched on it is the first choice.
+  useEffect(() => { if (directCfg.canHost) setLiveMode(m => (m === 'youtube' ? 'direct' : m)); }, [directCfg.canHost]); // eslint-disable-line react-hooks/exhaustive-deps
   const { isAdmin, isBeatmaker } = useAuth();
+  // Story, voice memo and message fans share one panel, with a switch at the top.
+  const [shareTab, setShareTab] = useState('story');
   // Newsletter shortcut, shown only to admins and newsletter editors so
   // Jane can reach it in one tap instead of Monetize > Affiliates > Newsletter.
   const [canNewsletter, setCanNewsletter] = useState(false);
@@ -148,7 +156,9 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
     return { ...item, id: `${item.id}_locked`, sub: `${needs} only, upgrade to unlock` };
   };
 
-  const [createTab, setCreateTab] = useState('menu'); // 'menu' | 'story' | 'dm' | 'memo' | 'live' | 'toppick'
+  // 'menu' | 'share' | 'live' | 'toppick'. Other pages can open straight
+  // onto a panel (the Live Studio opens 'live').
+  const [createTab, setCreateTab] = useState(initialTab === 'live' || initialTab === 'share' ? initialTab : 'menu');
   const [showMerchConnect, setShowMerchConnect] = useState(false);
   const [showMerchParked, setShowMerchParked]   = useState(false);
 
@@ -157,7 +167,8 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
   const [dmSent, setDmSent] = useState(false);
 
   const [liveTitle, setLiveTitle] = useState(artist ? `${artist.artist_name}'s Live Session` : '');
-  const [liveMode, setLiveMode] = useState('audio');
+  const [liveMode, setLiveMode] = useState('youtube');
+  const [liveError, setLiveError] = useState('');
   const [liveYoutubeUrl, setLiveYoutubeUrl] = useState('');
   const [scheduleMode, setScheduleMode] = useState(false);
   const [scheduledAt, setScheduledAt] = useState('');
@@ -200,11 +211,23 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
       if (existing) { setCreateTab('menu'); navigate(`/session/${existing.id}`); setStartingSession(false); return; }
       const title = liveTitle.trim() || `${artist.artist_name}'s Live Session`;
       const isScheduled = scheduleMode && scheduledAt;
+      // Direct from OBS: the artist's Cloudflare live input, made on first use.
+      let cfLiveUid = null;
+      if (liveMode === 'direct') {
+        const { data: { session: auth } } = await supabase.auth.getSession();
+        const r = await fetch('/.netlify/functions/cf-live', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'setup', token: auth?.access_token }),
+        }).then(x => x.json()).catch(() => ({}));
+        if (!r.uid) throw new Error('Direct streaming is not set up yet');
+        cfLiveUid = r.uid;
+      }
       const { data: session, error } = await supabase.from('listening_sessions').insert({
         artist_id: artist.id, title, mode: liveMode,
         status: isScheduled ? 'scheduled' : 'live',
         ...(isScheduled ? { scheduled_at: new Date(scheduledAt).toISOString() } : {}),
         ...(liveMode === 'youtube' && liveYoutubeUrl ? { youtube_url: liveYoutubeUrl } : {}),
+        ...(cfLiveUid ? { cf_live_uid: cfLiveUid } : {}),
       }).select().single();
       if (error) throw error;
       const { data: { session: authSession } } = await supabase.auth.getSession();
@@ -219,7 +242,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
       }
       close();
       if (!scheduleMode || !scheduledAt) navigate(`/session/${session.id}`);
-    } catch (err) { console.error('Start session error:', err); }
+    } catch (err) { console.error('Start session error:', err); setLiveError(err.message || 'Could not start the stream. Try again.'); }
     setStartingSession(false);
   };
 
@@ -300,13 +323,54 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[600] flex items-center justify-center px-6 bg-black/80 backdrop-blur-sm md:pl-64"
+    <div className={`fixed inset-0 z-[600] flex justify-center bg-black/80 backdrop-blur-sm md:pl-64 ${createTab === 'menu' ? 'items-center px-6' : 'items-end sm:items-center sm:px-6'}`}
       onClick={close}>
-      <div className="w-full overflow-y-auto overflow-x-hidden rounded-3xl"
-        style={{ maxWidth: 360, maxHeight: '85vh', backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }}
+      <div className={`w-full overflow-y-auto overflow-x-hidden ${createTab === 'menu' ? 'rounded-3xl' : 'rounded-t-[28px] sm:rounded-3xl'}`}
+        style={createTab === 'menu'
+          ? { maxWidth: 360, maxHeight: '85vh', backgroundColor: '#0f0f0f', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 32px 64px rgba(0,0,0,0.6)' }
+          : { maxWidth: 560, maxHeight: 'min(94vh, calc(100dvh - 12px))', minHeight: '62vh', backgroundColor: '#0c0b10', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 -20px 80px rgba(0,0,0,0.7)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         onClick={e => e.stopPropagation()}>
 
+        {/* Panel hero: big, so the panel reads as its own place */}
+        {createTab !== 'menu' && (() => {
+          const P = {
+            live:    { icon: Radio,     title: 'Go live',         sub: 'Stream to your fans now, or set a time and let them know', grad: 'from-red-500 via-pink-500 to-violet-600' },
+            share:   { icon: Megaphone, title: 'Share with fans', sub: 'A story, a voice memo or a message to everyone who follows you', grad: 'from-violet-600 via-fuchsia-500 to-amber-400' },
+            toppick: { icon: Star,      title: 'Top pick',        sub: 'The first thing a new listener hears on your profile', grad: 'from-amber-400 via-orange-500 to-pink-500' },
+          }[createTab] || { icon: Plus, title: 'Create', sub: '', grad: 'from-violet-600 to-pink-500' };
+          const Icon = P.icon;
+          return (
+            <div className="relative overflow-hidden">
+              <div className={`absolute inset-0 bg-gradient-to-br ${P.grad} opacity-25`} />
+              <div className="absolute -right-10 -top-10 w-48 h-48 rounded-full bg-white/10 blur-3xl" />
+              <div className="relative px-5 pt-3 pb-5">
+                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/25 sm:hidden" />
+                <div className="flex items-center justify-between">
+                  <button onClick={() => setCreateTab('menu')} aria-label="Back to the menu"
+                    className="h-9 px-3 flex items-center gap-1 rounded-full bg-black/30 hover:bg-black/50 text-xs font-bold text-white/80 transition">
+                    <ChevronDown className="w-4 h-4 rotate-90" /> Menu
+                  </button>
+                  <button onClick={close} aria-label="Close"
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-black/30 hover:bg-black/50 transition">
+                    <X className="w-4 h-4 text-white/80" />
+                  </button>
+                </div>
+                <div className="mt-4 flex items-center gap-4">
+                  <span className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${P.grad} flex items-center justify-center shadow-lg flex-shrink-0`}>
+                    <Icon className="w-7 h-7 text-white" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-2xl font-black text-white leading-tight">{P.title}</p>
+                    <p className="text-sm text-white/60 leading-snug">{P.sub}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Header */}
+        {createTab === 'menu' && (
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
           <div className="flex items-center space-x-2">
             {createTab !== 'menu' && (
@@ -324,8 +388,9 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
             <X className="w-4 h-4 text-white/60" />
           </button>
         </div>
+        )}
 
-        <div className="p-4 space-y-3">
+        <div className={createTab === 'menu' ? 'p-4 space-y-3' : `px-5 pt-4 space-y-4 ${createTab === 'live' || (createTab === 'share' && shareTab === 'dm') ? 'pb-0' : 'pb-6'}`}>
 
           {/* ── Menu ── */}
           {createTab === 'menu' && (
@@ -351,9 +416,14 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                 // Whatever is running right now first, then making music,
                 // then the money, then fans, profile, account, and help last.
                 // Extra features sit in their own bands so the top stays short.
-                ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
+                ...(((sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading) || liveNow.live || liveNow.soon)
                   ? [{ heading: 'Happening now', icon: Trophy, tint: MENU_TINTS.now, items: [
-                      { id: 'sessions', icon: Trophy, label: 'Enter Sessions', sub: 'The cover competition, open to everyone' },
+                      ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
+                        ? [{ id: 'sessions', icon: Trophy, label: 'Enter Sessions', sub: 'The cover competition, open to everyone' }]
+                        : []),
+                      ...(liveNow.live || liveNow.soon
+                        ? [{ id: 'live_streams', icon: Radio, label: 'Live streams', sub: liveStreamsLine(liveNow) }]
+                        : []),
                     ] }]
                   : []),
                 {
@@ -442,7 +512,8 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                       tap('menu_' + it.id);
                       const id = it.id;
                       if (id === 'live') { setCreateTab('live'); setLiveTitle(`${artist?.artist_name}'s Live Session`); }
-                      else if (id === 'memo') { setCreateTab('memo'); }
+                      else if (id === 'memo' || id === 'story' || id === 'dm') { setShareTab(id); setCreateTab('share'); }
+                      else if (id === 'live_streams') { close(); navigate('/live'); }
                       else if (id === 'upload') { close(); navigate('/dashboard?tab=upload'); }
                       else if (id === 'edit') { close(); navigate('/profile/edit'); }
                       // The account page, not the bio form. See the Account group above.
@@ -469,13 +540,6 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   }))} />
               ))}
             </>
-          )}
-
-          {/* ── Story ── */}
-          {createTab === 'story' && (
-            <div className="rounded-2xl border border-white/[0.06] overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
-              <StoryUpload artistId={artist.id} inline onUploaded={close} />
-            </div>
           )}
 
           {/* ── My Top Pick ── */}
@@ -560,88 +624,148 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
             </div>
           )}
 
-          {/* ── Voice Memo ── */}
-          {createTab === 'memo' && (
-            <VoiceMemoUpload artistId={artist.id} onUploaded={close} />
-          )}
+          {/* ── Share with fans: story, voice memo, message ── */}
+          {createTab === 'share' && (() => {
+            const tabs = [
+              { id: 'story', label: 'Story',      icon: Camera,    feature: 'stories' },
+              { id: 'memo',  label: 'Voice memo', icon: Mic,       feature: 'voice_memo' },
+              { id: 'dm',    label: 'Message',    icon: Megaphone, feature: 'fan_broadcast' },
+            ];
+            const current = tabs.find(t => t.id === shareTab) || tabs[0];
+            const allowed = hasFeature(current.feature);
+            return (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-1.5 p-1.5 rounded-2xl bg-white/[0.05] border border-white/[0.06]">
+                  {tabs.map(t => (
+                    <button key={t.id} onClick={() => setShareTab(t.id)}
+                      className={`flex flex-col items-center justify-center gap-1 py-3 rounded-xl text-xs font-black transition ${shareTab === t.id ? 'bg-white text-black shadow' : 'text-white/60 hover:text-white hover:bg-white/[0.05]'}`}>
+                      <t.icon className="w-5 h-5" />
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
 
-          {/* ── Message Fans ── */}
-          {createTab === 'dm' && (
-            <div className="space-y-3">
-              <p className="text-xs text-white/30">Sends a push notification to everyone following you.</p>
-              <textarea rows={4} maxLength={280} value={dmMessage}
-                onChange={e => setDmMessage(e.target.value)}
-                placeholder="Share an update, a hint about new music, or let them know you're going live..."
-                className="w-full px-3 py-2.5 bg-white/[0.06] rounded-xl text-white text-sm outline-none resize-none border border-white/[0.06] focus:border-white/20 transition placeholder-white/20" />
-              <button onClick={sendDMToFollowers} disabled={!dmMessage.trim() || dmSending || dmSent}
-                className="w-full py-3 rounded-2xl text-sm font-semibold transition disabled:opacity-40 flex items-center justify-center space-x-2"
-                style={{ backgroundColor: primaryColor, color: bgColor }}>
-                {dmSending ? <Loader className="w-4 h-4 animate-spin" /> : dmSent ? <><Check className="w-4 h-4" /><span>Sent!</span></> : <><Send className="w-4 h-4" /><span>Send to followers</span></>}
-              </button>
-            </div>
-          )}
+                {!allowed ? (
+                  <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-6 text-center">
+                    <p className="text-base font-black text-white">{FEATURE_LABELS?.[current.feature] || current.label} comes with a higher plan</p>
+                    <p className="text-sm text-white/50 mt-1">Upgrade to unlock it.</p>
+                    <button onClick={() => { close(); navigate('/upgrade'); }}
+                      className="mt-4 w-full py-3.5 rounded-2xl text-base font-black" style={{ backgroundColor: primaryColor, color: bgColor }}>
+                      See plans
+                    </button>
+                  </div>
+                ) : shareTab === 'story' ? (
+                  <div className="rounded-2xl border border-white/[0.08] overflow-hidden bg-white/[0.02] fm-panel-big">
+                    <StoryUpload artistId={artist.id} inline onUploaded={close} />
+                  </div>
+                ) : shareTab === 'memo' ? (
+                  <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4 fm-panel-big">
+                    <VoiceMemoUpload artistId={artist.id} onUploaded={close} />
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-white/60">Goes to everyone who follows you, in their notifications and on their phone.</p>
+                    <textarea rows={6} maxLength={280} value={dmMessage}
+                      onChange={e => setDmMessage(e.target.value)}
+                      placeholder="New music on Friday? Going live tonight? Tell them."
+                      className="w-full px-4 py-3.5 bg-white/[0.06] rounded-2xl text-white text-base outline-none resize-none border border-white/[0.08] focus:border-white/25 transition placeholder-white/25" />
+                    <div className="flex justify-end"><span className="text-xs text-white/30">{dmMessage.length}/280</span></div>
+                    <div className="sticky bottom-0 -mx-5 px-5 pt-4 mt-2 bg-gradient-to-t from-[#0c0b10] via-[#0c0b10] to-[#0c0b10]/0" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom, 0px))' }}>
+                    <button onClick={sendDMToFollowers} disabled={!dmMessage.trim() || dmSending || dmSent}
+                      className="w-full py-4 rounded-2xl text-base font-black transition disabled:opacity-40 flex items-center justify-center gap-2"
+                      style={{ backgroundColor: primaryColor, color: bgColor }}>
+                      {dmSending ? <Loader className="w-5 h-5 animate-spin" /> : dmSent ? <><Check className="w-5 h-5" /><span>Sent</span></> : <><Send className="w-5 h-5" /><span>Send to my followers</span></>}
+                    </button>
+                    </div>
+                  </div>
+                )}
+                <style>{`
+                  .fm-panel-big input, .fm-panel-big textarea { font-size: 16px; }
+                  .fm-panel-big button { min-height: 44px; }
+                `}</style>
+              </div>
+            );
+          })()}
 
           {/* ── Go Live ── */}
           {createTab === 'live' && (
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs text-white/40 font-medium uppercase tracking-wider">Session Title</label>
+            <div className="space-y-5">
+              {/* What kind of stream */}
+              <div className={`grid gap-3 ${directCfg.canHost ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2'}`}>
+                {[
+                  ...(directCfg.canHost ? [{ id: 'direct', icon: Radio, title: 'Direct from OBS', sub: 'Straight into Feelz Machine, recorded for the replay' }] : []),
+                  { id: 'youtube', icon: Youtube, title: directCfg.canHost ? 'Via YouTube' : 'Video stream', sub: 'Stream from OBS to YouTube, fans watch it here' },
+                  { id: 'audio',   icon: Music,   title: 'Listening party', sub: 'Play your tracks to fans in sync and chat' },
+                ].map(m => {
+                  const on = liveMode === m.id;
+                  return (
+                    <button key={m.id} onClick={() => setLiveMode(m.id)}
+                      className={`text-left p-4 rounded-2xl border-2 transition ${on ? 'border-white bg-white/[0.08]' : 'border-white/[0.08] bg-white/[0.03] hover:border-white/20'}`}>
+                      <span className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${on ? 'bg-gradient-to-br from-red-500 to-pink-500' : 'bg-white/[0.08]'}`}>
+                        <m.icon className="w-5 h-5 text-white" />
+                      </span>
+                      <span className="block text-base font-black text-white">{m.title}</span>
+                      <span className="block text-xs text-white/50 mt-0.5 leading-snug">{m.sub}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-white/50 font-black uppercase tracking-[0.15em]">Title</label>
                 <input value={liveTitle} onChange={e => setLiveTitle(e.target.value)}
-                  placeholder="Give your session a name..." maxLength={80}
-                  className="w-full px-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/20" />
+                  placeholder="Live Reviews Night, Beat Session, Q and A" maxLength={80}
+                  className="w-full px-4 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-2xl text-base text-white placeholder-white/25 focus:outline-none focus:border-white/25" />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs text-white/40 font-medium uppercase tracking-wider">Stream Type</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => setLiveMode('audio')}
-                    className={`flex items-center justify-center space-x-2 py-3 rounded-xl border text-sm font-medium transition ${liveMode === 'audio' ? 'bg-white/15 border-white/20 text-white' : 'bg-white/[0.04] border-white/[0.06] text-white/40'}`}>
-                    <Music className="w-4 h-4" /><span>Audio Queue</span>
-                  </button>
-                  <button onClick={() => setLiveMode('youtube')}
-                    className={`flex items-center justify-center space-x-2 py-3 rounded-xl border text-sm font-medium transition ${liveMode === 'youtube' ? 'bg-red-500/20 border-red-500/30 text-red-400' : 'bg-white/[0.04] border-white/[0.06] text-white/40'}`}>
-                    <Youtube className="w-4 h-4" /><span>YouTube Live</span>
-                  </button>
+
+              {liveMode === 'youtube' && (
+                <div className="space-y-2">
+                  <label className="text-xs text-white/50 font-black uppercase tracking-[0.15em]">YouTube live link</label>
+                  <input value={liveYoutubeUrl} onChange={e => setLiveYoutubeUrl(e.target.value)}
+                    placeholder="https://youtube.com/live/..."
+                    className="w-full px-4 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-2xl text-base text-white placeholder-white/25 focus:outline-none focus:border-red-500/50" />
+                  <p className="text-xs text-white/40">You can add or change it on the stream page too.</p>
                 </div>
-              </div>
+              )}
+
               {liveMode === 'audio' && (
                 <div className="space-y-2">
-                  <label className="text-xs text-white/40 font-medium uppercase tracking-wider">Queue Tracks (optional)</label>
+                  <label className="text-xs text-white/50 font-black uppercase tracking-[0.15em]">Tracks to play (optional)</label>
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
                     <input value={trackSearch} onChange={e => setTrackSearch(e.target.value)}
-                      placeholder="Search your tracks..."
-                      className="w-full pl-9 pr-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/20" />
-                    {searchingTracks && <Loader className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-white/30" />}
+                      placeholder="Search your tracks"
+                      className="w-full pl-11 pr-4 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-2xl text-base text-white placeholder-white/25 focus:outline-none focus:border-white/25" />
+                    {searchingTracks && <Loader className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-white/30" />}
                   </div>
                   {trackResults.length > 0 && (
-                    <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl overflow-hidden">
+                    <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl overflow-hidden">
                       {trackResults.map(track => (
                         <button key={track.id} onClick={() => addToLiveQueue(track)}
-                          className="w-full flex items-center space-x-3 px-3 py-2.5 hover:bg-white/[0.06] transition text-left border-b border-white/[0.04] last:border-0">
-                          <div className="w-8 h-8 rounded-lg bg-white/[0.06] flex-shrink-0 overflow-hidden">
-                            {track.cover_artwork_url ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-3.5 h-3.5 text-white/20 m-auto mt-2" />}
+                          className="w-full flex items-center gap-3 px-3 py-3 hover:bg-white/[0.06] transition text-left border-b border-white/[0.04] last:border-0">
+                          <div className="w-10 h-10 rounded-lg bg-white/[0.06] flex-shrink-0 overflow-hidden">
+                            {track.cover_artwork_url ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-4 h-4 text-white/20 m-auto mt-3" />}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm text-white truncate">{track.title}</p>
-                            {track.duration && <p className="text-[10px] text-white/30">{fmtLiveDuration(track.duration)}</p>}
+                            <p className="text-sm font-bold text-white truncate">{track.title}</p>
+                            {track.duration && <p className="text-xs text-white/40">{fmtLiveDuration(track.duration)}</p>}
                           </div>
-                          <Plus className="w-4 h-4 text-white/40 flex-shrink-0" />
+                          <Plus className="w-5 h-5 text-white/50 flex-shrink-0" />
                         </button>
                       ))}
                     </div>
                   )}
                   {queueTracks.length > 0 && (
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       {queueTracks.map((track, i) => (
-                        <div key={track.id} className="flex items-center space-x-2.5 px-2 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06]">
-                          <span className="text-[10px] text-white/20 w-4 text-center">{i + 1}</span>
-                          <div className="w-7 h-7 rounded-md bg-white/[0.06] flex-shrink-0 overflow-hidden">
-                            {track.cover_artwork_url ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-3 h-3 text-white/20 m-auto mt-2" />}
+                        <div key={track.id} className="flex items-center gap-3 px-3 py-2.5 rounded-2xl bg-white/[0.05] border border-white/[0.06]">
+                          <span className="text-xs font-black text-white/30 w-4 text-center">{i + 1}</span>
+                          <div className="w-9 h-9 rounded-lg bg-white/[0.06] flex-shrink-0 overflow-hidden">
+                            {track.cover_artwork_url ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-4 h-4 text-white/20 m-auto mt-2.5" />}
                           </div>
-                          <p className="text-xs text-white flex-1 truncate">{track.title}</p>
-                          {track.duration && <p className="text-[10px] text-white/30 flex-shrink-0">{fmtLiveDuration(track.duration)}</p>}
-                          <button onClick={() => removeFromLiveQueue(track.id)} className="p-1 rounded-lg hover:bg-white/[0.08] transition">
-                            <X className="w-3.5 h-3.5 text-white/30" />
+                          <p className="text-sm text-white flex-1 truncate">{track.title}</p>
+                          <button onClick={() => removeFromLiveQueue(track.id)} aria-label="Remove" className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/[0.08] transition">
+                            <X className="w-4 h-4 text-white/40" />
                           </button>
                         </div>
                       ))}
@@ -649,30 +773,42 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   )}
                 </div>
               )}
-              {liveMode === 'youtube' && (
-                <div className="space-y-1.5">
-                  <label className="text-xs text-white/40 font-medium uppercase tracking-wider">YouTube Live URL (optional)</label>
-                  <input value={liveYoutubeUrl} onChange={e => setLiveYoutubeUrl(e.target.value)}
-                    placeholder="https://youtube.com/live/..."
-                    className="w-full px-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/25 focus:outline-none focus:border-red-500/40" />
+
+              {/* When */}
+              <div className="space-y-2">
+                <label className="text-xs text-white/50 font-black uppercase tracking-[0.15em]">When</label>
+                <div className="grid grid-cols-2 gap-1.5 p-1.5 rounded-2xl bg-white/[0.05] border border-white/[0.06]">
+                  <button onClick={() => setScheduleMode(false)}
+                    className={`py-3 rounded-xl text-sm font-black transition ${!scheduleMode ? 'bg-white text-black' : 'text-white/60'}`}>Right now</button>
+                  <button onClick={() => setScheduleMode(true)}
+                    className={`py-3 rounded-xl text-sm font-black transition ${scheduleMode ? 'bg-white text-black' : 'text-white/60'}`}>Schedule it</button>
                 </div>
-              )}
-              <button onClick={() => setScheduleMode(v => !v)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm transition ${scheduleMode ? 'bg-purple-500/15 border-purple-500/30 text-purple-300' : 'bg-white/[0.04] border-white/[0.06] text-white/40'}`}>
-                <span>Schedule for later</span><span className="text-xs">{scheduleMode ? 'On' : 'Off'}</span>
+                {scheduleMode && (
+                  <>
+                    <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)}
+                      min={new Date().toISOString().slice(0, 16)}
+                      className="w-full px-4 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-2xl text-base text-white focus:outline-none focus:border-violet-500/50" />
+                    <p className="text-xs text-white/40">Fans get a heads-up now, a reminder 15 minutes before, and an alert when you go live.</p>
+                  </>
+                )}
+              </div>
+
+              <button onClick={() => { close(); navigate('/live/studio'); }}
+                className="w-full py-3 rounded-2xl text-sm font-bold text-white/60 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] transition">
+                Open your Live Studio
               </button>
-              {scheduleMode && (
-                <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)}
-                  min={new Date().toISOString().slice(0, 16)}
-                  className="w-full px-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white focus:outline-none focus:border-purple-500/40" />
-              )}
+              {liveError && <p className="text-sm text-red-300 text-center">{liveError}</p>}
+
+              {/* Pinned, so the main button is always in reach on a small screen. */}
+              <div className="sticky bottom-0 -mx-5 px-5 pt-4 mt-2 bg-gradient-to-t from-[#0c0b10] via-[#0c0b10] to-[#0c0b10]/0" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom, 0px))' }}>
               <button onClick={startLiveSession}
                 disabled={startingSession || !liveTitle.trim() || (scheduleMode && !scheduledAt)}
-                className={`w-full py-3 rounded-xl disabled:opacity-40 transition text-white font-semibold text-sm flex items-center justify-center space-x-2 ${scheduleMode ? 'bg-purple-500 hover:bg-purple-400' : 'bg-red-500 hover:bg-red-400'}`}>
+                className={`w-full py-4 rounded-2xl disabled:opacity-40 transition text-white font-black text-base flex items-center justify-center gap-2 shadow-lg ${scheduleMode ? 'bg-gradient-to-r from-violet-600 to-pink-500' : 'bg-gradient-to-r from-red-500 to-pink-500'}`}>
                 {startingSession
-                  ? <><Loader className="w-4 h-4 animate-spin" /><span>{scheduleMode ? 'Scheduling...' : 'Starting...'}</span></>
-                  : scheduleMode ? <><Calendar className="w-4 h-4" /><span>Schedule Stream</span></> : <><Radio className="w-4 h-4" /><span>Go Live</span></>}
+                  ? <><Loader className="w-5 h-5 animate-spin" /><span>{scheduleMode ? 'Scheduling' : 'Starting'}</span></>
+                  : scheduleMode ? <><Calendar className="w-5 h-5" /><span>Schedule stream</span></> : <><Radio className="w-5 h-5" /><span>Go live now</span></>}
               </button>
+              </div>
             </div>
           )}
 

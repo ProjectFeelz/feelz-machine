@@ -11,11 +11,14 @@ import { Heart, Loader, X, DollarSign } from 'lucide-react';
 
 const PRESET_AMOUNTS = [2, 5, 10, 20];
 
-export default function TipButton({ artist, onTipSent }) {
+// Optional, for gifts on live reviews: presetAmount and presetMessage fill the
+// form, autoOpen shows the sheet straight away with no Tip button, and
+// onClose(paid) says whether the sheet closed after a completed payment.
+export default function TipButton({ artist, onTipSent, presetAmount, presetMessage, autoOpen = false, onClose }) {
   const { user } = useAuth();
-  const [open, setOpen]         = useState(false);
-  const [amount, setAmount]     = useState('');
-  const [message, setMessage]   = useState('');
+  const [open, setOpen]         = useState(!!autoOpen);
+  const [amount, setAmount]     = useState(presetAmount ? String(presetAmount) : '');
+  const [message, setMessage]   = useState(presetMessage || '');
   const [step, setStep]         = useState('form'); // form | paying | success | error
   const [error, setError]       = useState('');
   const paypalRef               = useRef(null);
@@ -132,8 +135,13 @@ export default function TipButton({ artist, onTipSent }) {
   // that loads before that migration runs.
   if (!artist?.accepts_tips && !artist?.paypal_email) return null;
 
-  const reset = () => { setOpen(false); setAmount(''); setMessage(''); setStep('form'); setError(''); paypalRendered.current = false; };
+  const reset = () => {
+    const paid = step === 'success';
+    setOpen(false); setAmount(''); setMessage(''); setStep('form'); setError(''); paypalRendered.current = false;
+    if (onClose) onClose(paid);
+  };
 
+  if (!open && autoOpen) return null;
   if (!open) return (
     <button
       onClick={() => { if (!user) return; setOpen(true); }}

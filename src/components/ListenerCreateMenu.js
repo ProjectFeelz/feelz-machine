@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
-  X, Trophy, ListMusic, MessagesSquare, BarChart3, Link, Pencil, Settings, Sparkles, Inbox, GraduationCap, User,
+  X, Trophy, Radio, ListMusic, MessagesSquare, BarChart3, Link, Pencil, Settings, Sparkles, Inbox, GraduationCap, User,
 } from 'lucide-react';
 import { useTier } from '../contexts/useTier';
 import useSchoolSessions from '../hooks/useSchoolSessions';
+import useLiveStreams, { liveStreamsLine } from '../hooks/useLiveStreams';
 import { tap } from '../utils/track';
 import CreateMenuSection, { MENU_TINTS } from './CreateMenuSection';
 
@@ -27,6 +28,7 @@ export default function ListenerCreateMenu({ onClose }) {
   const navigate = useNavigate();
   const { isListenerPro } = useTier();
   const sessionsGate = useSchoolSessions();
+  const liveNow = useLiveStreams();
   const isPro = isListenerPro;
   // Which folded group is open (one at a time); Create and Happening now never fold.
   const [openGroup, setOpenGroup] = useState(null);
@@ -39,12 +41,20 @@ export default function ListenerCreateMenu({ onClose }) {
   // running right now first, then making playlists and your people, then your
   // listening and earning, profile and account, and help last.
   const groups = [
-    ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
-      ? [{ heading: 'Happening now', icon: Trophy, tint: MENU_TINTS.now, items: [{
-          id: 'sessions', icon: Trophy, label: 'Sessions',
-          sub: 'The cover competition. Listen, vote, or enter it yourself',
-          onClick: go('/sessions', 'sessions'),
-        }] }]
+    ...(((sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading) || liveNow.live || liveNow.soon)
+      ? [{ heading: 'Happening now', icon: Trophy, tint: MENU_TINTS.now, items: [
+          ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
+            ? [{
+                id: 'sessions', icon: Trophy, label: 'Sessions',
+                sub: 'The cover competition. Listen, vote, or enter it yourself',
+                onClick: go('/sessions', 'sessions'),
+              }]
+            : []),
+          // Under Sessions, only while something is live or starting soon.
+          ...(liveNow.live || liveNow.soon
+            ? [{ id: 'live_streams', icon: Radio, label: 'Live streams', sub: liveStreamsLine(liveNow), onClick: go('/live', 'live_streams') }]
+            : []),
+        ] }]
       : []),
     {
       heading: 'Create',

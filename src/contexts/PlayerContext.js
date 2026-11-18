@@ -92,6 +92,13 @@ export function resolvePlaySource() {
 // visit, not brand somebody an external visitor for the rest of the year.
 const EXTERNAL_KEY = 'fm_entry_from';
 
+// Where the last playing track is written so it can be offered back after
+// the phone evicts the app. See the two effects in the provider.
+const RESUME_KEY = 'feelz_resume';
+// Older than this and it is yesterday's listening. Offering that back is
+// strange rather than helpful.
+const RESUME_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
 export function readExternalEntry() {
   try {
     const q = new URLSearchParams(window.location.search);
@@ -269,6 +276,17 @@ export function PlayerProvider({ children }) {
   // bottom of the file) rather than wired into a page, so every one of the 39
   // playTrack call sites gets the explanation for free.
   const [playbackNotice, setPlaybackNotice] = useState(null);
+  // WHAT WAS PLAYING WHEN THE PHONE TOOK THE APP AWAY.
+  //
+  // Android evicts a backgrounded PWA to reclaim memory, and tapping the
+  // media notification relaunches it cold: a blank player, For You rebuilt
+  // from the top, and the song somebody was in the middle of simply gone.
+  // Nothing anywhere wrote down what was playing.
+  //
+  // This holds what was found in storage on load. It is deliberately NOT
+  // currentTrack: setting that arms the listening-event guard for a play
+  // that is not happening, and would bank a listen nobody made.
+  const [resumeCandidate, setResumeCandidate] = useState(null);
   // Which tab the desktop docked player panel opens on when triggered,
   // shared so DesktopPlayer's Queue button and FullPlayer's own tabs
   // drive the same single panel instead of two competing ones.
@@ -1031,7 +1049,12 @@ export function PlayerProvider({ children }) {
     };
 
     const onVisible = () => {
-      if (document.visibilityState === 'visible') tryResume();
+      if (document.visibilityState !== 'visible') return;
+      // A fresh budget. Attempts made while the page was frozen or throttled
+      // were never going to land, and letting them count is how a sleep long
+      // enough to kill the stream also exhausts the thing meant to fix it.
+      resumeTriesRef.current = 0;
+      tryResume();
     };
 
     document.addEventListener('visibilitychange', onVisible);
@@ -1273,6 +1296,35 @@ export function PlayerProvider({ children }) {
       if (stallTimerRef.current) { clearTimeout(stallTimerRef.current); stallTimerRef.current = null; }
     };
 
+    // WAKING UP IS A RECOVERY TRIGGER. IT WAS NOT, AND THAT IS THE CAR BUG.
+    //
+    // recover() is what reopens a dead stream. It was reachable from error,
+    // from stalled/waiting through the grace timer, and from coming back
+    // online. Not from the screen coming back on.
+    //
+    // In the car that is the only route that matters. The phone sleeps, the
+    // page is frozen, and the stream dies somewhere in there. Frozen pages do
+    // not run timers, so the stall grace timeout that would have called
+    // recover() never fires. On waking, the old visibility handler called
+    // tryResume(), which only calls play(), and play() cannot fix a source
+    // that is already gone. It failed, spent a retry, and after three of them
+    // (eight while driving) gave up for good.
+    //
+    // That is why it happened with Driving mode on as well as off: the budget
+    // was never the problem. Nothing was reopening the stream.
+    //
+    // Same stuck test onOnline uses, so a track still playing happily out of
+    // its buffer is left alone.
+    const onWake = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!audio.src || audio.ended) return;
+      const stuck = Boolean(audio.error) || stallTimerRef.current || audio.readyState < 3;
+      if (!stuck) return;
+      clearStallTimer();
+      recover();
+    };
+    document.addEventListener('visibilitychange', onWake);
+
     audio.addEventListener('error',      onError);
     audio.addEventListener('stalled',    onStall);
     audio.addEventListener('waiting',    onStall);
@@ -1285,6 +1337,7 @@ export function PlayerProvider({ children }) {
       clearStallTimer();
       window.removeEventListener('online',  onOnline);
       window.removeEventListener('offline', onOffline);
+      document.removeEventListener('visibilitychange', onWake);
       audio.removeEventListener('error',      onError);
       audio.removeEventListener('stalled',    onStall);
       audio.removeEventListener('waiting',    onStall);
@@ -1742,6 +1795,84 @@ export function PlayerProvider({ children }) {
     return () => { if (window.showToast === showNotice) window.showToast = null; };
   }, [showNotice]);
 
+  // ── Remembering the song, and offering it back ───────────────────────
+  //
+  // Written on a timer rather than on timeupdate, which fires several times a
+  // second when this only needs to be roughly right. localStorage and not
+  // sessionStorage, because sessionStorage dies with the tab and the tab
+  // dying is the entire case this exists for.
+  useEffect(() => {
+    if (!currentTrack?.id || !isPlaying) return undefined;
+    const write = () => {
+      const at = audioRef.current?.currentTime || 0;
+      // Nothing worth coming back to in the first few seconds.
+      if (at < 5) return;
+      try {
+        localStorage.setItem(RESUME_KEY, JSON.stringify({
+          id: currentTrack.id, at: Math.floor(at), ts: Date.now(),
+        }));
+      } catch { /* private mode, or storage is full. Not worth a crash. */ }
+    };
+    write();
+    const timer = setInterval(write, 5000);
+    return () => { write(); clearInterval(timer); };
+  }, [currentTrack?.id, isPlaying]);
+
+  // Read once, on the load that follows being killed.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null'); } catch { return; }
+      if (!saved?.id || !saved.ts) return;
+      if (Date.now() - saved.ts > RESUME_MAX_AGE_MS) {
+        try { localStorage.removeItem(RESUME_KEY); } catch {}
+        return;
+      }
+      const { data } = await supabase
+        .from('tracks')
+        .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+        .eq('id', saved.id)
+        .maybeSingle();
+      // Unpublished, deleted, or simply will not load. Nothing to offer, and
+      // the stale key goes with it.
+      if (!data || data.is_published === false) {
+        try { localStorage.removeItem(RESUME_KEY); } catch {}
+        return;
+      }
+      if (!cancelled) setResumeCandidate({ track: data, at: saved.at || 0 });
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const dismissResume = useCallback(() => {
+    setResumeCandidate(null);
+    try { localStorage.removeItem(RESUME_KEY); } catch {}
+  }, []);
+
+  // Through playTrack like every other path, so the availability gate, the
+  // queue and the listening-event arming behave exactly as they do for a
+  // normal tap. The seek waits for metadata, because a position means
+  // nothing until the element knows how long the track is.
+  const resumeLast = useCallback(() => {
+    const c = resumeCandidate;
+    if (!c?.track) return;
+    setResumeCandidate(null);
+    try { localStorage.removeItem(RESUME_KEY); } catch {}
+    playTrack(c.track);
+    const audio = audioRef.current;
+    if (!audio || !c.at) return;
+    const onMeta = () => {
+      audio.removeEventListener('loadedmetadata', onMeta);
+      try {
+        if (!audio.duration || c.at < audio.duration) audio.currentTime = c.at;
+      } catch { /* landed wherever it landed, still the right song */ }
+    };
+    audio.addEventListener('loadedmetadata', onMeta);
+    // Metadata already in means the event has been and gone.
+    if (audio.readyState >= 1) onMeta();
+  }, [resumeCandidate, playTrack]);
+
   // The notice clears itself. Tying it to a dismiss button would mean every
   // page that can play a track also has to render one.
   useEffect(() => {
@@ -1961,6 +2092,7 @@ export function PlayerProvider({ children }) {
     removeFromQueue, moveInQueue, playNextInQueue, clearQueue, closePlayer, toggleShuffle, toggleRepeat,
     replaceQueue, jumpToIndex,
     playbackNotice, showNotice, dismissPlaybackNotice: () => setPlaybackNotice(null),
+    resumeCandidate, resumeLast, dismissResume,
     setDrivingMode,
   };
 
@@ -1996,6 +2128,51 @@ export function PlayerProvider({ children }) {
           >
             <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#fbbf24' }} />
             <p className="text-xs text-white/80">{playbackNotice.message}</p>
+          </div>
+        </div>
+      )}
+      {/* Offered, never forced. The song comes back paused because the page
+          it reopens on has had no gesture, and browsers will not start audio
+          without one. One tap and it is exactly where it was. */}
+      {resumeCandidate?.track && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 z-[420] px-4 w-full max-w-sm"
+          style={{ bottom: 'calc(112px + var(--safe-area-bottom, 0px))' }}
+        >
+          <div
+            className="flex items-center gap-3 px-3 py-2.5 rounded-2xl shadow-2xl"
+            style={{
+              backgroundColor: 'rgba(20,20,28,0.96)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              backdropFilter: 'blur(12px)',
+            }}
+          >
+            {resumeCandidate.track.cover_artwork_url && (
+              <img
+                src={resumeCandidate.track.cover_artwork_url}
+                alt=""
+                className="w-9 h-9 rounded-lg object-cover flex-shrink-0"
+              />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-wide text-white/35">Pick up where you left off</p>
+              <p className="text-xs text-white truncate">{resumeCandidate.track.title}</p>
+            </div>
+            <button
+              type="button"
+              onClick={resumeLast}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-black flex-shrink-0"
+            >
+              Resume
+            </button>
+            <button
+              type="button"
+              onClick={dismissResume}
+              aria-label="Dismiss"
+              className="text-white/30 hover:text-white/60 text-lg leading-none px-1 flex-shrink-0"
+            >
+              ×
+            </button>
           </div>
         </div>
       )}

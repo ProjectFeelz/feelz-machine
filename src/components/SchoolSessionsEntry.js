@@ -31,6 +31,10 @@ const BLANK_FORM = {
   songId: '',
   isGroup: false,
   groupMembers: [''],
+  // The field this fed was removed from the form: it was optional, nobody
+  // knew what a candidate card was, and people stopped there rather than
+  // skip a question they did not understand. The key stays so the entry
+  // insert still has something to read, and it now always writes null.
   candidateCardNo: '',
   verificationCode: '',
   entrantFullName: '',
@@ -341,13 +345,6 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               </button>
             </div>
           )}
-
-          <div>
-            <Label>Candidate card number <span className="text-white/20">(optional)</span></Label>
-            <Input value={form.candidateCardNo}
-              onChange={e => set('candidateCardNo', e.target.value)}
-              placeholder="No. from your entry card, if you have one" />
-          </div>
 
           <div className="flex items-center space-x-2.5 pt-1">
             <Toggle value={form.isMinor} onChange={() => set('isMinor', !form.isMinor)} />

@@ -10,7 +10,7 @@ import { useOfflineLibrary } from '../contexts/OfflineContext';
 import {
   Heart, Download, ListMusic, Users, Clock, ChevronRight, TrendingUp, ArrowDownToLine,
   Music, BarChart3, Zap, Crown, Palette,
-  Shield, ChevronDown, Check, BarChart2, Play, MessageCircle,
+  Shield, ChevronDown, Check, BarChart2, Play, MessageCircle, Radio,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import spreadByArtist from '../utils/spreadByArtist';
@@ -62,6 +62,13 @@ export default function LibraryPage() {
   // conversation was to remember which artist it belonged to, open their
   // profile and press Chat again, so every visit cost as much as the first.
   const [myRooms, setMyRooms] = useState([]);
+  // How many streams you have watched, for the Streams card.
+  const [watchedStreams, setWatchedStreams] = useState(0);
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase.from('session_views').select('session_id', { count: 'exact', head: true }).eq('user_id', user.id)
+      .then(({ count, error }) => { if (!error) setWatchedStreams(count || 0); });
+  }, [user?.id]);
   useEffect(() => {
     if (!user) { setMyRooms([]); return; }
     let cancelled = false;
@@ -295,6 +302,7 @@ export default function LibraryPage() {
     { icon: TrendingUp,label: 'Recently Discovered',  path: '/library/discovered',  iconColor: 'text-orange-400/70', count: null,            accent: 'bg-orange-500/10' },
     // One door into every chat. The bug room is not counted; it is reached
     // from Hub and the dashboard on purpose.
+    { icon: Radio,     label: 'Streams',              path: '/library/streams',     iconColor: 'text-rose-400/70',   count: watchedStreams || null, accent: 'bg-rose-500/10', sub: 'Shows and live reviews you watched' },
     { icon: MessageCircle, label: 'Chats',            path: '/community',           iconColor: 'text-pink-400/70',   count: myRooms.filter(r => !/report\s*a?\s*bug/i.test(r.name || '')).length || null, accent: 'bg-pink-500/10', sub: 'Artist rooms and fans' },
   ];
 

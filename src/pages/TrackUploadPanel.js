@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import CollaboratorSearch from '../components/CollaboratorSearch';
 import SchoolSessionsEntry, { schoolSessionsFormValid, SCHOOL_SESSIONS_BLANK_FORM } from '../components/SchoolSessionsEntry';
+import useSchoolSessions from '../hooks/useSchoolSessions';
 import LyricsThemePicker from '../components/LyricsThemePicker';
 import TierGate from '../components/TierGate';
 import { useTier } from '../contexts/useTier';
@@ -236,6 +237,10 @@ const BLANK_TRACK = {
  * Matched on slug rather than id so it reads as what it is.
  */
 const PODCAST_ACCOUNT_SLUG = 'feelz-machine';
+
+// Titles compared with the competition shortlist. Case, punctuation and the
+// "(Cover)" everybody adds are noise; the words are the signal.
+const titleKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 const BLANK_RELEASE = {
   release_type: 'single',
@@ -1543,6 +1548,79 @@ export default function TrackUploadPanel() {
   const [collaborators, setCollaborators]       = useState([]);
   const [schoolSessionsEnabled, setSchoolSessionsEnabled] = useState(false);
   const [schoolSessionsForm, setSchoolSessionsForm]       = useState(SCHOOL_SESSIONS_BLANK_FORM);
+  const sessionsSectionRef = useRef(null);
+
+  // THE OTHER HALF OF THE ENTRY PROBLEM.
+  //
+  // Arming the form from the Sessions link only helps people who came through
+  // that link. Somebody who opens upload on their own, records the
+  // competition song and never scrolls to the toggle still ends up with an
+  // ordinary track wearing the competition's title. Three of those are in the
+  // catalogue now and their artists believe they entered.
+  //
+  // So the form asks. It never decides: the toggle is still theirs to set,
+  // and a 'no' is remembered for that title so it cannot nag.
+  const sessionsGate = useSchoolSessions();
+  const [shortlistKeys, setShortlistKeys] = useState([]);
+  const [sessionsAsked, setSessionsAsked] = useState('');
+
+  useEffect(() => {
+    const compId = sessionsGate.config?.competition?.id;
+    if (!sessionsGate.allowed || !compId) return;
+    if (!entriesAreOpen(sessionsGate.config?.competition)) return;
+    supabase.from('school_sessions_shortlist_songs')
+      .select('title')
+      .eq('competition_id', compId)
+      .eq('is_active', true)
+      .then(({ data }) => setShortlistKeys((data || []).map(r => titleKey(r.title)).filter(Boolean)));
+  }, [sessionsGate.allowed, sessionsGate.config?.competition?.id]);
+
+  // Deliberately narrow. An exact match once the noise is stripped, or one
+  // title sitting inside the other so "Started From Zero (Cover)" counts.
+  // Loose word overlap would ask everybody who used the word zero, and a
+  // prompt that cries wolf is one people learn to dismiss.
+  const looksLikeEntry = (() => {
+    if (schoolSessionsEnabled || !shortlistKeys.length) return false;
+    const k = titleKey(trackForm.title);
+    if (k.length < 4 || sessionsAsked === k) return false;
+    return shortlistKeys.some(s => s && (s === k || k.includes(s) || s.includes(k)));
+  })();
+
+  // ARRIVING FROM THE SESSIONS PAGE MEANING TO ENTER.
+  //
+  // The entry toggle sits near the bottom of a long form and starts off. So
+  // somebody who pressed "Upload your entry" on the Sessions page lands here,
+  // fills the form from the top, submits, and has uploaded an ordinary track.
+  // Three of those are in the catalogue right now wearing the competition
+  // song's title, and their artists believe they entered.
+  //
+  // The fix is to carry the intent rather than hope it is noticed. Only the
+  // Sessions CTA adds sessions=1, so the toggle can never arm itself for a
+  // normal upload: no param, no change, exactly as before.
+  //
+  // The param is stripped straight after reading. Otherwise it stays in the
+  // address bar and a refresh, a back button or a shared link would silently
+  // re-arm an entry on some later upload, which is the accident this is
+  // supposed to prevent.
+  useEffect(() => {
+    let params;
+    try { params = new URLSearchParams(window.location.search); } catch { return; }
+    if (params.get('sessions') !== '1') return;
+    params.delete('sessions');
+    const qs = params.toString();
+    try {
+      window.history.replaceState({}, '',
+        window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash);
+    } catch { /* the arming below still matters */ }
+    // Entering only takes live songs, same rule the toggle itself applies.
+    setSchoolSessionsEnabled(true);
+    setTrackForm(f => ({ ...f, is_published: true }));
+    // Put it in front of them. The form is long and the section they came for
+    // is at the end of it.
+    window.setTimeout(() => {
+      try { sessionsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
+    }, 400);
+  }, []);
   const [albumCollaborators, setAlbumCollaborators] = useState([]);
   const [albumTrackQueue, setAlbumTrackQueue]   = useState([]);
   const [sessionAlbumId, setSessionAlbumId]     = useState(null);
@@ -2946,6 +3024,38 @@ export default function TrackUploadPanel() {
                   <FInput type="text" required value={trackForm.title}
                     onChange={(e) => setTrackForm({ ...trackForm, title: e.target.value })}
                     onBlur={(e) => setTrackForm(prev => ({ ...prev, title: normaliseTitleCase(cleanTrackTitle(e.target.value, artist?.artist_name)) }))} />
+                  {looksLikeEntry && (
+                    <div className="mt-2 rounded-xl border border-lime-400/25 bg-lime-400/[0.06] px-3 py-2.5">
+                      <p className="text-xs text-white/80">
+                        This looks like the Sessions song. Are you entering the competition?
+                      </p>
+                      <p className="text-[11px] text-white/35 mt-0.5">
+                        Entries are judged and can win. Upload it without entering and it
+                        stays an ordinary track on your profile.
+                      </p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSchoolSessionsEnabled(true);
+                            setTrackForm(f => ({ ...f, is_published: true }));
+                            setSessionsAsked(titleKey(trackForm.title));
+                            window.setTimeout(() => {
+                              try { sessionsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
+                            }, 150);
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-lime-400 text-black">
+                          Yes, enter it
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSessionsAsked(titleKey(trackForm.title))}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/50 hover:text-white/80">
+                          No, just uploading
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 {!isAlbumRelease && !isBeat && (
                   <div>
@@ -3215,6 +3325,7 @@ export default function TrackUploadPanel() {
                   setCollaborators={setCollaborators} currentArtistId={artist.id} />
               </TierGate>
 
+              <div ref={sessionsSectionRef}>
               <SchoolSessionsEntry
                 enabled={schoolSessionsEnabled}
                 // Entering switches Published on.
@@ -3232,6 +3343,7 @@ export default function TrackUploadPanel() {
                   if (next) setTrackForm(f => ({ ...f, is_published: true }));
                 }}
                 form={schoolSessionsForm} setForm={setSchoolSessionsForm} />
+              </div>
 
               <button type="submit" disabled={isWorking}
                 className="w-full py-3 bg-white text-black font-semibold rounded-lg hover:bg-white/90 disabled:opacity-50 transition flex items-center justify-center space-x-2">

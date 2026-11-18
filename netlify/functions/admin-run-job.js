@@ -53,6 +53,11 @@ const ALLOWED = {
   'update-engagement-scores':  () => require('./update-engagement-scores'),
   'daily-spotlight':           () => require('./daily-spotlight'),
   'rotate-featured':           () => require('./rotate-featured'),
+  // Added after it was found overdue with no way to catch it up by hand.
+  // It qualifies on this file's own rule: it upserts engagement_outcomes
+  // and engagement_learning and nothing else, both keyed so a second run
+  // rewrites the same rows. It sends nothing and pays nobody.
+  'score-engagement-outcomes': () => require('./score-engagement-outcomes'),
 };
 
 const json = (statusCode, body) => ({
