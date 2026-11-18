@@ -2115,7 +2115,7 @@ export default function ForYouPage() {
       window.__feelz_play_source_at = Date.now();
       startedHereRef.current = true;
       const playableQueue = filteredTracks.filter(t => t?.file_url);
-      playTrack(item, playableQueue, playableQueue.findIndex(t => t.id === item.id));
+      playTrack(item, playableQueue);
       lastPlayedIdx.current = idx;
       setIsMinimized(true);
     }
@@ -2141,7 +2141,7 @@ export default function ForYouPage() {
       window.__feelz_play_source_at = Date.now();
       startedHereRef.current = true;
       const playableQueue = filteredTracks.filter(t => t?.file_url);
-      playTrack(item, playableQueue, playableQueue.findIndex(t => t.id === item.id));
+      playTrack(item, playableQueue);
       setIsMinimized(true);
     }
   }, [idx, filteredTracks]); // eslint-disable-line
@@ -2245,7 +2245,7 @@ export default function ForYouPage() {
       window.__feelz_play_source_at = Date.now();
       startedHereRef.current = true;
       const playableQueue = filteredTracks.filter(t => t?.file_url);
-      playTrack(nextItem, playableQueue, playableQueue.findIndex(t => t.id === nextItem.id));
+      playTrack(nextItem, playableQueue);
       lastPlayedIdx.current = newIdx;
     }
     setIdx(newIdx);
