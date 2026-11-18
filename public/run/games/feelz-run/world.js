@@ -896,13 +896,68 @@ function drawClimbs() {
   }
 }
 
+// The Lower City's sludge: a painted mud texture (assets/worlds/tex-mud.webp),
+// laid flat and seen at a low angle, so it is squashed top to bottom.
+let mudArt = null, mudPat = null;
+function mudPattern() {
+  if (!mudArt) { mudArt = new Image(); mudArt.src = "assets/worlds/tex-mud.webp"; }
+  if (!mudArt.complete || !mudArt.naturalWidth) return null;
+  if (!mudPat) mudPat = ctx.createPattern(mudArt, "repeat");
+  return mudPat;
+}
+function mudFill(x0, y0, w, h, alpha) {
+  const pat = mudPattern();
+  if (!pat) return false;
+  // squashed to the ground's angle, sliding with the world
+  pat.setTransform(new DOMMatrix().translateSelf(-(cameraX % (512 * 0.8)), y0, 0).scaleSelf(0.8, 0.32));
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = pat;
+  ctx.fillRect(x0, y0, w, h);
+  ctx.restore();
+  return true;
+}
+// Sludge along the top of the Lower City street (Mission 1's dusty mud).
+function drawSludge(s, h) {
+  if (!mission || !(typeof ATMOS !== "undefined" && (ATMOS.missions || []).includes(mission.id))) return;
+  const X0 = Math.max(sx(s.x), 0), X1 = Math.min(sx(s.x) + s.w, W), Y = sy(s.y);
+  if (X1 <= X0) return;
+  const band = Math.min(h, m(0.55)), top = Y + 5;      // under the gold lip, which always stays clear
+  ctx.save();
+  ctx.beginPath(); ctx.rect(X0, top, X1 - X0, band); ctx.clip();
+  // patchy, soft-edged pools of sludge: thick in places, none in others
+  for (let x = X0 - (X0 + cameraX) % 96 - 96; x < X1 + 96; x += 96) {
+    const k = seeded(Math.floor((x + cameraX) / 96) * 1.7);
+    if (sectionAt(x + cameraX).world !== "lc" || k < 0.3) continue;
+    const rw = 60 + k * 50, rh = band * (0.45 + k * 0.5);
+    ctx.save();
+    ctx.beginPath(); ctx.ellipse(x + 48, top, rw, rh, 0, 0, Math.PI); ctx.clip();
+    mudFill(x - rw, top, rw * 2 + 96, rh, 0.7 + k * 0.3);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// Called after the wet floors are drawn: mud doesn't mirror anything.
+function drawSludgeAll() {
+  const viewBottom = cameraY + H + 4;
+  for (const s of level.solids) if (s.kind === "ground" && onScreen(s.x, s.w, 0)) drawSludge(s, Math.min(s.h, viewBottom - s.y));
+}
+
 function drawMud() {
   for (const mu of level.mud) {
     if (!onScreen(mu.x, mu.w)) continue;
     const x = sx(mu.x), y = sy(0);
-    ctx.fillStyle = "#3a2a1b";
-    ctx.beginPath(); ctx.ellipse(x + mu.w / 2, y + 2, mu.w / 2 + 8, 6, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = "rgba(241, 202, 120, 0.35)"; ctx.lineWidth = 1;
+    ctx.save();
+    // a wide lens of sludge lying on the street
+    ctx.beginPath(); ctx.ellipse(x + mu.w / 2, y + 3, mu.w / 2 + 10, 9, 0, 0, Math.PI * 2); ctx.clip();
+    if (!mudFill(x - 12, y - 8, mu.w + 24, 24, 1)) { ctx.fillStyle = "#3a2a1b"; ctx.fillRect(x - 12, y - 8, mu.w + 24, 24); }
+    ctx.fillStyle = "rgba(40, 28, 16, 0.35)"; ctx.fillRect(x - 12, y - 8, mu.w + 24, 24);
+    ctx.restore();
+    // a wet shine along its top, and rings where the rain lands
+    ctx.strokeStyle = "rgba(220, 200, 160, 0.25)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.ellipse(x + mu.w / 2, y + 1, mu.w / 2 + 2, 4, 0, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
+    ctx.strokeStyle = "rgba(241, 202, 120, 0.35)";
     for (let i = 0; i < 3; i++) {
       const t = (frameTime * 0.6 + i / 3) % 1;
       ctx.globalAlpha = 1 - t;

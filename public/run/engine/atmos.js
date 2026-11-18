@@ -168,7 +168,7 @@ const Atmos = (() => {
       if (depth < 8) continue;
       ctx.save();
       ctx.beginPath(); ctx.rect(f.x0, f.Y + 3, f.x1 - f.x0, depth); ctx.clip();
-      ctx.globalAlpha = L.wet * (0.6 + fk * 0.6);
+      ctx.globalAlpha = L.wet * (0.45 + fk * 0.6);
       // in slices, each nudged sideways a little: the rain on the water
       for (let y = 0; y < depth; y += 4) {
         const wob = Math.sin(frameTime * 6 + y * 0.7 + f.x0 * 0.01) * (1 + rain * 2) * (y / depth + 0.3);
@@ -179,9 +179,10 @@ const Atmos = (() => {
       ctx.restore();
       // fade it into the dark of the floor
       const g = ctx.createLinearGradient(0, f.Y + 3, 0, f.Y + 3 + depth);
-      g.addColorStop(0, "rgba(6, 8, 12, 0.1)"); g.addColorStop(1, "rgba(6, 8, 12, 0.85)");
+      g.addColorStop(0, "rgba(6, 8, 12, 0)"); g.addColorStop(1, "rgba(6, 8, 12, 0.5)");
       ctx.fillStyle = g; ctx.fillRect(f.x0, f.Y + 3, f.x1 - f.x0, depth);
     }
+    if (typeof drawSludgeAll === "function") drawSludgeAll();
   }
 
   function front() {
