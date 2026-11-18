@@ -118,6 +118,9 @@ export default function NewsletterComposePage() {
   // Per-post email state, keyed by post id. Separate from `sending`, which
   // belongs to composing.
   const [emailing, setEmailing] = React.useState({});
+  // Which rows' search switch is mid-flight. Up here with the other hooks
+  // because the component returns early while it checks authorization.
+  const [searchBusy, setSearchBusy] = React.useState({});
   // How many emails have already gone out per post, from newsletter_email_sends.
   const [sendLog, setSendLog] = React.useState({});
 
@@ -437,8 +440,10 @@ export default function NewsletterComposePage() {
   //
   // set_newsletter_search_indexable writes that one column and asks who is
   // calling. Migration 251.
-  const [searchBusy, setSearchBusy] = React.useState({});
-
+  //
+  // searchBusy is declared with the other hooks near the top, not here.
+  // This function sits below two early returns, and a hook after an early
+  // return is a hook that does not run on every render.
   const toggleSearch = async (post) => {
     const next = !post.search_indexable;
     setSearchBusy(prev => ({ ...prev, [post.id]: true }));

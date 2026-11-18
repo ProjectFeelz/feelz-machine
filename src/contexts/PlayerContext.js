@@ -1818,10 +1818,55 @@ export function PlayerProvider({ children }) {
     return () => { write(); clearInterval(timer); };
   }, [currentTrack?.id, isPlaying]);
 
-  // Read once, on the load that follows being killed.
+  // ── Reading it back ──────────────────────────────────────────────────
+  //
+  // WHAT WAS WRONG: "Unknown artist", and no sound
+  //
+  // This handed playTrack the raw database row. Every other path in the app
+  // flattens the joined artist before passing a track anywhere:
+  //
+  //     artist_name:  t.artists?.artist_name || 'Unknown',
+  //     artist_slug:  t.artists?.slug || null,
+  //     artist_image: t.artists?.profile_image_url || null,
+  //
+  // Without that the card reads track.artist_name, finds nothing, falls
+  // through to its last resort and prints "Unknown artist" across a real song
+  // by a real artist. ForYouPage.js is where that string comes from.
+  //
+  // The column list is spelled out now instead of '*', and it is the same list
+  // the feed selects, so a resumed track and a tapped track are the same shape
+  // and cannot drift apart again. '*' looked safer and was not: it depends on
+  // the table never gaining a column the client is not granted, and it hides
+  // which fields playback actually needs.
+  //
+  //
+  // WHY IT RUNS ON RETURN AND NOT ONLY ON MOUNT
+  //
+  // It read once, on mount. That covers the app being killed and started
+  // again, which is the case it was written for, and it is the case that
+  // works.
+  //
+  // It does not cover coming back to a page the phone froze rather than
+  // killed. There is no mount, so there is no read, so there is no card.
+  // Tapping the media card in the notification shade is usually exactly that:
+  // the page is still there, it was simply not running.
+  //
+  // pageshow with persisted set is the browser saying this page came back
+  // rather than loaded. visibilitychange catches the rest. Both are cheap and
+  // both bail immediately when something is already playing, which is the
+  // normal case and must stay silent.
+  const resumeReadRef = useRef(false);
+
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+
+    const read = async () => {
+      // Something is already playing. There is nothing to offer and a card
+      // over a playing song is just in the way.
+      if (currentTrackRef.current?.id) return;
+      if (resumeReadRef.current) return;
+      resumeReadRef.current = true;
+
       let saved = null;
       try { saved = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null'); } catch { return; }
       if (!saved?.id || !saved.ts) return;
@@ -1829,20 +1874,56 @@ export function PlayerProvider({ children }) {
         try { localStorage.removeItem(RESUME_KEY); } catch {}
         return;
       }
-      const { data } = await supabase
+
+      const { data, error } = await supabase
         .from('tracks')
-        .select('*, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+        .select('id, title, slug, short_code, is_podcast, is_competition_entry, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
         .eq('id', saved.id)
         .maybeSingle();
-      // Unpublished, deleted, or simply will not load. Nothing to offer, and
-      // the stale key goes with it.
-      if (!data || data.is_published === false) {
+
+      // Said out loud rather than swallowed. A card that never appears and a
+      // card that appears broken are the same silence from the outside.
+      if (error) {
+        console.error('[player] resume lookup failed:', error.code, error.message);
+        resumeReadRef.current = false;
+        return;
+      }
+
+      // Unpublished, deleted, or missing the one field playback needs.
+      // Nothing to offer, and the stale key goes with it.
+      if (!data || data.is_published === false || !data.file_url) {
         try { localStorage.removeItem(RESUME_KEY); } catch {}
         return;
       }
-      if (!cancelled) setResumeCandidate({ track: data, at: saved.at || 0 });
-    })();
-    return () => { cancelled = true; };
+
+      // The flattening. This is the fix.
+      const track = {
+        ...data,
+        artist_name:  data.artists?.artist_name || 'Unknown',
+        artist_slug:  data.artists?.slug || null,
+        artist_image: data.artists?.profile_image_url || null,
+      };
+
+      if (!cancelled) setResumeCandidate({ track, at: saved.at || 0 });
+    };
+
+    read();
+
+    const onShow = (e) => { if (e.persisted) { resumeReadRef.current = false; read(); } };
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (currentTrackRef.current?.id) return;
+      resumeReadRef.current = false;
+      read();
+    };
+
+    window.addEventListener('pageshow', onShow);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('pageshow', onShow);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   const dismissResume = useCallback(() => {
