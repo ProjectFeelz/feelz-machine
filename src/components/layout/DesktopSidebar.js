@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Bell } from 'lucide-react';
 import useNotifications from '../../contexts/useNotifications';
 import { myAvatar, myName, myInitial } from '../../utils/me';
+import useLiveStreams from '../../hooks/useLiveStreams';
 
 // navItems built dynamically in component based on role
 
@@ -64,6 +65,9 @@ export default function DesktopSidebar() {
     { path: '/games',        icon: Gamepad2,        label: 'Games' },
   ];
 
+  // The Live item says when somebody is live or about to be.
+  const liveNow = useLiveStreams();
+
   const handleNav = (path) => {
     if ((path === '/library' || path === '/profile') && !user) {
       navigate('/login');
@@ -74,7 +78,7 @@ export default function DesktopSidebar() {
 
   return (
     <aside
-      className="hidden md:flex flex-col w-64 fixed left-0 bottom-0 z-40 border-r border-white/[0.06]"
+      className="hidden md:flex flex-col w-64 fixed left-0 bottom-0 z-40 overflow-hidden border-r border-white/[0.06]"
       style={{
         // top comes from --fm-titlebar rather than being pinned at 0, so the
         // sidebar starts below the app's own title bar when the installed
@@ -82,15 +86,20 @@ export default function DesktopSidebar() {
         // this is the same top-0 it has always been in a browser tab and on a
         // phone.
         top: 'var(--fm-titlebar, 0px)',
-        background: 'rgba(14,14,16,0.94)',
-        backdropFilter: 'blur(24px)',
-        WebkitBackdropFilter: 'blur(24px)',
-        borderRight: '1px solid rgba(255,255,255,0.12)',
-        boxShadow: '8px 0 32px rgba(0,0,0,0.5)',
+        // Frosted glass with a faint brand tint: green at the top, violet
+        // settling at the bottom, so the bar reads as part of the app rather
+        // than a grey slab.
+        background: 'linear-gradient(180deg, rgba(144,175,47,0.07) 0%, rgba(14,14,18,0.78) 28%, rgba(14,14,18,0.78) 70%, rgba(124,58,237,0.08) 100%)',
+        backdropFilter: 'blur(28px) saturate(150%)',
+        WebkitBackdropFilter: 'blur(28px) saturate(150%)',
+        borderRight: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: 'inset -1px 0 0 rgba(255,255,255,0.03), 8px 0 40px rgba(0,0,0,0.45)',
       }}>
+      {/* A soft glow behind the logo */}
+      <div aria-hidden="true" className="pointer-events-none absolute -top-16 -left-10 w-56 h-56 rounded-full blur-3xl" style={{ background: 'rgba(144,175,47,0.10)' }} />
 
       {/* Logo */}
-      <div className="flex items-center space-x-3 px-6 py-6 flex-shrink-0">
+      <div className="relative flex items-center space-x-3 px-6 py-6 flex-shrink-0">
         <Logo />
         <div>
           <span className="text-sm font-bold text-white tracking-tight">Feelz Machine</span>
@@ -99,30 +108,39 @@ export default function DesktopSidebar() {
       </div>
 
       {/* Divider */}
-      <div className="mx-6 mb-4 h-px bg-white/[0.05]" />
+      <div className="mx-6 mb-4 h-px" style={{ background: 'linear-gradient(90deg, rgba(144,175,47,0.35), rgba(255,255,255,0.04))' }} />
 
       {/* Nav links */}
-      <nav className="flex-1 px-4 space-y-0.5 overflow-y-auto">
+      <nav className="relative flex-1 px-4 space-y-1 overflow-y-auto">
         {navItems.map(({ path, icon: Icon, label }) => {
           const isActive = location.pathname === path || (path !== '/' && location.pathname.startsWith(path)) || (path === '/' && location.pathname === '/for-you');
           return (
             <button
               key={path}
               onClick={() => handleNav(path)}
-              className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all text-left group ${
-                isActive ? 'text-white' : 'text-white/60 hover:text-white/80 hover:bg-white/[0.04]'
+              className={`relative w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all text-left group border ${
+                isActive ? 'text-white border-white/[0.09]' : 'text-white/60 hover:text-white/85 border-transparent hover:bg-white/[0.04] hover:border-white/[0.05]'
               }`}
-              style={isActive ? { background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(8px)' } : {}}>
+              style={isActive ? {
+                background: 'linear-gradient(90deg, rgba(144,175,47,0.16), rgba(255,255,255,0.05) 70%)',
+                backdropFilter: 'blur(10px)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 18px rgba(0,0,0,0.25)',
+              } : {}}>
+              {isActive && <span aria-hidden="true" className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full" style={{ background: '#90AF2F', boxShadow: '0 0 10px rgba(144,175,47,0.8)' }} />}
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all ${
-                isActive ? 'bg-white/10' : 'group-hover:bg-white/[0.04]'
-              }`}>
-                <Icon className="w-4 h-4 flex-shrink-0 transition-colors" strokeWidth={isActive ? 2.2 : 1.5} />
+                isActive ? '' : 'group-hover:bg-white/[0.05]'
+              }`} style={isActive ? { background: 'rgba(144,175,47,0.18)', color: '#b5d34a' } : {}}>
+                <Icon className="w-4 h-4 flex-shrink-0 transition-colors" strokeWidth={isActive ? 2.2 : 1.6} />
               </div>
-              <span className={`text-sm transition-all ${isActive ? 'font-semibold' : 'font-normal'}`}>
+              <span className={`flex-1 min-w-0 truncate text-sm transition-all ${isActive ? 'font-semibold' : 'font-normal'}`}>
                 {label}
               </span>
-              {isActive && (
-                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white/60 flex-shrink-0" />
+              {path === '/live' && (liveNow.live > 0 || liveNow.soon > 0) ? (
+                <span className={`ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-black tracking-wider flex-shrink-0 ${liveNow.live ? 'bg-red-500 text-white' : 'bg-amber-400/90 text-black'}`}>
+                  {liveNow.live ? <><span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE</> : 'SOON'}
+                </span>
+              ) : isActive && (
+                <div className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#90AF2F' }} />
               )}
             </button>
           );
@@ -130,8 +148,8 @@ export default function DesktopSidebar() {
       </nav>
 
       {/* Bottom section */}
-      <div className="px-4 pb-6 space-y-2 flex-shrink-0">
-        <div className="mx-2 mb-3 h-px bg-white/[0.05]" />
+      <div className="relative px-4 pb-6 space-y-2 flex-shrink-0">
+        <div className="mx-2 mb-3 h-px bg-white/[0.06]" />
 
         {/* Notifications */}
         <DesktopNotifButton />
@@ -153,8 +171,8 @@ export default function DesktopSidebar() {
         {user && (
           <button
             onClick={() => navigate(artist?.slug ? `/artist/${artist.slug}` : `/listener/${user.id}`)}
-            className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-white/[0.05] transition-all group"
-            style={{ border: '1px solid rgba(255,255,255,0.05)' }}>
+            className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl hover:bg-white/[0.06] transition-all group"
+            style={{ border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(10px)' }}>
             <div className="w-8 h-8 rounded-full overflow-hidden bg-white/10 flex-shrink-0 ring-2 ring-white/10">
               {myAvatar({ artist, listener, user })
                 ? <img src={myAvatar({ artist, listener, user })} alt="" className="w-full h-full object-cover" />

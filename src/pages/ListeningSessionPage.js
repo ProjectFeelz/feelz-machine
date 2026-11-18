@@ -28,11 +28,14 @@ import {
   Plus, Search, Loader, Send,
   ChevronDown, Star, Trash2, BarChart2,
   Pin, Shield, Ban, Clock, AtSign, Check, ArrowDown, Timer, Bell, CalendarPlus,
-  Mic, Disc3, Crown
+  Mic, Disc3, Crown, Reply, Share2, CornerDownRight
 } from 'lucide-react';
+import { searchTracks } from '../utils/searchTracks';
 
 const YOUTUBE_REGEX = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
 const REACTIONS = ['❤️', '🔥', '🎵', '⚡', '🙌'];
+// Reactions on a chat message (the database only takes these).
+const MSG_REACTIONS = ['🔥', '❤️', '😂', '👏', '💯', '😮'];
 
 function extractYouTubeId(url) {
   const m = url?.match(YOUTUBE_REGEX);
@@ -69,13 +72,9 @@ function TrackSearch({ artistId, onAdd, existingIds = [] }) {
     if (query.trim().length < 2) { setResults([]); return; }
     const t = setTimeout(async () => {
       setSearching(true);
-      const { data } = await supabase
-        .from('tracks')
-        .select('id, title, cover_artwork_url, duration')
-        .eq('artist_id', artistId)
-        .ilike('title', `%${query.trim()}%`)
-        .limit(8);
-      setResults((data || []).filter(t => !existingIds.includes(t.id)));
+      // Any published song on Feelz Machine, by title or by artist.
+      const rows = await searchTracks(supabase, query, { limit: 10, exclude: existingIds });
+      setResults(rows);
       setSearching(false);
     }, 300);
     return () => clearTimeout(t);
@@ -90,11 +89,14 @@ function TrackSearch({ artistId, onAdd, existingIds = [] }) {
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Search your tracks..."
+          placeholder="Search songs or artists"
           className="w-full pl-9 pr-3 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-xl text-sm text-white placeholder-white/25 focus:outline-none focus:border-white/20"
         />
       </div>
       {searching && <div className="text-center py-2"><Loader className="w-4 h-4 animate-spin text-white/30 mx-auto" /></div>}
+      {!searching && query.trim().length >= 2 && results.length === 0 && (
+        <p className="text-xs text-white/40 px-1">No songs or artists called "{query.trim()}" yet.</p>
+      )}
       {results.map(track => (
         <button key={track.id} onClick={() => { onAdd(track); setQuery(''); setResults([]); }}
           className="w-full flex items-center space-x-3 p-2.5 rounded-xl hover:bg-white/[0.06] transition text-left">
@@ -105,7 +107,7 @@ function TrackSearch({ artistId, onAdd, existingIds = [] }) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm text-white truncate">{track.title}</p>
-            {track.duration && <p className="text-xs text-white/30">{fmt(track.duration)}</p>}
+            <p className="text-xs text-white/30 truncate">{[track.artist_name, track.duration ? fmt(track.duration) : ''].filter(Boolean).join(' · ')}</p>
           </div>
           <Plus className="w-4 h-4 text-white/40 flex-shrink-0" />
         </button>
@@ -146,15 +148,33 @@ function nameColour(name) {
   return NAME_COLOURS[h % NAME_COLOURS.length];
 }
 
-function ChatMessage({ msg, hostUserId, isModUser, myName, onTap }) {
+// The reactions under a message: tap one to add or take back yours.
+function ReactionChips({ list, onReact }) {
+  if (!list?.length) return null;
+  return (
+    <div className="flex flex-wrap gap-1 mt-1">
+      {list.map(r => (
+        <button key={r.emoji} type="button" onClick={(e) => { e.stopPropagation(); onReact && onReact(r.emoji); }}
+          className={`inline-flex items-center gap-1 h-6 px-1.5 rounded-full text-[11px] font-bold transition ${r.mine ? 'bg-pink-500/25 border border-pink-400/50 text-white' : 'bg-white/[0.06] border border-white/[0.08] text-white/70 hover:bg-white/[0.1]'}`}>
+          <span className="text-[13px] leading-none">{r.emoji}</span>{r.count}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ChatMessage({ msg, hostUserId, isModUser, myName, onTap, reactions, onReact }) {
   const colour = nameColour(msg.name);
   const isHostMsg = hostUserId && msg.user_id === hostUserId;
   const mentionsMe = !!myName && (msg.content || '').toLowerCase().includes('@' + myName.toLowerCase().replace(/\s+/g, ''));
 
+  const tap = () => onTap && onTap(msg);
+  const key = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tap(); } };
+
   if (msg.is_tip) {
     return (
-      <button type="button" onClick={() => onTap && onTap(msg)}
-        className="block w-[calc(100%-1.5rem)] text-left mx-3 my-1.5 p-3 rounded-2xl bg-gradient-to-r from-amber-400/20 via-pink-500/15 to-violet-500/20 border border-amber-300/30">
+      <div role="button" tabIndex={0} onClick={tap} onKeyDown={key}
+        className="block w-[calc(100%-1.5rem)] text-left mx-3 my-1.5 p-3 rounded-2xl bg-gradient-to-r from-amber-400/20 via-pink-500/15 to-violet-500/20 border border-amber-300/30 cursor-pointer">
         <div className="flex items-center gap-2">
           <span className="px-2 py-0.5 rounded-md bg-amber-400 text-black text-[11px] font-black">
             ${Number(msg.tip_amount || 0).toFixed(Number(msg.tip_amount) % 1 ? 2 : 0)} TIP
@@ -162,13 +182,14 @@ function ChatMessage({ msg, hostUserId, isModUser, myName, onTap }) {
           <span className="text-xs font-black truncate" style={{ color: colour }}>{msg.name || 'Listener'}</span>
         </div>
         {msg.content && <p className="text-sm text-white mt-1.5 leading-snug break-words">{msg.content}</p>}
-      </button>
+        <ReactionChips list={reactions} onReact={(e) => onReact && onReact(msg, e)} />
+      </div>
     );
   }
 
   return (
-    <button type="button" onClick={() => onTap && onTap(msg)}
-      className={`w-full text-left flex items-start gap-2.5 px-4 py-1.5 transition hover:bg-white/[0.03] ${mentionsMe ? 'bg-pink-500/10 border-l-2 border-pink-400' : ''}`}>
+    <div role="button" tabIndex={0} onClick={tap} onKeyDown={key}
+      className={`w-full text-left flex items-start gap-2.5 px-4 py-1.5 transition hover:bg-white/[0.03] cursor-pointer ${mentionsMe ? 'bg-pink-500/10 border-l-2 border-pink-400' : ''}`}>
       <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden mt-0.5" style={{ background: colour }}>
         {msg.avatar
           ? <img src={msg.avatar} alt="" className="w-full h-full object-cover" />
@@ -177,15 +198,23 @@ function ChatMessage({ msg, hostUserId, isModUser, myName, onTap }) {
             </div>}
       </div>
       <div className="flex-1 min-w-0">
+        {msg.reply_to_name && (
+          <p className="flex items-center gap-1 text-[11px] text-white/45 truncate mb-0.5">
+            <CornerDownRight className="w-3 h-3 flex-shrink-0" />
+            <span className="font-bold" style={{ color: nameColour(msg.reply_to_name) }}>{msg.reply_to_name}</span>
+            <span className="truncate">{msg.reply_to_content}</span>
+          </p>
+        )}
         <p className="text-sm leading-snug break-words">
           <span className="font-black mr-1.5" style={{ color: colour }}>{msg.name || 'Listener'}</span>
           {isHostMsg && <span className="mr-1.5 px-1.5 py-px rounded bg-gradient-to-r from-pink-500 to-violet-500 text-[9px] font-black tracking-wider align-middle">HOST</span>}
           {!isHostMsg && isModUser && <span className="mr-1.5 px-1.5 py-px rounded bg-emerald-400 text-black text-[9px] font-black tracking-wider align-middle">MOD</span>}
           <span className="text-white/85">{msg.content}</span>
         </p>
+        <ReactionChips list={reactions} onReact={(e) => onReact && onReact(msg, e)} />
         <span className="text-[10px] text-white/25">{timeAgo(msg.created_at)}</span>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -206,6 +235,19 @@ function MessageSheet({ msg, me, isMod, isHost, hostUserId, isModUser, onClose, 
           <p className="text-xs font-black" style={{ color: nameColour(msg.name) }}>{msg.name || 'Listener'}</p>
           {msg.content && <p className="text-sm text-white/70 mt-1 line-clamp-3 break-words">{msg.content}</p>}
         </div>
+        {actions.react && (
+          <div className="flex items-center justify-between gap-1 px-3 py-2.5 border-b border-white/[0.06]">
+            {MSG_REACTIONS.map(e => (
+              <button key={e} onClick={go(() => actions.react(msg, e))} aria-label={`React ${e}`}
+                className="flex-1 h-11 rounded-2xl text-2xl hover:bg-white/[0.08] active:scale-90 transition">{e}</button>
+            ))}
+          </div>
+        )}
+        {actions.reply && (
+          <button className={row} onClick={go(() => actions.reply(msg))}>
+            <Reply className="w-4 h-4 text-white/50" /> Reply
+          </button>
+        )}
         {!mine && msg.name && (
           <button className={row} onClick={go(() => actions.mention(msg))}>
             <AtSign className="w-4 h-4 text-white/50" /> Mention {msg.name}
@@ -486,8 +528,18 @@ function SubmitForReviewModal({ sessionId, user, onClose, onSubmitted, host, onG
 // Host and moderators: the review queue. "Review live" puts a track on stage
 // with a rating poll for everyone; "Finish" closes it and sends the artist the
 // result. "Preview" plays it on this device only, for OBS to pick up.
-function ReviewQueuePanel({ queue, reviewsOpen, onToggleOpen, onChanged, flash, isAudioMode, onQueueForEveryone }) {
+function ReviewQueuePanel({ queue, reviewsOpen, onToggleOpen, onChanged, flash, isAudioMode, onQueueForEveryone, sessionId, canAddSessions }) {
   const [busy, setBusy] = useState(null);
+  const [adding, setAdding] = useState(false);
+  // Platform hosts: every Sessions cover entry into this queue, in one tap.
+  const addSessions = async () => {
+    setAdding(true);
+    const { data, error } = await supabase.rpc('session_add_sessions_entries', { p_session: sessionId });
+    setAdding(false);
+    if (error) { flash('Could not add the Sessions entries.'); return; }
+    flash(data ? `${data} Sessions ${data === 1 ? 'entry' : 'entries'} added to the queue.` : 'Every Sessions entry is already in the queue.');
+    onChanged();
+  };
   const [previewId, setPreviewId] = useState(null);
   const previewRef = useRef(null);
 
@@ -540,6 +592,12 @@ function ReviewQueuePanel({ queue, reviewsOpen, onToggleOpen, onChanged, flash, 
           {reviewsOpen ? 'TAKING TRACKS' : 'PAUSED'}
         </button>
       </div>
+      {canAddSessions && (
+        <button onClick={addSessions} disabled={adding}
+          className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-gradient-to-r from-amber-400/20 to-pink-500/20 border border-amber-300/30 text-[11px] font-black text-amber-100 disabled:opacity-50">
+          {adding ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Crown className="w-3.5 h-3.5" />} Add the Sessions entries
+        </button>
+      )}
 
       {onStage && (
         <div className="p-2.5 rounded-xl bg-gradient-to-r from-pink-500/20 to-violet-500/20 border border-pink-400/30">
@@ -567,7 +625,7 @@ function ReviewQueuePanel({ queue, reviewsOpen, onToggleOpen, onChanged, flash, 
         <p className="text-xs text-white/30 text-center py-2">No tracks waiting. Artists send theirs from the chat.</p>
       ) : (
         waiting.map(item => (
-          <div key={item.id} className="flex items-center gap-2 p-2 rounded-xl bg-white/[0.04] border border-white/[0.05]">
+          <div key={item.id} className="flex flex-wrap sm:flex-nowrap items-center gap-2 p-2 rounded-xl bg-white/[0.04] border border-white/[0.05]">
             <span className="w-5 text-center text-[11px] font-black text-white/40">{item.place}</span>
             <div className="w-9 h-9 rounded-lg bg-white/[0.06] flex-shrink-0 overflow-hidden">
               {item.cover_url ? <img src={item.cover_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-4 h-4 text-white/20 m-auto mt-2.5" />}
@@ -575,12 +633,15 @@ function ReviewQueuePanel({ queue, reviewsOpen, onToggleOpen, onChanged, flash, 
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-white truncate">
                 {item.track_title}
+                {item.source === 'sessions' && <span className="ml-1.5 text-[9px] font-black px-1.5 py-px rounded bg-amber-300/20 text-amber-200">SESSIONS</span>}
                 {item.gift_amount
                   ? <span className="ml-1.5 text-[9px] font-black px-1.5 py-px rounded bg-amber-400 text-black">{(giftFor(item.gift_amount)?.name || 'GIFT').toUpperCase()} ${Number(item.gift_amount)}</span>
                   : item.is_priority && <span className="ml-1.5 text-[9px] font-black px-1.5 py-px rounded bg-violet-500/30 text-violet-200">BOOST</span>}
               </p>
               <p className="text-[10px] text-white/40 truncate">{item.artist_name}</p>
             </div>
+            {/* On a phone the buttons drop to their own line so the title has room. */}
+            <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end">
             <button onClick={() => preview(item)} className="px-2 py-1.5 rounded-lg bg-white/[0.06] text-[10px] font-bold text-white/70">
               {previewId === item.id ? 'Stop' : 'Preview'}
             </button>
@@ -595,6 +656,7 @@ function ReviewQueuePanel({ queue, reviewsOpen, onToggleOpen, onChanged, flash, 
               className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-red-500/20 transition">
               <X className="w-3 h-3 text-white/30" />
             </button>
+            </div>
           </div>
         ))
       )}
@@ -700,12 +762,7 @@ function CreateReviewPollModal({ sessionId, artistId, onClose, onCreated }) {
   const searchTracks = async (q) => {
     if (!q.trim()) { setResults([]); return; }
     setSearching(true);
-    const { data } = await supabase.from('tracks')
-      .select('id, title, artists(artist_name)')
-      .eq('is_published', true)
-      .ilike('title', `%${q}%`)
-      .limit(8);
-    setResults(data || []);
+    setResults(await searchTracks(supabase, q, { limit: 10 }));
     setSearching(false);
   };
 
@@ -878,6 +935,12 @@ export default function ListeningSessionPage() {
   const [audioLocked, setAudioLocked]     = useState(false);
   const [listeners, setListeners]         = useState([]); // who's watching
   const [showListeners, setShowListeners] = useState(false);
+  const [replyTo, setReplyTo]             = useState(null);  // the message being answered
+  const [msgReactions, setMsgReactions]   = useState([]);    // { message_id, user_id, emoji }
+  // Replays: where the video is (seconds), and the stream's reactions to play back.
+  const [replayT, setReplayT]             = useState(null);
+  const replayReactionsRef = useRef([]);
+  const replayLastRef      = useRef(null);
 
   const audioRef      = useRef(new Audio());
   const sessionSubRef = useRef(null);
@@ -1066,6 +1129,14 @@ export default function ListeningSessionPage() {
   const [myVotes, setMyVotes]               = useState({});
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [showReviewQueue, setShowReviewQueue] = useState(false);
+  // The host's review queue opens by itself the first time tracks are waiting.
+  const reviewAutoOpened = useRef(false);
+  useEffect(() => {
+    if (isHost && !reviewAutoOpened.current && reviewQueue.some(q => q.status === 'pending' || q.status === 'reviewing')) {
+      reviewAutoOpened.current = true;
+      setShowReviewQueue(true);
+    }
+  }, [isHost, reviewQueue]);
 
   // Mirror queue state into a ref so syncAudio always has the latest data
   useEffect(() => { queueRef.current = queue; }, [queue]);
@@ -1170,6 +1241,19 @@ export default function ListeningSessionPage() {
       .subscribe();
 
     const chatSub = supabase.channel(`session-chat-${sessionId}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'session_message_reactions',
+        filter: `session_id=eq.${sessionId}`,
+      }, ({ new: r }) => {
+        setMsgReactions(prev => prev.some(x => x.message_id === r.message_id && x.user_id === r.user_id && x.emoji === r.emoji) ? prev : [...prev, r]);
+      })
+      .on('postgres_changes', {
+        event: 'DELETE', schema: 'public', table: 'session_message_reactions',
+        filter: `session_id=eq.${sessionId}`,
+      }, ({ old: r }) => {
+        if (!r) return;
+        setMsgReactions(prev => prev.filter(x => !(x.message_id === r.message_id && x.user_id === r.user_id && x.emoji === r.emoji)));
+      })
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'session_messages',
         filter: `session_id=eq.${sessionId}`,
@@ -1310,10 +1394,30 @@ export default function ListeningSessionPage() {
   };
 
   const loadMessages = async () => {
-    const { data } = await supabase
-      .from('session_messages').select('*')
-      .eq('session_id', sessionId).order('created_at').limit(100);
-    setMessages(data || []);
+    // A live chat needs the latest hundred. A replay needs the whole lot, so
+    // it can play back in time with the video.
+    const { data: st } = await supabase.from('listening_sessions').select('status').eq('id', sessionId).maybeSingle();
+    if (st?.status === 'ended') {
+      const all = [];
+      for (let from = 0; from < 5000; from += 1000) {
+        const { data: page } = await supabase.from('session_messages').select('*')
+          .eq('session_id', sessionId).order('created_at').range(from, from + 999);
+        all.push(...(page || []));
+        if (!page || page.length < 1000) break;
+      }
+      setMessages(all);
+      const { data: rx } = await supabase.from('session_reactions').select('emoji, created_at')
+        .eq('session_id', sessionId).order('created_at').limit(5000);
+      replayReactionsRef.current = (rx || []).map(r => ({ emoji: r.emoji, at: new Date(r.created_at).getTime() }));
+    } else {
+      const { data } = await supabase
+        .from('session_messages').select('*')
+        .eq('session_id', sessionId).order('created_at', { ascending: false }).limit(100);
+      setMessages((data || []).reverse());
+    }
+    const { data: mr } = await supabase.from('session_message_reactions')
+      .select('message_id, user_id, emoji').eq('session_id', sessionId).limit(5000);
+    setMsgReactions(mr || []);
   };
 
   // ── Audio sync for listeners ────────────────────────────────────────────────
@@ -1470,6 +1574,7 @@ export default function ListeningSessionPage() {
       avatar:     profile?.profile_image_url || null,
       is_tip:     isTip,
       tip_amount: tipAmt,
+      ...(replyTo && !isTip ? { reply_to_id: replyTo.id } : {}),
     }).select('*').single();
     setSending(false);
     if (error) {
@@ -1481,6 +1586,7 @@ export default function ListeningSessionPage() {
     }
     if (sent) setMessages(prev => prev.some(m => m.id === sent.id) ? prev : [...prev, sent]);
     setChatInput('');
+    setReplyTo(null);
     atBottomRef.current = true;
     if (session?.slow_mode_seconds && !isMod) setSlowLeft(session.slow_mode_seconds);
   };
@@ -1528,7 +1634,68 @@ export default function ListeningSessionPage() {
         type: 'broadcast', event: 'reaction', payload: { emoji },
       }).catch(() => {});
     }
+    // Kept, so the replay plays it back at this moment.
+    if (user?.id && session?.status === 'live') {
+      supabase.from('session_reactions').insert({ session_id: sessionId, user_id: user.id, emoji }).then(() => {}, () => {});
+    }
   };
+
+  // Reactions on a chat message: one of each emoji per person, tap again to take it back.
+  const toggleMsgReaction = async (msg, emoji) => {
+    if (!user?.id || !msg?.id) return;
+    const mine = msgReactions.some(r => r.message_id === msg.id && r.user_id === user.id && r.emoji === emoji);
+    if (mine) {
+      setMsgReactions(prev => prev.filter(r => !(r.message_id === msg.id && r.user_id === user.id && r.emoji === emoji)));
+      await supabase.from('session_message_reactions').delete()
+        .eq('message_id', msg.id).eq('user_id', user.id).eq('emoji', emoji);
+    } else {
+      setMsgReactions(prev => [...prev, { message_id: msg.id, user_id: user.id, emoji }]);
+      const { error } = await supabase.from('session_message_reactions')
+        .insert({ message_id: msg.id, session_id: sessionId, user_id: user.id, emoji });
+      if (error && error.code !== '23505') {
+        setMsgReactions(prev => prev.filter(r => !(r.message_id === msg.id && r.user_id === user.id && r.emoji === emoji)));
+        flash("You can't react in this chat right now.");
+      }
+    }
+  };
+
+  // The link anyone can open: the stream, its countdown or its replay.
+  const shareStream = async () => {
+    const url = `https://www.feelzmachine.com/session/${sessionId}`;
+    const hostName = session?.artists?.artist_name || 'Feelz Machine';
+    const text = session?.status === 'live' ? `${hostName} is live on Feelz Machine`
+      : session?.status === 'scheduled' ? `${hostName} goes live on Feelz Machine`
+      : `Watch ${hostName} on Feelz Machine`;
+    try {
+      if (navigator.share) { await navigator.share({ title: session?.title || text, text, url }); return; }
+    } catch (e) { if (e?.name === 'AbortError') return; }
+    try { await navigator.clipboard.writeText(url); flash('Link copied. Paste it anywhere.'); }
+    catch { window.prompt('Copy this link', url); }
+  };
+
+  // Replay clock: the video position, as the time it was during the stream.
+  const onReplayTime = useCallback((t) => {
+    const sec = Math.floor(t);
+    setReplayT(prev => (prev === sec ? prev : sec));
+    // Reactions that happened since the last tick float up again. A seek
+    // (a jump of more than a few seconds) skips them rather than flooding.
+    const last = replayLastRef.current;
+    replayLastRef.current = t;
+    if (last === null || t < last || t - last > 4) return;
+    const base = replayBaseRef.current;
+    if (!base) return;
+    const from = base + last * 1000, to = base + t * 1000;
+    const due = replayReactionsRef.current.filter(r => r.at > from && r.at <= to).slice(0, 12);
+    due.forEach((r, i) => {
+      setTimeout(() => {
+        const id = ++reactionIdRef.current;
+        const left = 10 + Math.random() * 80;
+        setReactions(prev => [...prev, { emoji: r.emoji, id, left }]);
+        setTimeout(() => setReactions(prev => prev.filter(x => x.id !== id)), 2000);
+      }, i * 60);
+    });
+  }, []);
+  const replayBaseRef = useRef(0);
 
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center">
@@ -1544,6 +1711,34 @@ export default function ListeningSessionPage() {
   const isScheduled = session.status === 'scheduled';
   const isEnded = session.status === 'ended';
   const isReplay = isEnded && !session.replay_hidden && (!!ytId || (session.mode === 'direct' && !!session.cf_live_uid));
+
+  // Replays bring the chat, tips and reactions back in at the moment they
+  // happened: video position + when the stream went live (+ the host's nudge).
+  const replayBase = isReplay
+    ? new Date(session.live_started_at || session.started_at || 0).getTime() + (session.replay_offset_seconds || 0) * 1000
+    : 0;
+  replayBaseRef.current = replayBase;
+  const replayCut = isReplay && replayT !== null ? replayBase + replayT * 1000 : null;
+  const shownMessages = !isReplay ? messages
+    : replayCut === null ? [] : messages.filter(m => new Date(m.created_at).getTime() <= replayCut);
+  const replayTip = replayCut !== null
+    ? [...shownMessages].reverse().find(m => m.is_tip && replayCut - new Date(m.created_at).getTime() < 6000)
+    : null;
+  // Reactions under each message: [{ emoji, count, mine }]
+  const reactionsByMsg = {};
+  msgReactions.forEach(r => {
+    const list = reactionsByMsg[r.message_id] || (reactionsByMsg[r.message_id] = []);
+    let row = list.find(x => x.emoji === r.emoji);
+    if (!row) { row = { emoji: r.emoji, count: 0, mine: false }; list.push(row); }
+    row.count += 1;
+    if (r.user_id === user?.id) row.mine = true;
+  });
+  const canReact = !!user && !isEnded && !myBan;
+  const shiftReplayChat = async (secs) => {
+    const next = (session.replay_offset_seconds || 0) + secs;
+    await updateSession({ replay_offset_seconds: next });
+    replayLastRef.current = null;
+  };
   const onStage = reviewQueue.find(q => q.status === 'reviewing');
   const waitingReviews = reviewQueue.filter(q => q.status === 'pending');
   const myPlace = waitingReviews.find(q => q.is_mine)?.place || null;
@@ -1582,14 +1777,31 @@ export default function ListeningSessionPage() {
     <>
       {reactions.map(r => <FloatingReaction key={r.id} emoji={r.emoji} id={r.id} left={r.left} />)}
       {onStage && !isEnded && (
-        <div className="absolute left-3 bottom-16 max-w-[70%] flex items-center gap-2.5 p-2 pr-3 rounded-2xl bg-black/70 backdrop-blur border border-pink-400/40 shadow-[0_0_30px_rgba(236,72,153,0.35)]">
-          <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/10 flex-shrink-0">
-            {onStage.cover_url ? <img src={onStage.cover_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-4 h-4 text-white/40 m-auto mt-3" />}
+        // On screen for everyone while a track is reviewed: the artwork, who
+        // made it and a little about them.
+        <div className="fm-review-card absolute left-2 sm:left-3 bottom-14 sm:bottom-16 w-[min(78%,440px)] flex items-stretch gap-3 p-2 sm:p-2.5 rounded-2xl bg-black/75 backdrop-blur-md border border-pink-400/40 shadow-[0_0_40px_rgba(236,72,153,0.4)]">
+          <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-white/10 flex-shrink-0 ring-1 ring-white/10">
+            {onStage.cover_url ? <img src={onStage.cover_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-6 h-6 text-white/40 m-auto mt-5 sm:mt-9" />}
           </div>
-          <div className="min-w-0">
-            <p className="text-[9px] font-black tracking-[0.2em] text-pink-300">NOW REVIEWING</p>
-            <p className="text-xs font-black text-white truncate">{onStage.track_title}</p>
-            <p className="text-[10px] text-white/60 truncate">{onStage.artist_name}</p>
+          <div className="min-w-0 flex-1 py-0.5">
+            <p className="text-[9px] sm:text-[10px] font-black tracking-[0.2em] text-pink-300">
+              NOW REVIEWING{onStage.source === 'sessions' ? ' · SESSIONS' : ''}
+            </p>
+            <p className="text-sm sm:text-base font-black text-white truncate leading-tight mt-0.5">{onStage.track_title}</p>
+            <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+              {onStage.artist_image && <img src={onStage.artist_image} alt="" className="w-4 h-4 sm:w-5 sm:h-5 rounded-full object-cover flex-shrink-0" />}
+              <p className="text-[11px] sm:text-xs font-bold text-white/80 truncate">{onStage.artist_name}</p>
+            </div>
+            {onStage.artist_bio && (
+              <p className="hidden sm:block text-[11px] text-white/55 leading-snug mt-1 line-clamp-2">{onStage.artist_bio}</p>
+            )}
+          </div>
+        </div>
+      )}
+      {replayTip && (
+        <div className="absolute left-0 right-0 top-14 flex justify-center pointer-events-none">
+          <div key={replayTip.id} className="fm-combo px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-400 to-pink-500 text-black text-xs font-black shadow-[0_0_30px_rgba(251,191,36,0.5)] whitespace-nowrap">
+            {replayTip.name || 'Someone'} tipped ${Number(replayTip.tip_amount || 0).toFixed(Number(replayTip.tip_amount) % 1 ? 2 : 0)}
           </div>
         </div>
       )}
@@ -1608,6 +1820,10 @@ export default function ListeningSessionPage() {
     ban: (m, mins) => banUser(m, mins),
     mod: (m) => makeMod(m),
     unmod: (m) => removeMod(m.user_id, m.name),
+    ...(canReact ? {
+      react: (m, e) => toggleMsgReaction(m, e),
+      reply: (m) => { setReplyTo(m); setTimeout(() => document.getElementById('fm-live-chat-input')?.focus(), 50); },
+    } : {}),
   };
   const endPoll = async (poll) => {
     const { error } = await supabase.from('session_polls').update({ expires_at: new Date().toISOString() }).eq('id', poll.id);
@@ -1662,6 +1878,10 @@ export default function ListeningSessionPage() {
         className="pointer-events-auto inline-flex items-center gap-1 px-2 py-1 rounded-md bg-black/40 backdrop-blur text-white text-[11px] font-bold">
         <Users className="w-3.5 h-3.5" /> {listenerCount}
       </button>
+      <button onClick={shareStream} aria-label="Share this stream"
+        className="pointer-events-auto w-8 h-8 flex items-center justify-center rounded-full bg-black/40 backdrop-blur hover:bg-black/60 transition">
+        <Share2 className="w-4 h-4 text-white" />
+      </button>
     </div>
   );
 
@@ -1691,6 +1911,8 @@ export default function ListeningSessionPage() {
                     hostName={host.artist_name}
                     hostImage={host.profile_image_url}
                     topBar={stageTopBar}
+                    overlay={floating}
+                    onTime={onReplayTime}
                   />
                 ) : (
                   <LiveStage
@@ -1701,6 +1923,8 @@ export default function ListeningSessionPage() {
                     isHost={isHost}
                     replay
                     topBar={stageTopBar}
+                    overlay={floating}
+                    onTime={onReplayTime}
                   />
                 )
               ) : isScheduled ? (
@@ -1893,6 +2117,20 @@ export default function ListeningSessionPage() {
               </button>
             </div>
           )}
+          {isHost && isReplay && (
+            <div className="mx-4 lg:mx-0 mt-2 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.07]">
+              <p className="text-xs text-white/60">
+                The chat, tips and reactions play back as they happened. If they land a little early or late against the video, nudge them.
+              </p>
+              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                <button onClick={() => shiftReplayChat(-15)} className="px-3 py-2 rounded-xl bg-white/10 text-xs font-black">Chat is late: 15s sooner</button>
+                <button onClick={() => shiftReplayChat(15)} className="px-3 py-2 rounded-xl bg-white/10 text-xs font-black">Chat is early: 15s later</button>
+                {!!session.replay_offset_seconds && (
+                  <span className="text-[11px] text-white/40">{session.replay_offset_seconds > 0 ? '+' : ''}{session.replay_offset_seconds}s</span>
+                )}
+              </div>
+            </div>
+          )}
 
           {isHost && !isEnded && (
             <div className="mx-4 lg:mx-0 mt-3 p-3 rounded-2xl bg-white/[0.04] border border-white/[0.07] space-y-3">
@@ -2007,6 +2245,7 @@ export default function ListeningSessionPage() {
                   onChanged={() => { loadReviewQueue(); loadPolls(); }}
                   flash={flash}
                   isAudioMode={session.mode === 'audio'}
+                  canAddSessions={!!isHost && !!isAdmin}
                   onQueueForEveryone={async (item) => {
                     const { data: t } = await supabase.from('tracks').select('id, title, cover_artwork_url, file_url, duration').eq('id', item.track_id).maybeSingle();
                     if (t) { await addToQueue(t); flash(`"${t.title}" added to the queue`); }
@@ -2072,6 +2311,7 @@ export default function ListeningSessionPage() {
                 onChanged={() => { loadReviewQueue(); loadPolls(); }}
                 flash={flash}
                 isAudioMode={false}
+                canAddSessions={!!isHost && !!isAdmin}
               />
             </div>
           )}
@@ -2140,11 +2380,13 @@ export default function ListeningSessionPage() {
           {polls.length > 0 && (
             <div className="lg:hidden flex-shrink-0 px-3 pt-2">
               {mobilePollOpen ? (
-                <div className="relative">
-                  <button onClick={() => setPollFolded(true)} aria-label="Fold poll"
-                    className="absolute right-3 top-3 z-10 w-6 h-6 rounded-full bg-black/40 flex items-center justify-center">
-                    <ChevronDown className="w-3.5 h-3.5 text-white/70 rotate-180" />
-                  </button>
+                <div>
+                  <div className="flex justify-end mb-1">
+                    <button onClick={() => setPollFolded(true)} aria-label="Fold poll"
+                      className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-white/[0.06] text-[11px] font-bold text-white/60">
+                      Hide poll <ChevronDown className="w-3.5 h-3.5 rotate-180" />
+                    </button>
+                  </div>
                   <div className="-m-2 max-h-72 overflow-y-auto">
                     <SessionPollCard poll={polls[0]} userId={user?.id} onVote={castVote} canEnd={isMod} onEnd={endPoll} />
                   </div>
@@ -2177,14 +2419,18 @@ export default function ListeningSessionPage() {
           <div className="relative flex-1 min-h-0">
           <div ref={chatScrollRef} onScroll={onChatScroll} className="absolute inset-0 overflow-y-auto">
             <div className="py-2">
-              {messages.filter(m => m.is_tip).slice(-3).map((msg, i) => (
-                <ChatMessage key={(msg.id || i) + '-tip'} msg={msg} hostUserId={host.user_id} isModUser={modIds.has(msg.user_id)} myName={myName} onTap={user ? setSheetMsg : null} />
+              {shownMessages.filter(m => m.is_tip).slice(-3).map((msg, i) => (
+                <ChatMessage key={(msg.id || i) + '-tip'} msg={msg} hostUserId={host.user_id} isModUser={modIds.has(msg.user_id)} myName={myName} onTap={user ? setSheetMsg : null}
+                  reactions={reactionsByMsg[msg.id]} onReact={canReact ? toggleMsgReaction : null} />
               ))}
-              {messages.filter(m => !m.is_tip).length === 0 && (
-                <p className="text-center text-xs text-white/30 py-8">Say hi. You are first.</p>
+              {shownMessages.filter(m => !m.is_tip).length === 0 && (
+                <p className="text-center text-xs text-white/30 py-8">
+                  {isReplay ? (replayCut === null || !replayT ? 'Press play and the chat comes in as it happened.' : 'The chat picks up as the stream goes on.') : 'Say hi. You are first.'}
+                </p>
               )}
-              {messages.filter(m => !m.is_tip).map((msg, i) => (
-                <ChatMessage key={msg.id || i} msg={msg} hostUserId={host.user_id} isModUser={modIds.has(msg.user_id)} myName={myName} onTap={user ? setSheetMsg : null} />
+              {shownMessages.filter(m => !m.is_tip).map((msg, i) => (
+                <ChatMessage key={msg.id || i} msg={msg} hostUserId={host.user_id} isModUser={modIds.has(msg.user_id)} myName={myName} onTap={user ? setSheetMsg : null}
+                  reactions={reactionsByMsg[msg.id]} onReact={canReact ? toggleMsgReaction : null} />
               ))}
               <div ref={chatEndRef} />
             </div>
@@ -2232,9 +2478,18 @@ export default function ListeningSessionPage() {
                   {session.slow_mode_seconds > 0 && !isMod && (
                     <p className="text-[10px] text-white/40 inline-flex items-center gap-1"><Timer className="w-3 h-3" /> Slow mode: one message every {session.slow_mode_seconds}s</p>
                   )}
+                  {replyTo && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.05] border-l-2 border-pink-400">
+                      <Reply className="w-3.5 h-3.5 text-pink-300 flex-shrink-0" />
+                      <p className="text-[11px] text-white/60 truncate flex-1">
+                        Replying to <span className="font-black" style={{ color: nameColour(replyTo.name) }}>{replyTo.name || 'Listener'}</span>{replyTo.content ? `: ${replyTo.content}` : ''}
+                      </p>
+                      <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply" className="text-white/40 hover:text-white"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                  )}
                   <form onSubmit={sendMessage} className="flex gap-2">
-                    <input value={chatInput} onChange={e => setChatInput(e.target.value)}
-                      placeholder="Say something"
+                    <input id="fm-live-chat-input" value={chatInput} onChange={e => setChatInput(e.target.value)}
+                      placeholder={replyTo ? `Reply to ${replyTo.name || 'them'}` : 'Say something'}
                       maxLength={200}
                       className="flex-1 min-w-0 px-4 py-2.5 bg-white/[0.06] border border-white/[0.08] rounded-2xl text-sm text-white placeholder-white/30 focus:outline-none focus:border-pink-500/50" />
                     <button type="submit" disabled={!chatInput.trim() || sending || (slowLeft > 0 && !isMod)} aria-label="Send"

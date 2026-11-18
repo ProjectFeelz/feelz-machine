@@ -12,7 +12,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { myAvatar } from '../../utils/me';
 import { useAppThemeInit } from '../../hooks/useAppTheme';
 import { ListenerThemeProvider } from '../../contexts/ListenerThemeContext';
-import { Bell, Flame, UserCircle, Compass, Plus } from 'lucide-react';
+import { Bell, Flame, UserCircle, Compass } from 'lucide-react';
+import useLiveStreams from '../../hooks/useLiveStreams';
 import useNotifications from '../../contexts/useNotifications';
 import { OfflineBanner } from '../../hooks/useOffline';
 import ErrorBoundary from '../ErrorBoundary';
@@ -95,6 +96,41 @@ function SplashScreen() {
   );
 }
 
+// ── LIVE chip ────────────────────────────────────────────────────────────────
+// Top left of the phone's top bar on every page while somebody is live (red,
+// pulsing, with the host's picture) or about to go live (amber). One tap opens
+// the stream, or Feelz Live when there are several. Nothing shows otherwise.
+function LiveChip() {
+  const { live, soon, first } = useLiveStreams({ withFirst: true });
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  if ((!live && !soon) || pathname === '/live' || pathname.startsWith('/session/')) return <span />;
+  const isLive = live > 0;
+  const host = first?.artists;
+  const go = () => navigate(first && (isLive ? live === 1 : soon === 1) ? `/session/${first.id}` : '/live');
+  return (
+    <button onClick={go} aria-label={isLive ? 'Watch the live stream' : 'See the upcoming stream'}
+      className={`pointer-events-auto flex items-center gap-1.5 h-8 pl-1 pr-2.5 rounded-full border max-w-[55vw] ${isLive ? 'bg-red-500/15 border-red-500/40' : 'bg-amber-400/10 border-amber-400/30'}`}>
+      <span className={`relative w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ring-2 ${isLive ? 'ring-red-500 fm-live-ring' : 'ring-amber-400'}`}>
+        {host?.profile_image_url
+          ? <img src={host.profile_image_url} alt="" className="w-full h-full object-cover" />
+          : <span className={`block w-full h-full ${isLive ? 'bg-red-500' : 'bg-amber-400'}`} />}
+      </span>
+      <span className={`text-[11px] font-black tracking-wide ${isLive ? 'text-red-300' : 'text-amber-300'}`}>
+        {isLive ? (live > 1 ? `${live} LIVE` : 'LIVE') : 'SOON'}
+      </span>
+      {host?.artist_name && (
+        <span className="text-[11px] font-bold text-white/80 truncate">{host.artist_name}</span>
+      )}
+      <style>{`
+        .fm-live-ring { animation: fm-live-ring 1.6s ease-in-out infinite; }
+        @keyframes fm-live-ring { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.6); } 50% { box-shadow: 0 0 0 5px rgba(239,68,68,0); } }
+        @media (prefers-reduced-motion: reduce) { .fm-live-ring { animation: none; } }
+      `}</style>
+    </button>
+  );
+}
+
 // ── Bell button ───────────────────────────────────────────────────────────────
 function MobileBellButton() {
   const { unreadCount } = useNotifications();
@@ -110,9 +146,10 @@ function MobileBellButton() {
 
   return (
     <div
-      className="md:hidden fixed top-0 left-0 right-0 z-[60] flex items-center justify-end px-4 pointer-events-none"
+      className="md:hidden fixed top-0 left-0 right-0 z-[60] flex items-center justify-between px-4 pointer-events-none"
       style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)', height: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 44px)' }}
     >
+      <LiveChip />
       <div className="flex items-center space-x-1.5 pointer-events-auto">
         {/* Streak flame */}
         {streak > 1 && (
@@ -413,30 +450,6 @@ export default function AppLayout() {
         {location.pathname !== "/" && <MiniPlayer />}
         <MobileNav onOpenCreateMenu={() => { setCreateTab('menu'); setShowCreateMenu(true); }} />
 
-        {/* Create, on a computer: the same menu as the + in the phone's
-            bottom bar (go live, upload, stories, chat rooms and the rest).
-            Top right, and it moves left of the docked player when that is open. */}
-        <button
-          type="button"
-          onClick={() => { setCreateTab('menu'); setShowCreateMenu(true); }}
-          aria-label="Create"
-          className="fm-create-fab hidden md:flex fixed top-5 z-[70] items-center h-12 rounded-full text-black font-black shadow-lg transition-all duration-200"
-          style={{
-            right: currentTrack && !isMinimized ? 424 : 24,
-            backgroundColor: '#90AF2F',
-            boxShadow: '0 6px 24px rgba(144,175,47,0.45)',
-          }}
-        >
-          <span className="w-12 h-12 flex items-center justify-center flex-shrink-0">
-            <Plus className="w-6 h-6" strokeWidth={2.75} />
-          </span>
-          <span className="fm-create-label overflow-hidden whitespace-nowrap text-sm">Create</span>
-        </button>
-        <style>{`
-          .fm-create-fab .fm-create-label { max-width: 0; opacity: 0; transition: max-width .2s ease, opacity .15s ease, padding .2s ease; }
-          .fm-create-fab:hover .fm-create-label, .fm-create-fab:focus-visible .fm-create-label { max-width: 90px; opacity: 1; padding-right: 18px; }
-          .fm-create-fab:hover { transform: translateY(-1px); }
-        `}</style>
 
         {/* Rendered as a sibling of MobileNav, not a child, MobileNav
             unmounts itself when the on-screen keyboard opens (sensible for

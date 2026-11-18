@@ -26,6 +26,7 @@
  *   overlay     anything to float over the video (reactions)
  *   topBar      the bar across the top of the stage (LIVE pill, viewers)
  *   replay      a past stream: starts paused, plays from the start, no live edge
+ *   onTime      replays only: called with the video position in seconds
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -56,7 +57,7 @@ const canFullscreen = () =>
   typeof document !== 'undefined' &&
   !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
 
-export default function LiveStage({ videoId, title, hostName, hostImage, isHost = false, overlay = null, topBar = null, replay = false }) {
+export default function LiveStage({ videoId, title, hostName, hostImage, isHost = false, overlay = null, topBar = null, replay = false, onTime = null }) {
   const wrapRef   = useRef(null);
   const mountRef  = useRef(null);
   const playerRef = useRef(null);
@@ -68,6 +69,18 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
   const [errorCode, setErrorCode] = useState(null);
   const [isFull, setIsFull]   = useState(false);
   const [chrome, setChrome]   = useState(true);   // our controls showing
+
+  // Replays report where the video is, so the chat, reactions and tips can
+  // come back in at the moment they happened.
+  const onTimeRef = useRef(onTime);
+  onTimeRef.current = onTime;
+  useEffect(() => {
+    if (!replay || !onTime) return undefined;
+    const t = setInterval(() => {
+      try { const s = playerRef.current?.getCurrentTime?.(); if (typeof s === 'number' && !Number.isNaN(s)) onTimeRef.current?.(s); } catch { /* not ready */ }
+    }, 500);
+    return () => clearInterval(t);
+  }, [replay, !!onTime]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build the player. A new id rebuilds it from scratch.
   useEffect(() => {

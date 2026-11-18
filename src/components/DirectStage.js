@@ -10,6 +10,7 @@
  *   src        the .m3u8 address (live input or recording)
  *   onAir      for a live stream: whether the host is sending video yet
  *   replay     a recording: starts paused, plays from the start
+ *   onTime     replays only: called with the video position in seconds
  *   poster     image shown before playing
  *   hostName, hostImage, title, overlay, topBar   as LiveStage
  */
@@ -34,7 +35,7 @@ function loadHls() {
 
 const canFullscreen = () => typeof document !== 'undefined' && !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
 
-export default function DirectStage({ src, onAir = true, replay = false, poster, hostName, hostImage, title, overlay = null, topBar = null }) {
+export default function DirectStage({ src, onAir = true, replay = false, poster, hostName, hostImage, title, overlay = null, topBar = null, onTime = null }) {
   const wrapRef = useRef(null);
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
@@ -44,6 +45,18 @@ export default function DirectStage({ src, onAir = true, replay = false, poster,
   const [volume, setVolume] = useState(0.8);
   const [isFull, setIsFull] = useState(false);
   const [chrome, setChrome] = useState(true);
+
+  // Replays report where the video is, so the chat, reactions and tips can
+  // come back in at the moment they happened.
+  const onTimeRef = useRef(onTime);
+  onTimeRef.current = onTime;
+  useEffect(() => {
+    if (!replay || !onTime) return undefined;
+    const t = setInterval(() => {
+      try { const s = videoRef.current?.currentTime; if (typeof s === 'number' && !Number.isNaN(s)) onTimeRef.current?.(s); } catch { /* not ready */ }
+    }, 500);
+    return () => clearInterval(t);
+  }, [replay, !!onTime]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const v = videoRef.current;

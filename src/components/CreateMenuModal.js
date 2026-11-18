@@ -17,6 +17,7 @@ import MerchConnectSheet from './MerchConnectSheet';
 import MerchParked from './MerchParked';
 import { MERCH_PARKED } from '../config/features';
 import { tap } from '../utils/track';
+import { searchTracks } from '../utils/searchTracks';
 import CreateMenuSection, { MENU_TINTS } from './CreateMenuSection';
 import {
   Trophy, Camera, Mic, TrendingUp, HeartHandshake, Store, Coins, Wallet,
@@ -31,6 +32,27 @@ import {
 // center plus button — without the two call sites fighting over shared state.
 // Groups that are always open: what's running right now, and making music.
 const ALWAYS_OPEN = ['Happening now', 'Create'];
+
+// The three kinds of show, picked first in the Go live panel.
+const LIVE_KINDS = [
+  { id: 'review', icon: Disc3,   title: 'Live reviews',    sub: 'Play artists\' tracks, the room rates them', grad: 'from-fuchsia-500 to-amber-400' },
+  { id: 'party',  icon: Music,   title: 'Listening party', sub: 'Tracks in sync for everyone, with chat',      grad: 'from-pink-500 to-violet-600' },
+  { id: 'video',  icon: Youtube, title: 'Video stream',    sub: 'You on camera, fans watch and chat',          grad: 'from-red-500 to-pink-500' },
+];
+
+function SetupToggle({ on, onChange, title, sub }) {
+  return (
+    <button type="button" onClick={() => onChange(!on)} className="w-full flex items-center gap-3 px-4 py-3.5 text-left">
+      <span className="flex-1 min-w-0">
+        <span className="block text-sm font-bold text-white">{title}</span>
+        <span className="block text-xs text-white/45 leading-snug">{sub}</span>
+      </span>
+      <span className={`relative w-11 h-6 rounded-full flex-shrink-0 transition ${on ? 'bg-emerald-400' : 'bg-white/15'}`}>
+        <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} />
+      </span>
+    </button>
+  );
+}
 
 export default function CreateMenuModal({ artist, user, onClose, primaryColor = '#90AF2F', bgColor = '#000000', initialTab = 'menu' }) {
   const navigate = useNavigate();
@@ -177,6 +199,21 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
   const [trackResults, setTrackResults] = useState([]);
   const [searchingTracks, setSearchingTracks] = useState(false);
   const [startingSession, setStartingSession] = useState(false);
+  // Set up before going live: what the show is, reviews, Sessions entries, slow mode.
+  const [liveKind, setLiveKind] = useState('review');       // 'review' | 'party' | 'video'
+  const [liveReviews, setLiveReviews] = useState(true);
+  const [liveSessions, setLiveSessions] = useState(false);
+  const [liveSlow, setLiveSlow] = useState(0);
+  const [titleTouched, setTitleTouched] = useState(false);
+  const kindTitle = (k) => k === 'review' ? `${artist?.artist_name || 'Live'} Live Reviews`
+    : k === 'party' ? `${artist?.artist_name || 'Live'} Listening Party` : `${artist?.artist_name || 'Live'} Live`;
+  useEffect(() => { if (artist && !titleTouched) setLiveTitle(kindTitle(liveKind)); }, [artist?.id, liveKind]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pickKind = (k) => {
+    setLiveKind(k);
+    setLiveReviews(k === 'review');
+    if (k === 'party') setLiveMode('audio');
+    else if (liveKind === 'party' || (k === 'video' && liveMode === 'audio')) setLiveMode('youtube');
+  };
 
   const close = () => {
     onClose();
@@ -188,10 +225,9 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
     if (!artist?.id || trackSearch.trim().length < 2) { setTrackResults([]); return; }
     setSearchingTracks(true);
     const t = setTimeout(async () => {
-      const { data } = await supabase.from('tracks').select('id,title,cover_artwork_url,duration')
-        .eq('artist_id', artist.id).eq('is_published', true)
-        .ilike('title', `%${trackSearch.trim()}%`).limit(8);
-      setTrackResults((data || []).filter(t => !queueTracks.find(q => q.id === t.id)));
+      // Any published song on Feelz Machine, by title or by artist.
+      const rows = await searchTracks(supabase, trackSearch, { limit: 10, exclude: queueTracks.map(q => q.id) });
+      setTrackResults(rows);
       setSearchingTracks(false);
     }, 300);
     return () => clearTimeout(t);
@@ -228,8 +264,15 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
         ...(isScheduled ? { scheduled_at: new Date(scheduledAt).toISOString() } : {}),
         ...(liveMode === 'youtube' && liveYoutubeUrl ? { youtube_url: liveYoutubeUrl } : {}),
         ...(cfLiveUid ? { cf_live_uid: cfLiveUid } : {}),
+        reviews_open: liveReviews,
+        slow_mode_seconds: liveSlow,
       }).select().single();
       if (error) throw error;
+      // Every Sessions entry straight into the review queue (platform hosts).
+      if (liveReviews && liveSessions && isAdmin) {
+        const { error: sErr } = await supabase.rpc('session_add_sessions_entries', { p_session: session.id });
+        if (sErr) console.warn('Sessions entries not added:', sErr.message);
+      }
       const { data: { session: authSession } } = await supabase.auth.getSession();
       fetch('/.netlify/functions/notify-session-live', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -433,8 +476,11 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   items: [
                     { id: 'upload', icon: Music, label: 'Upload Track', sub: 'Add new music to your profile' },
                     gated('live_streaming', { id: 'live', icon: Radio, label: 'Go Live', sub: 'Start a live session' }),
-                    gated('stories', { id: 'story', icon: Camera, label: 'Add Story', sub: 'Share a 24hr clip with fans' }),
-                    gated('voice_memo', { id: 'memo', icon: Mic, label: 'Voice Memo', sub: 'Record a message for your fans' }),
+                    // Story, voice memo and message to fans share one panel.
+                    (hasFeature('stories') || hasFeature('voice_memo') || hasFeature('fan_broadcast'))
+                      ? { id: 'share', icon: Megaphone, label: 'Share with fans', sub: 'A story, a voice memo or a message' }
+                      : { id: 'share_locked', icon: Megaphone, label: 'Share with fans', sub: 'Pro only, upgrade to unlock' },
+                    { id: 'chats', icon: MessagesSquare, label: 'Chat Rooms', sub: 'Your rooms and artist chats' },
                   ],
                 },
                 {
@@ -454,8 +500,6 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   icon: Megaphone,
                   tint: MENU_TINTS.fans,
                   items: [
-                    gated('fan_broadcast', { id: 'dm', icon: Megaphone, label: 'Message Fans', sub: 'Send a notification to all followers' }),
-                    { id: 'chats', icon: MessagesSquare, label: 'Chat Rooms', sub: 'Your rooms and artist chats' },
                     ...(canNewsletter
                       ? [{ id: 'newsletter', icon: Mail, label: 'Newsletter', sub: 'Write an update for the app or venues' }]
                       : []),
@@ -511,8 +555,8 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                       // have just added five on a hunch.
                       tap('menu_' + it.id);
                       const id = it.id;
-                      if (id === 'live') { setCreateTab('live'); setLiveTitle(`${artist?.artist_name}'s Live Session`); }
-                      else if (id === 'memo' || id === 'story' || id === 'dm') { setShareTab(id); setCreateTab('share'); }
+                      if (id === 'live') { setCreateTab('live'); }
+                      else if (id === 'share') { setShareTab(hasFeature('stories') ? 'story' : hasFeature('voice_memo') ? 'memo' : 'dm'); setCreateTab('share'); }
                       else if (id === 'live_streams') { close(); navigate('/live'); }
                       else if (id === 'upload') { close(); navigate('/dashboard?tab=upload'); }
                       else if (id === 'edit') { close(); navigate('/profile/edit'); }
@@ -690,30 +734,55 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
           {/* ── Go Live ── */}
           {createTab === 'live' && (
             <div className="space-y-5">
-              {/* What kind of stream */}
-              <div className={`grid gap-3 ${directCfg.canHost ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2'}`}>
-                {[
-                  ...(directCfg.canHost ? [{ id: 'direct', icon: Radio, title: 'Direct from OBS', sub: 'Straight into Feelz Machine, recorded for the replay' }] : []),
-                  { id: 'youtube', icon: Youtube, title: directCfg.canHost ? 'Via YouTube' : 'Video stream', sub: 'Stream from OBS to YouTube, fans watch it here' },
-                  { id: 'audio',   icon: Music,   title: 'Listening party', sub: 'Play your tracks to fans in sync and chat' },
-                ].map(m => {
-                  const on = liveMode === m.id;
-                  return (
-                    <button key={m.id} onClick={() => setLiveMode(m.id)}
-                      className={`text-left p-4 rounded-2xl border-2 transition ${on ? 'border-white bg-white/[0.08]' : 'border-white/[0.08] bg-white/[0.03] hover:border-white/20'}`}>
-                      <span className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${on ? 'bg-gradient-to-br from-red-500 to-pink-500' : 'bg-white/[0.08]'}`}>
-                        <m.icon className="w-5 h-5 text-white" />
-                      </span>
-                      <span className="block text-base font-black text-white">{m.title}</span>
-                      <span className="block text-xs text-white/50 mt-0.5 leading-snug">{m.sub}</span>
-                    </button>
-                  );
-                })}
+              {/* What the show is */}
+              <div className="space-y-2">
+                <label className="text-xs text-white/50 font-black uppercase tracking-[0.15em]">What is the show?</label>
+                <div className="grid grid-cols-3 gap-2.5">
+                  {LIVE_KINDS.map(k => {
+                    const on = liveKind === k.id;
+                    return (
+                      <button key={k.id} onClick={() => pickKind(k.id)}
+                        className={`text-left p-3.5 rounded-2xl border-2 transition ${on ? 'border-white bg-white/[0.08]' : 'border-white/[0.08] bg-white/[0.03] hover:border-white/20'}`}>
+                        <span className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2.5 bg-gradient-to-br ${on ? k.grad : 'from-white/[0.08] to-white/[0.08]'}`}>
+                          <k.icon className="w-5 h-5 text-white" />
+                        </span>
+                        <span className="block text-sm font-black text-white leading-tight">{k.title}</span>
+                        <span className="block text-[11px] text-white/50 mt-1 leading-snug">{k.sub}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+
+              {/* How it reaches fans */}
+              {liveKind !== 'party' && (
+                <div className="space-y-2">
+                  <label className="text-xs text-white/50 font-black uppercase tracking-[0.15em]">How you stream</label>
+                  <div className={`grid gap-1.5 p-1.5 rounded-2xl bg-white/[0.05] border border-white/[0.06] ${(directCfg.canHost ? 2 : 1) + (liveKind === 'review' ? 1 : 0) === 3 ? 'grid-cols-3' : (directCfg.canHost || liveKind === 'review') ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    {[
+                      { id: 'youtube', label: 'Video via YouTube' },
+                      ...(directCfg.canHost ? [{ id: 'direct', label: 'Direct from OBS' }] : []),
+                      ...(liveKind === 'review' ? [{ id: 'audio', label: 'Audio in the app' }] : []),
+                    ].map(o => (
+                      <button key={o.id} onClick={() => setLiveMode(o.id)}
+                        className={`py-3 px-2 rounded-xl text-xs sm:text-sm font-black transition ${liveMode === o.id ? 'bg-white text-black' : 'text-white/60 hover:text-white'}`}>
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-white/40">
+                    {liveMode === 'audio'
+                      ? 'No camera needed. Tracks play to everyone in sync while you talk in the chat.'
+                      : liveMode === 'direct'
+                        ? 'OBS streams straight into Feelz Machine. Your server and key are in the Live Studio.'
+                        : 'Stream from OBS to YouTube as usual. Fans watch it here, without ads or suggestions.'}
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <label className="text-xs text-white/50 font-black uppercase tracking-[0.15em]">Title</label>
-                <input value={liveTitle} onChange={e => setLiveTitle(e.target.value)}
+                <input value={liveTitle} onChange={e => { setLiveTitle(e.target.value); setTitleTouched(true); }}
                   placeholder="Live Reviews Night, Beat Session, Q and A" maxLength={80}
                   className="w-full px-4 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-2xl text-base text-white placeholder-white/25 focus:outline-none focus:border-white/25" />
               </div>
@@ -734,10 +803,13 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   <div className="relative">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
                     <input value={trackSearch} onChange={e => setTrackSearch(e.target.value)}
-                      placeholder="Search your tracks"
+                      placeholder="Search songs or artists"
                       className="w-full pl-11 pr-4 py-3.5 bg-white/[0.06] border border-white/[0.08] rounded-2xl text-base text-white placeholder-white/25 focus:outline-none focus:border-white/25" />
                     {searchingTracks && <Loader className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-white/30" />}
                   </div>
+                  {trackSearch.trim().length >= 2 && !searchingTracks && trackResults.length === 0 && (
+                    <p className="text-xs text-white/40 px-1">No songs or artists called "{trackSearch.trim()}" on Feelz Machine yet.</p>
+                  )}
                   {trackResults.length > 0 && (
                     <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl overflow-hidden">
                       {trackResults.map(track => (
@@ -748,7 +820,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-bold text-white truncate">{track.title}</p>
-                            {track.duration && <p className="text-xs text-white/40">{fmtLiveDuration(track.duration)}</p>}
+                            <p className="text-xs text-white/40 truncate">{[track.artist_name, fmtLiveDuration(track.duration)].filter(Boolean).join(' · ')}</p>
                           </div>
                           <Plus className="w-5 h-5 text-white/50 flex-shrink-0" />
                         </button>
@@ -763,7 +835,10 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                           <div className="w-9 h-9 rounded-lg bg-white/[0.06] flex-shrink-0 overflow-hidden">
                             {track.cover_artwork_url ? <img src={track.cover_artwork_url} alt="" className="w-full h-full object-cover" /> : <Music className="w-4 h-4 text-white/20 m-auto mt-2.5" />}
                           </div>
-                          <p className="text-sm text-white flex-1 truncate">{track.title}</p>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-white truncate">{track.title}</p>
+                            {track.artist_name && <p className="text-[11px] text-white/40 truncate">{track.artist_name}</p>}
+                          </div>
                           <button onClick={() => removeFromLiveQueue(track.id)} aria-label="Remove" className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/[0.08] transition">
                             <X className="w-4 h-4 text-white/40" />
                           </button>
@@ -773,6 +848,33 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                   )}
                 </div>
               )}
+
+              {/* Set up before going live. Moderators, music and polls stay on the stream page. */}
+              <div className="space-y-2">
+                <label className="text-xs text-white/50 font-black uppercase tracking-[0.15em]">Set up</label>
+                <div className="rounded-2xl bg-white/[0.04] border border-white/[0.07] divide-y divide-white/[0.06]">
+                  <SetupToggle on={liveReviews} onChange={setLiveReviews}
+                    title="Take tracks for review"
+                    sub="Artists in the chat send a track, you play it and the room rates it" />
+                  {isAdmin && liveReviews && (
+                    <SetupToggle on={liveSessions} onChange={setLiveSessions}
+                      title="Add the Sessions entries"
+                      sub="Every cover entry goes into your review queue, with its artwork, artist and bio on screen as it plays" />
+                  )}
+                  <div className="px-4 py-3.5">
+                    <p className="text-sm font-bold text-white">Slow mode</p>
+                    <p className="text-xs text-white/45 mb-2.5">How long people wait between messages. Change it any time on the stream.</p>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {[0, 5, 15, 30, 60].map(sec => (
+                        <button key={sec} onClick={() => setLiveSlow(sec)}
+                          className={`px-3.5 py-2 rounded-xl text-xs font-black transition ${liveSlow === sec ? 'bg-white text-black' : 'bg-white/[0.06] text-white/60 hover:bg-white/[0.1]'}`}>
+                          {sec ? `${sec}s` : 'Off'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               {/* When */}
               <div className="space-y-2">

@@ -321,7 +321,7 @@ export default function LivePage() {
       </Helmet>
 
       {/* Title bar */}
-      <div className="flex items-end justify-between gap-4 mb-5 px-4 md:px-0">
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 mb-5 px-4 md:px-0">
         <div>
           <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tight leading-none">
             <span className="text-white">Feelz</span>{' '}
@@ -330,10 +330,17 @@ export default function LivePage() {
           <p className="text-sm text-white/55 mt-2">Shows, live track reviews and listening parties. Catch them live or watch the replay.</p>
         </div>
         {artist && (
-          <button onClick={() => navigate('/live/studio')}
-            className="hidden sm:inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-white/[0.07] hover:bg-white/[0.12] text-sm font-bold text-white transition flex-shrink-0">
-            <Clapperboard className="w-4 h-4" /> Live Studio
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button onClick={() => navigate('/live/studio')} aria-label="Live Studio"
+              className="inline-flex items-center gap-2 h-11 px-3.5 sm:px-4 rounded-full bg-white/[0.07] hover:bg-white/[0.12] text-sm font-bold text-white transition">
+              <Clapperboard className="w-4 h-4" /> <span className="hidden sm:inline">Live Studio</span>
+            </button>
+            {/* Always here, whether or not anyone is live right now. */}
+            <button onClick={openCreate}
+              className="inline-flex items-center gap-2 h-11 px-4 rounded-full bg-gradient-to-r from-red-500 to-pink-500 text-sm font-black text-white shadow-[0_6px_24px_rgba(236,72,153,0.35)] hover:brightness-110 transition">
+              <Radio className="w-4 h-4" /> Go live
+            </button>
+          </div>
         )}
       </div>
 
