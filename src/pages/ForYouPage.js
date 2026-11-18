@@ -1578,17 +1578,38 @@ export default function ForYouPage() {
         const dbHiddenIds = (hiddenData || []).map(h => h.track_id).filter(Boolean);
         dbHiddenIds.forEach(id => hiddenIdsRef.current.add(id));
 
-        // Skipped in the last 24 hours: kept out of the feed for a day.
+        // A SKIP USED TO BUY EXACTLY ONE DAY, HOWEVER MANY TIMES YOU SKIPPED.
+        //
+        // The old rule was a flat 24 hours: skip something, it leaves the feed
+        // until tomorrow, then it is eligible again. Skip it again tomorrow and
+        // it rests another day. A track you have rejected eight times comes
+        // back on the ninth morning exactly like one you skipped once by
+        // accident, which is the whole of "I always skip them and they keep
+        // coming back".
+        //
+        // The rest now grows with the count that record_skip() keeps. One skip
+        // is still a day, because skipping once usually means not right now.
+        // Four separate skips of the same song is not a mood, so it stops
+        // coming back at all.
         if (offset === 0) {
-          const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
           const { data: skipData } = await supabase
             .from('listener_feedback')
-            .select('track_id')
+            .select('track_id, skip_count, updated_at')
             .eq('user_id', user.id)
             .eq('signal', 'skip')
-            .gte('updated_at', since)
-            .limit(200);
-          (skipData || []).forEach(r => r.track_id && skippedIdsRef.current.add(r.track_id));
+            .order('updated_at', { ascending: false })
+            .limit(500);
+          const nowMs = Date.now();
+          const REST_DAYS = [1, 7, 30];   // 1st, 2nd, 3rd skip; 4th is forever
+          (skipData || []).forEach(r => {
+            if (!r.track_id) return;
+            const times = r.skip_count > 0 ? r.skip_count : 1;
+            if (times >= 4) { skippedIdsRef.current.add(r.track_id); return; }
+            const restMs = REST_DAYS[times - 1] * 24 * 60 * 60 * 1000;
+            if (nowMs - new Date(r.updated_at).getTime() < restMs) {
+              skippedIdsRef.current.add(r.track_id);
+            }
+          });
         }
         hiddenIds = [...new Set([...hiddenIdsRef.current, ...skippedIdsRef.current])];
 

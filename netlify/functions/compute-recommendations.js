@@ -335,11 +335,17 @@ exports.handler = async (event) => {
         const moodCounts    = {};
         const artistStreams = {};
         const streamedIds   = new Set();
+        // How many times each track was played, not just whether it was. A
+        // skip means something different on a song somebody already knows.
+        const playCount     = {};
         let beatStreams = 0;
         let songStreams = 0;
 
         streams.forEach(s => {
-          if (s.track_id) streamedIds.add(s.track_id);
+          if (s.track_id) {
+            streamedIds.add(s.track_id);
+            playCount[s.track_id] = (playCount[s.track_id] || 0) + 1;
+          }
           const g = s.tracks?.genre, m = s.tracks?.mood, a = s.tracks?.artist_id;
           if (g) genreCounts[g]   = (genreCounts[g]   || 0) + 1;
           if (m) moodCounts[m]    = (moodCounts[m]    || 0) + 1;
@@ -548,7 +554,20 @@ exports.handler = async (event) => {
               const d        = feedback.skipDetail[track.id] || { pct: 0, times: 1 };
               const severity = Math.max(0, Math.min(1, (70 - d.pct) / 70));
               const times    = Math.max(1, Math.min(4, d.times));
-              score -= 40 * severity * times;
+
+              // FAMILIARITY MUTES A SKIP.
+              //
+              // Steve plays High Rises and skipped it once at 1%, which on the
+              // rules above would cost it 39 points. He likes the song. He had
+              // heard it twenty-six times and did not want it again right then,
+              // which is a different sentence from "no".
+              //
+              // A skip on a song somebody keeps coming back to is about timing.
+              // A skip on a song they have barely heard is about taste. Only
+              // the second one should move a recommendation much.
+              const familiar = (playCount[track.id] || 0) >= 5 ? 0.25 : 1;
+
+              score -= 40 * severity * times * familiar;
             }
           }
 
