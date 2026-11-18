@@ -57,12 +57,16 @@ export default function DesktopSidebar() {
     { path: '/home',         icon: Home,            label: 'Home' },
     { path: '/browse',       icon: Search,          label: 'Browse' },
     { path: '/library',      icon: Library,         label: 'Library' },
+    // Live and Games sit with the other places you go to listen or play,
+    // directly under Library. They were at the bottom, under Profile, which
+    // put two things people come to the site FOR below the two things they
+    // visit to manage their own account.
+    { path: '/live',         icon: Radio,           label: 'Live' },
+    { path: '/games',        icon: Gamepad2,        label: 'Games' },
     ...(isArtist || isBeatmaker
       ? [{ path: '/hub', icon: LayoutDashboard, label: isBeatmaker ? 'Studio' : 'Hub' }]
       : []),
     { path: '/profile',      icon: User,            label: 'Profile' },
-    { path: '/live',         icon: Radio,           label: 'Live' },
-    { path: '/games',        icon: Gamepad2,        label: 'Games' },
   ];
 
   // The Live item says when somebody is live or about to be.

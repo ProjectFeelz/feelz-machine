@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import ReactPlayer from 'react-player';
 import { supabase } from '../supabaseClient';
+import { TRACK_COLUMNS } from '../constants/trackColumns';
 import { visibleNow } from '../utils/stories';
 import { resolveStreamSrc, resolveVideoSrc, warmStreamUrls } from '../utils/streamUrl';
 import { parseLyrics, activeLineIndex, wordProgress, lyricTheme } from '../utils/lyrics';
@@ -1155,6 +1156,36 @@ function ForYouCard({ track, isActive, user, navigate, onOpenSheet, onShare, onN
               {track.genre}
             </span>
           )}
+          {/* THERE IS A VIDEO HERE.
+            *
+            * Six of 163 published tracks have one, and until now the only
+            * sign of it was a film icon in the right hand rail, which is a
+            * column of icons people tap for liking and sharing rather than
+            * read. So a video could sit behind a record for months and never
+            * be opened, which is roughly what happened.
+            *
+            * It sits with the genre pill because that row is already the
+            * place the card says what this track IS. Blue against the genre
+            * pill's purple, so the two read as different kinds of fact.
+            *
+            * It is a button, not a label: tapping the badge is the same as
+            * tapping Watch, which gives the video a second way in that is
+            * where somebody is already looking. It disappears once the video
+            * is running, because at that point the rail button says Record
+            * and the badge would only be telling you what you can see.
+            *
+            * stopPropagation because the card itself handles taps. */}
+          {hasVideo && !watching && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setWatching(true); }}
+              className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+              style={{ background: 'rgba(96,165,250,0.18)', color: '#93c5fd', border: '1px solid rgba(96,165,250,0.35)' }}
+            >
+              <Film className="w-3 h-3" strokeWidth={2.5} />
+              Video
+            </button>
+          )}
           {(() => {
             // AI label, same rule as Browse and the track page: an admin
             // override wins over what the artist declared.
@@ -1664,7 +1695,7 @@ export default function ForYouPage() {
           const idList = rankedIds.map(r => r.id);
           const { data: rankedTracks, error: rankedErr } = await supabase
             .from('tracks')
-            .select('id, title, slug, short_code, is_podcast, is_competition_entry, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+            .select(TRACK_COLUMNS)
             .in('id', idList)
             // Competition entries are not catalogue songs. See migration 233.
             .is('competition_id', null);
@@ -1703,7 +1734,7 @@ export default function ForYouPage() {
 
         let recQuery = supabase
           .from('listener_recommendations')
-          .select('score, reason, tracks(id, title, slug, short_code, is_podcast, is_competition_entry, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
+          .select(`score, reason, tracks(${TRACK_COLUMNS})`)
           .eq('user_id', user.id)
           .order('score', { ascending: false })
           .range(offset, offset + PAGE_SIZE - 1);
@@ -1758,7 +1789,7 @@ export default function ForYouPage() {
       if (offset === 0) {
         const { data: picks, error: picksErr } = await supabase
           .from('cold_start_picks')
-          .select('position, tracks(id, title, slug, short_code, is_podcast, is_competition_entry, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url))')
+          .select(`position, tracks(${TRACK_COLUMNS})`)
           .eq('is_active', true)
           .order('position');
 
@@ -1845,7 +1876,7 @@ export default function ForYouPage() {
         const existingIdsStr = allExcludeIds.length > 0 ? `(${allExcludeIds.join(',')})` : null;
 
         let recentQuery = supabase.from('tracks')
-          .select('id, title, slug, short_code, is_podcast, is_competition_entry, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+          .select(TRACK_COLUMNS)
           .eq('is_published', true).is('competition_id', null)
           .order('created_at', { ascending: false })
           .limit(halfPage);
@@ -1859,7 +1890,7 @@ export default function ForYouPage() {
         // longer, stream_count ignores likes, comments and downloads entirely.
         // stream_count stays as the tiebreak for tracks not yet scored.
         let topQuery = supabase.from('tracks')
-          .select('id, title, slug, short_code, is_podcast, is_competition_entry, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+          .select(TRACK_COLUMNS)
           .eq('is_published', true).is('competition_id', null)
           .order('engagement_score', { ascending: false, nullsFirst: false })
           .order('stream_count', { ascending: false })
@@ -2015,7 +2046,7 @@ export default function ForYouPage() {
     (async () => {
       const { data } = await supabase
         .from('tracks')
-        .select('id, title, slug, short_code, is_podcast, is_competition_entry, genre, mood, cover_artwork_url, file_url, youtube_url, duration, lyrics, lyrics_theme, artist_id, is_beat, stream_count, like_count, bpm, beat_key, beat_scale, download_price, engagement_score, is_published, is_preorder, release_date, ai_content, ai_content_admin_override, artists!tracks_artist_id_fkey(artist_name, slug, profile_image_url)')
+        .select(TRACK_COLUMNS)
         .eq('is_published', true).is('competition_id', null)
         .order('created_at', { ascending: false })
         .limit(30);
