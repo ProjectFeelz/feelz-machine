@@ -2144,7 +2144,6 @@ export default function TrackUploadPanel() {
                 // first season's rows still carry real values.
                 school_id:         null,
                 school_name_freetext: null,
-                candidate_card_no: schoolSessionsForm.candidateCardNo.trim() || null,
                 entrant_full_name: schoolSessionsForm.entrantFullName.trim(),
                 entrant_email:     schoolSessionsForm.entrantEmail.trim(),
                 entrant_tiktok_handle: schoolSessionsForm.tiktokHandle.trim().replace(/^@/, ''),

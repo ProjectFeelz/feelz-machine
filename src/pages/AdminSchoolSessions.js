@@ -790,7 +790,7 @@ export default function AdminSchoolSessions({ embedded = false }) {
 
   const exportCsv = () => {
     const rows = [
-      ['Entrant', 'Email', 'TikTok', 'Song Covered', 'Group?', 'Group Members', 'School', 'Candidate Card #', 'Finalist', 'Winner', 'Track', 'Artist Profile', 'Submitted'],
+      ['Entrant', 'Email', 'TikTok', 'Song Covered', 'Group?', 'Group Members', 'School', 'Finalist', 'Winner', 'Track', 'Artist Profile', 'Submitted'],
       ...entries.map(e => [
         e.entrant_full_name,
         e.entrant_email || '',
@@ -799,7 +799,6 @@ export default function AdminSchoolSessions({ embedded = false }) {
         e.is_group ? 'Yes' : 'No',
         (e.members || []).map(m => m.member_name).join('; '),
         e.school?.name || e.school_name_freetext || '',
-        e.candidate_card_no || '',
         e.is_finalist ? 'Yes' : '',
         e.is_winner ? 'Yes' : '',
         e.track?.title || '',
@@ -1423,7 +1422,6 @@ export default function AdminSchoolSessions({ embedded = false }) {
                   </div>
                   <p className="text-white/40 mt-0.5">
                     Covering: {e.song?.title || 'No song selected'} · {e.school?.name || e.school_name_freetext || 'No school'}
-                    {e.candidate_card_no ? ` · Card #${e.candidate_card_no}` : ''}
                   </p>
                   {e.is_group && e.members?.length > 0 && (
                     <p className="text-white/30 mt-0.5">

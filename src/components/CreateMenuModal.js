@@ -182,6 +182,7 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
   // 'menu' | 'share' | 'live' | 'toppick'. Other pages can open straight
   // onto a panel (the Live Studio opens 'live').
   const [createTab, setCreateTab] = useState(initialTab === 'live' || initialTab === 'share' ? initialTab : 'menu');
+  const openedDirect = initialTab === 'live' || initialTab === 'share';
   const [showMerchConnect, setShowMerchConnect] = useState(false);
   const [showMerchParked, setShowMerchParked]   = useState(false);
 
@@ -392,9 +393,11 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
               <div className="relative px-5 pt-3 pb-5">
                 <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/25 sm:hidden" />
                 <div className="flex items-center justify-between">
-                  <button onClick={() => setCreateTab('menu')} aria-label="Back to the menu"
+                  {/* Opened straight onto this panel (Go live on Feelz Live, the
+                      Live Studio): back closes it and leaves you on that page. */}
+                  <button onClick={openedDirect ? close : () => setCreateTab('menu')} aria-label={openedDirect ? 'Back' : 'Back to the menu'}
                     className="h-9 px-3 flex items-center gap-1 rounded-full bg-black/30 hover:bg-black/50 text-xs font-bold text-white/80 transition">
-                    <ChevronDown className="w-4 h-4 rotate-90" /> Menu
+                    <ChevronDown className="w-4 h-4 rotate-90" /> {openedDirect ? 'Back' : 'Menu'}
                   </button>
                   <button onClick={close} aria-label="Close"
                     className="w-9 h-9 flex items-center justify-center rounded-full bg-black/30 hover:bg-black/50 transition">

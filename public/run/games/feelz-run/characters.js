@@ -90,6 +90,58 @@ function kodaPose(p) {
   return ["idle", frameFor(def, "idle", frameTime)];
 }
 
+// The same pose as kodaPose, but as a smooth 0..1 through the move rather
+// than a sprite frame, for the 3D model (engine/char3d.js), which can show
+// any moment of a move, not just the frames that were rendered.
+function kodaPose3D(p) {
+  const A = SPRITES.koda.animations;
+  const cyc = (a, phase) => phase / A[a].phasePerCycle;            // looping, by distance run
+  const clock = (a, c) => c * (A[a].fps || 10) / A[a].frames;       // by time
+  if (p.pose) return [p.pose[0], (p.pose[1] + 0.5) / ((A[p.pose[0]] || { frames: 1 }).frames)];
+  if (p.zip) return ["climb", 0.25];
+  if (p.state === "dance") return ["idle", clock("idle", frameTime)];
+  if (p.move) return [p.move.kind, Math.min(0.999, p.move.t / p.move.dur)];
+  if (p.climb) return ["climb", (-p.y) / 16 / A.climb.frames];
+  if (p.pounding) return ["pound", 0];
+  if (p.state === "pound") return ["pound", 0.2 + 0.8 * (1 - p.stateT / 0.35)];
+  if (p.state === "dash") return ["dash", Math.min(0.999, p.animClock / 0.36)];
+  if (p.kickT > 0) return ["wallkick", 1 - p.kickT / 0.45];
+  if (ATTACK_STATES.has(p.state)) {
+    const anim = p.state === "finisher" ? "kick" : p.state;
+    return [anim, 1 - p.stateT / ATTACKS[p.state].dur];
+  }
+  if (p.fightWith && p.ground) return ["punch", 0];
+  if (p.state === "stun") return ["stun", clock("stun", p.animClock)];
+  if (p.state === "hurt") return ["hurt", clock("hurt", p.animClock)];
+  if (p.state === "slide") return ["slide", Math.min(0.999, clock("slide", p.animClock))];
+  if (!p.ground) {
+    if (p.flipTime > 0) return ["flip", 1 - p.flipTime / 0.45];
+    if (p.vy < 0) return ["jump", Math.max(0, Math.min(0.999, 1 + p.vy / JUMP_SPEED))];
+    return ["fall", clock("fall", p.animClock)];
+  }
+  if (p.crouch) {
+    if (Math.abs(p.vx) > 1) return ["crouch_walk", cyc("crouch_walk", p.runPhase)];
+    return ["crouch_idle", clock("crouch_idle", frameTime)];
+  }
+  if (Math.abs(p.vx) > 1) {
+    const anim = p.boostTime > 0 ? "sprint" : "run";
+    return [anim, cyc(anim, p.runPhase)];
+  }
+  return ["idle", clock("idle", frameTime)];
+}
+
+// A runner rendered by Char3D, dropped into the 2D picture with its feet on (footX, footY).
+function drawModelFrame(c, footX, footY, opts) {
+  const size = Char3D.VIEW_METRES * PX;
+  ctx.save();
+  ctx.translate(sx(footX), sy(footY));
+  if (opts && opts.mirror) ctx.scale(1, -1);
+  if (opts && opts.alpha !== undefined) ctx.globalAlpha = opts.alpha;
+  if (opts && opts.glow) { ctx.shadowColor = opts.glow; ctx.shadowBlur = opts.blur || 7; }
+  ctx.drawImage(c, -size / 2, -size * Char3D.FOOT, size, size);
+  ctx.restore();
+}
+
 // Thin tapered streaks of air tearing past Koda, thick near him and thinning out behind.
 function drawSpeedWind(p) {
   const k = Math.min(1, p.boostTime / 0.6), cx = sx(p.x), cy = sy(p.y) - p.h * 0.55, dir = p.facing;
@@ -157,7 +209,15 @@ function drawPlayers() {
     if (p.invuln > 0 && !p.finished && Math.floor(frameTime * 14) % 2 === 0) continue;
     const [anim, frame] = kodaPose(p);
     const img = kodaSheetFor(p);
-    if (!art.koda.ready) continue;
+    // The 3D Koda when his model has this move (engine/char3d.js); otherwise the
+    // sprite sheet. Outfit colours and co-op tints are still sprite-only, so
+    // those runners keep the sprite for now.
+    const plain = img === art.koda;
+    const [anim3, t3] = typeof Char3D !== "undefined" && plain ? kodaPose3D(p) : [null, 0];
+    const facing3 = p.climb ? -p.climb.side : p.facing;
+    const model = anim3 && Char3D.has("koda", anim3)
+      ? Char3D.render("koda", "p" + p.id + (p.coopName || ""), anim3, t3, facing3) : null;
+    if (!art.koda.ready && !model) continue;
     const floor = p.ground ? p.ground.y : (floorBelow(p.x, p.y, true) || { y: p.y }).y;
     const lift = Math.max(0, floor - p.y);
     ctx.fillStyle = `rgba(0, 0, 0, ${Math.max(0.08, 0.35 - lift / 600)})`;
@@ -182,7 +242,8 @@ function drawPlayers() {
     if (p.ground && (p.ground.kind === "ground" || p.ground.kind === "roof")) {
       ctx.save();
       ctx.beginPath(); ctx.rect(sx(p.x) - 80, sy(p.ground.y) + 4, 160, 44); ctx.clip();
-      drawSheetFrame(img, SPRITES.koda, anim, frame, p.x, p.ground.y + 4, facing, { mirror: true, alpha: 0.2 });
+      if (model) drawModelFrame(model, p.x, p.ground.y + 4, { mirror: true, alpha: 0.2 });
+      else drawSheetFrame(img, SPRITES.koda, anim, frame, p.x, p.ground.y + 4, facing, { mirror: true, alpha: 0.2 });
       ctx.restore();
     }
     if (p.shield) {
@@ -191,8 +252,9 @@ function drawPlayers() {
       ctx.beginPath(); ctx.ellipse(sx(p.x), sy(p.y) - p.h / 2 - 6, 30, p.h / 2 + 18, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
     }
-    drawSheetFrame(img, SPRITES.koda, anim, frame, p.x, p.y + (p.state === "slide" ? 3 : 0), facing,
-      { glow: p.id === 1 ? "rgba(255, 186, 70, 0.22)" : "rgba(110, 220, 255, 0.4)", blur: 3 });
+    const mainGlow = { glow: p.id === 1 ? "rgba(255, 186, 70, 0.22)" : "rgba(110, 220, 255, 0.4)", blur: 3 };
+    if (model) drawModelFrame(model, p.x, p.y, mainGlow);
+    else drawSheetFrame(img, SPRITES.koda, anim, frame, p.x, p.y + (p.state === "slide" ? 3 : 0), facing, mainGlow);
     if (twoPlayer) {
       ctx.fillStyle = p.id === 1 ? "#f1ca78" : "#7fe3ff";
       ctx.font = "800 14px 'Barlow Condensed', Impact, sans-serif";

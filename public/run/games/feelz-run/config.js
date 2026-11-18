@@ -403,3 +403,33 @@ const WORLD_DRESSING = {
   ve: [["ve_decor1", 2.4], ["ve_decor2", 1.6], ["ve_barrel", 1.1]],
   rc: [["rc_decor1", 3.0], ["rc_barrel", 1.2], ["rc_cart", 1.3]]
 };
+
+
+/* ---------------------------------------------------------------------------
+   3D CHARACTERS (engine/char3d.js)
+
+   Koda as a real rigged model: every move plays at the screen's full frame
+   rate instead of 4 to 10 sprite frames. Exported from
+   FILL_Game/08_Blender/FEELZ_RUN_sprites_meshy.blend (KN_Armature, the KN_
+   actions), slimmed for phones. Any move left out of `clips` uses the sprite.
+   metres: how tall he stands on screen. holdY: the game does the climbing.
+--------------------------------------------------------------------------- */
+const CHAR3D = {
+  koda: {
+    id: "koda",
+    src: "assets/models/koda.glb",
+    metres: 1.62,
+    clips: {
+      idle: "idle", run: "run", sprint: "sprint", jump: { clip: "jump", loop: false }, fall: "fall",
+      flip: { clip: "flip", loop: false }, crouch_idle: "crouch_idle", crouch_walk: "crouch_walk",
+      slide: { clip: "slide", loop: false }, climb: { clip: "climb", holdY: true },
+      mantle: { clip: "mantle", loop: false }, vault: { clip: "vault", loop: false },
+      punch: { clip: "punch", loop: false }, kick: { clip: "kick", loop: false },
+      hurt: { clip: "hurt", loop: false }, stun: "stun",
+      takedown: { clip: "takedown", loop: false }, smash: { clip: "smash", loop: false },
+      flykick: { clip: "flykick", loop: false }, spinkick: { clip: "spinkick", loop: false },
+      dash: { clip: "dash", loop: false }, pound: { clip: "pound", loop: false },
+      wallkick: { clip: "wallkick", loop: false }
+    }
+  }
+};

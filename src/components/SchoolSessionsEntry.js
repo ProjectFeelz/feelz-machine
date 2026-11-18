@@ -31,11 +31,6 @@ const BLANK_FORM = {
   songId: '',
   isGroup: false,
   groupMembers: [''],
-  // The field this fed was removed from the form: it was optional, nobody
-  // knew what a candidate card was, and people stopped there rather than
-  // skip a question they did not understand. The key stays so the entry
-  // insert still has something to read, and it now always writes null.
-  candidateCardNo: '',
   verificationCode: '',
   entrantFullName: '',
   entrantEmail: '',
