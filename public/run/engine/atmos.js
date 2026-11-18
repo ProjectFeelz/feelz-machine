@@ -33,13 +33,26 @@ const Atmos = (() => {
     slowMs = dt > 21 ? slowMs + dt : Math.max(0, slowMs - dt * 0.5);
     if (slowMs > 2000 && quality < 2) { quality += 1; slowMs = 0; console.warn("[atmos] lighter effects for this device, level", quality); }
   }
-  let fogArt = null, blurArt = null, moteArt = null;
+  let fogArt = null, blurArt = null;
   const splashes = [];
 
+  // The look for where the camera is: the world's own, then this mission's
+  // changes to it, then the painting's (a night scene in a day world).
+  let lookKey = "", lookVal = null;
   function look() {
-    if (flag === "0" || typeof ATMOS === "undefined" || !mission || !(ATMOS.missions || []).includes(mission.id) || !level) return null;
+    if (flag === "0" || typeof ATMOS === "undefined" || !mission || !level) return null;
+    const ms = ATMOS.missions;
+    if (ms !== "all" && !(ms || []).includes(mission.id)) return null;
     const sec = sectionAt(cameraX + W / 2);
-    return sec ? ATMOS.worlds[sec.world] || null : null;
+    if (!sec) return null;
+    const key = mission.id + "|" + sec.world + "|" + (sec.backdrop || "");
+    if (key === lookKey) return lookVal;
+    const base = ATMOS.worlds[sec.world];
+    lookKey = key;
+    lookVal = base ? Object.assign({}, base,
+      ((ATMOS.byMission || {})[mission.id] || {})[sec.world] || {},
+      (ATMOS.byBackdrop || {})[sec.backdrop] || {}) : null;
+    return lookVal;
   }
   const stormK = () => Math.min(1, (storm && storm.strength) || 0);
   const flashK = () => Math.min(1, (flash || 0) + (lightningBolt ? 0.5 : 0));
@@ -85,18 +98,43 @@ const Atmos = (() => {
   }
   const BLUR_PARTS = [[0, 0, 620, 220, "top"], [620, 0, 160, 600, "side"], [800, 0, 100, 400, "top"], [0, 440, 600, 160, "bottom"], [880, 0, 320, 260, "top"]];
 
-  function motes() {
-    if (moteArt) return moteArt;
+  // One small soft sprite per kind of thing in the air.
+  const moteArts = {};
+  function motes(kind) {
+    kind = kind || "dust";
+    if (moteArts[kind]) return moteArts[kind];
     const c = document.createElement("canvas"); c.width = 32; c.height = 32;
-    const g = c.getContext("2d"), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
-    gr.addColorStop(0, "rgba(255, 236, 200, 0.9)"); gr.addColorStop(0.35, "rgba(255, 220, 170, 0.35)"); gr.addColorStop(1, "rgba(255, 220, 170, 0)");
-    g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
-    return (moteArt = c);
+    const g = c.getContext("2d");
+    const col = { dust: [255, 228, 186], spark: [170, 225, 255], sand: [236, 196, 140], petal: [235, 120, 140] }[kind] || [255, 228, 186];
+    if (kind === "petal") {
+      g.fillStyle = `rgba(${col}, 0.9)`;
+      g.beginPath(); g.ellipse(16, 16, 14, 8, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = "rgba(255, 200, 210, 0.6)"; g.beginPath(); g.ellipse(13, 13, 6, 3, 0, 0, Math.PI * 2); g.fill();
+    } else {
+      const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+      gr.addColorStop(0, `rgba(${col}, 0.9)`); gr.addColorStop(0.35, `rgba(${col}, 0.35)`); gr.addColorStop(1, `rgba(${col}, 0)`);
+      g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
+    }
+    return (moteArts[kind] = c);
   }
 
   // Fog sheets at a depth: `par` how fast it slides with the camera, `y` its band.
+  // Fog in a colour (sand haze in the desert, violet in the Veil): tinted once, kept.
+  const tinted = {};
+  function fogArtFor(tint) {
+    if (!tint) return fogSheet();
+    if (tinted[tint]) return tinted[tint];
+    const src = fogSheet(), c = document.createElement("canvas");
+    c.width = src.width; c.height = src.height;
+    const g = c.getContext("2d");
+    g.drawImage(src, 0, 0);
+    g.globalCompositeOperation = "source-in";
+    g.fillStyle = tint; g.fillRect(0, 0, c.width, c.height);
+    return (tinted[tint] = c);
+  }
+  let fogTint = null;
   function fogLayer(par, y, h, alpha, drift) {
-    const art = fogSheet(), w = 1024 * (h / 256);
+    const art = fogArtFor(fogTint), w = 1024 * (h / 256);
     const off = (((cameraX * par + frameTime * drift) % w) + w) % w;
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -108,6 +146,7 @@ const Atmos = (() => {
     const L = look();
     if (!L) return;
     pace();
+    fogTint = L.fogTint || null;
     const sk = stormK();
     ctx.save();
     // Light shafts down through the cloud, swaying slowly; fewer as the storm closes in.
@@ -239,14 +278,28 @@ const Atmos = (() => {
     } else splashes.length = 0;
     // Dust (or spray) floating in the light.
     if (L.motes) {
-      const art = motes(), n = quality ? 10 : 24;
-      ctx.globalCompositeOperation = "lighter";
+      const kind = L.mote || "dust", n = quality ? 10 : (kind === "sand" ? 40 : 24);
+      ctx.globalCompositeOperation = kind === "petal" ? "source-over" : "lighter";
+      const art = motes(kind);
       for (let i = 0; i < n; i++) {
-        const par = 0.6 + seeded(i * 3.3) * 0.8, size = 3 + seeded(i * 1.9) * 9;
-        const x = ((seeded(i * 7.1) * (W + 100) - cameraX * par + Math.sin(frameTime * 0.3 + i) * 30) % (W + 100) + (W + 100)) % (W + 100) - 50;
-        const y = ((seeded(i * 5.7) * H - frameTime * (6 + seeded(i) * 10)) % H + H) % H;
+        const par = 0.6 + seeded(i * 3.3) * 0.8, size = (kind === "sand" ? 2 : 3) + seeded(i * 1.9) * (kind === "petal" ? 7 : 9);
+        let x, y;
+        if (kind === "sand") {            // blown sideways, fast, low
+          x = ((seeded(i * 7.1) * (W + 200) - cameraX * par - frameTime * (260 + seeded(i) * 220)) % (W + 200) + (W + 200)) % (W + 200) - 100;
+          y = H * 0.35 + seeded(i * 5.7) * H * 0.65 + Math.sin(frameTime * 3 + i) * 6;
+        } else if (kind === "petal") {    // drifting down, swaying
+          x = ((seeded(i * 7.1) * (W + 100) - cameraX * par + Math.sin(frameTime * 0.8 + i) * 50 - frameTime * 20) % (W + 100) + (W + 100)) % (W + 100) - 50;
+          y = ((seeded(i * 5.7) * H + frameTime * (25 + seeded(i) * 25)) % (H + 40)) - 20;
+        } else {                          // dust floats, sparks rise
+          x = ((seeded(i * 7.1) * (W + 100) - cameraX * par + Math.sin(frameTime * 0.3 + i) * 30) % (W + 100) + (W + 100)) % (W + 100) - 50;
+          y = ((seeded(i * 5.7) * H - frameTime * (kind === "spark" ? 30 + seeded(i) * 30 : 6 + seeded(i) * 10)) % H + H) % H;
+        }
         ctx.globalAlpha = L.motes * (0.4 + Math.sin(frameTime * 1.3 + i * 2) * 0.3);
-        ctx.drawImage(art, x - size / 2, y - size / 2, size, size);
+        if (kind === "petal") {
+          ctx.save(); ctx.translate(x, y); ctx.rotate(frameTime * (1 + seeded(i)) + i);
+          ctx.drawImage(art, -size / 2, -size / 4, size, size / 2); ctx.restore();
+        } else if (kind === "sand") ctx.drawImage(art, x - size * 3, y - size / 2, size * 6, size);
+        else ctx.drawImage(art, x - size / 2, y - size / 2, size, size);
       }
       ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
     }

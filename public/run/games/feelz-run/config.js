@@ -420,7 +420,7 @@ const WORLD_DRESSING = {
 const RUNNER_CLIPS = {
   idle: "idle", run: "run", sprint: "sprint", jump: { clip: "jump", loop: false }, fall: "fall",
   flip: { clip: "flip", loop: false }, crouch_idle: "crouch_idle", crouch_walk: "crouch_walk",
-  slide: { clip: "slide", loop: false }, climb: { clip: "climb", y: "level" },
+  slide: { clip: "slide", loop: false, from: 0.12, to: 0.75 }, climb: { clip: "climb", y: "level" },
   // mantle: the pull-up only; the game lifts him onto the ledge.
   mantle: { clip: "mantle", loop: false, y: "hold", from: 0.5, to: 3.2 },
   // vault: the dive and roll without the run-up; the game's arc is the height.
@@ -480,7 +480,7 @@ for (const [who, w] of Object.entries(SPRITES.npcs.who)) {
              them, width of each, and its own models and tint
 --------------------------------------------------------------------------- */
 const WORLD3D = {
-  missions: ["m01"],
+  missions: "all",
   worlds: {
     lc: {
       fronts: ["tenement", "hostel", "kodas-building", "lc-b5", "lc-b6", "lc-b7", "lc-b2"],
@@ -489,6 +489,19 @@ const WORLD3D = {
     mc: {
       fronts: ["mc-b7", "mc-b6", "mc-b2", "tenement", "mc-b4", "mc-b8", "kodas-building"],
       tint: 0xb9b1a6, fog: 0x3d434c
+    },
+    uc: {
+      fronts: ["uc-b1", "uc-b3", "uc-b4", "uc-b2"],
+      tint: 0xe2dbd0, fog: 0x8a8274
+    },
+    rc: {
+      fronts: ["rc-b1", "rc-b3", "rc-b4", "rc-b5"],
+      tint: 0xeae3da, fog: 0x93a39f
+    },
+    // the desert keeps some of its painted rock: share is how many roofs become buildings
+    de: {
+      fronts: ["de-b1", "de-b3", "de-b4"],
+      tint: 0xd9c4a8, fog: 0x9a7a52, share: 0.55
     }
   }
 };
@@ -504,14 +517,40 @@ const WORLD3D = {
      vignette   how dark the corners go
 --------------------------------------------------------------------------- */
 const ATMOS = {
-  missions: ["m01"],
+  missions: "all",
+  // Each world's own air. mote: dust, petal, sand or spark. fogTint colours the fog.
   worlds: {
     // The Lower City: dusty, brown sludge, warm lamp light through the dirt
-    lc: { fog: 0.24, shafts: 0.12, light: "255, 210, 150", wet: 0.32, motes: 0.55, foreground: 0.7, grade: "#f4e2c8", vignette: 0.55 },
-    // The rooftops: colder, more open sky
-    mc: { fog: 0.18, shafts: 0.12, light: "200, 220, 255", wet: 0.38, motes: 0.3, foreground: 0.55, grade: "#e6eaee", vignette: 0.5 },
-    // The storm shelter: indoors, still air, one warm light
-    ve: { fog: 0.18, shafts: 0.16, light: "255, 190, 120", wet: 0, motes: 0.7, foreground: 0.3, grade: "#efd9c2", vignette: 0.62 },
-    uc: { fog: 0.22, shafts: 0.14, light: "255, 230, 190", wet: 0.3, motes: 0.2, foreground: 0.4, grade: "#efe6da", vignette: 0.45 }
+    lc: { fog: 0.24, shafts: 0.12, light: "255, 210, 150", wet: 0.32, motes: 0.55, mote: "dust", foreground: 0.7, grade: "#f4e2c8", vignette: 0.55 },
+    // The Middle City: colder, more open sky
+    mc: { fog: 0.18, shafts: 0.12, light: "200, 220, 255", wet: 0.38, motes: 0.3, mote: "dust", foreground: 0.55, grade: "#e6eaee", vignette: 0.5 },
+    // The Upper City: clean warm light, little haze
+    uc: { fog: 0.12, shafts: 0.16, light: "255, 236, 200", wet: 0.15, motes: 0.2, mote: "dust", foreground: 0.3, grade: "#f6eee2", vignette: 0.4 },
+    // The Restored City: soft gardens, petals in the air
+    rc: { fog: 0.14, shafts: 0.2, light: "255, 240, 210", wet: 0.12, motes: 0.6, mote: "petal", foreground: 0.25, grade: "#fbf0ea", vignette: 0.38 },
+    // The desert: heat haze and blowing sand
+    de: { fog: 0.22, fogTint: "#e2b878", shafts: 0.18, light: "255, 215, 150", wet: 0, motes: 0.8, mote: "sand", foreground: 0.2, grade: "#f8e2c4", vignette: 0.45 },
+    // The Veil: dreamlike, sparks drifting up through violet haze
+    ve: { fog: 0.16, fogTint: "#c9b8ff", shafts: 0.14, light: "200, 180, 255", wet: 0.1, motes: 0.7, mote: "spark", foreground: 0.15, grade: "#ece6f6", vignette: 0.55 }
+  },
+  // A mission's own changes to a world.
+  byMission: {
+    // Mission 1's storm shelter is indoors: still air, one warm light
+    m01: { ve: { fog: 0.18, fogTint: null, shafts: 0.16, light: "255, 190, 120", wet: 0, motes: 0.7, mote: "dust", foreground: 0.3, grade: "#efd9c2", vignette: 0.62 } },
+    // Mission 10's shelter is the same room
+    m10: { ve: { fog: 0.18, fogTint: null, shafts: 0.16, light: "255, 190, 120", wet: 0, motes: 0.7, mote: "dust", foreground: 0.3, grade: "#efd9c2", vignette: 0.62 } }
+  },
+  // A painting's own changes (night scenes in day worlds and the like).
+  byBackdrop: {
+    "m8-loc-02-plaza-fountain-night": { light: "150, 210, 255", mote: "spark", motes: 0.5, grade: "#dfe4f6", vignette: 0.55, wet: 0.35 },
+    "m3-loc-01-market-night": { light: "255, 200, 130", grade: "#eedcc6" },
+    "m3-loc-03-firepit-gathering": { light: "255, 170, 90", mote: "spark", motes: 0.6, grade: "#f2d8bc" },
+    "m10-loc-03-street-shrines": { light: "255, 190, 110", grade: "#efd8c0" },
+    "m9-loc-02-white-corridor": { fog: 0.08, fogTint: null, shafts: 0.06, mote: "dust", motes: 0.15, grade: "#f2f4f8", vignette: 0.35, wet: 0.25 },
+    "m9-loc-04-reservoir": { fogTint: "#9fb5a8", light: "200, 230, 210", mote: "dust", wet: 0.4 },
+    "m7-loc-01-rain-alley": { light: "180, 200, 240", grade: "#e2e6ee", wet: 0.45 },
+    "m15-loc-02-platform-over-void": { light: "220, 190, 255", mote: "spark" },
+    "m15-loc-03-mud-return": { grade: "#eadfce" }
   }
 };
+

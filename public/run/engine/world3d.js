@@ -30,7 +30,13 @@ const World3D = (() => {
   const backs = new Map();            // slot key -> object
   const drawn = new Set();            // roof solids drawn in 3D this frame
   let fillMat = null, fillGeo = null;
-  let slow = 0, lastAt = 0;
+  let slow = 0, lastAt = 0, preloaded = false;
+  // Load the buildings of every world this mission passes through, up front.
+  function preloadHere() {
+    preloaded = true;
+    const c = config(), here = new Set(((level && level.sections) || []).map(x => x.world));
+    for (const [w, ws] of Object.entries((c && c.worlds) || {})) if (here.has(w)) for (const n of [...(ws.fronts || []), ...((ws.back && ws.back.models) || [])]) model(n);
+  }
 
   const flag = (() => { try { return new URLSearchParams(location.search).get("world3d"); } catch (e) { return null; } })();
   const phone = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
@@ -39,7 +45,7 @@ const World3D = (() => {
   function config() { return typeof WORLD3D !== "undefined" ? WORLD3D : null; }
   function worldSet(world) {
     const c = config();
-    if (!c || flag === "0" || !mission || !(c.missions || []).includes(mission.id)) return null;
+    if (!c || flag === "0" || !mission || (c.missions !== "all" && !(c.missions || []).includes(mission.id))) return null;
     return c.worlds[world] || null;
   }
 
@@ -82,8 +88,7 @@ const World3D = (() => {
       fillMat = new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.9 });
       state = "ready";
       // Load the whole set for this mission now, so a roof never waits on its model.
-      const c = config();
-      for (const ws of Object.values((c && c.worlds) || {})) for (const n of [...(ws.fronts || []), ...((ws.back && ws.back.models) || [])]) model(n);
+
     }).catch(err => { console.warn("[world3d] not available:", err && err.message); state = "failed"; });
   }
 
@@ -198,6 +203,7 @@ const World3D = (() => {
     if (!set) { hideAll(); return; }
     if (state === "idle") start();
     if (state !== "ready") return;
+    if (!preloaded) preloadHere();
     // A device that can't keep up goes back to the painted buildings by itself.
     const now = performance.now(), dt = now - lastAt;
     lastAt = now;
@@ -217,7 +223,9 @@ const World3D = (() => {
     for (const s of level.solids) {
       if (s.kind !== "roof" || !onScreen(s.x, s.w, 300)) continue;
       const w = sectionAt(s.x + s.w / 2).world, ws = worldSet(w);
-      if (!ws || !ws.fronts) continue;
+      if (!ws || !ws.fronts || (typeof FLOATING_WORLDS !== "undefined" && FLOATING_WORLDS[w])) continue;
+      // some worlds keep part of their own painted roofs (the desert's rock)
+      if (ws.share !== undefined && seeded(s.seed * 1.7) >= ws.share) continue;
       let f = fronts.get(s);
       if (!f) { const g = buildFront(s, ws); if (!g) continue; f = { group: g }; fronts.set(s, f); }
       f.group.visible = true;
@@ -242,6 +250,7 @@ const World3D = (() => {
 
   // A new run: drop everything built for the last level.
   function reset() {
+    preloaded = false;
     for (const f of fronts.values()) scene && scene.remove(f.group);
     for (const b of backs.values()) scene && scene.remove(b);
     fronts.clear(); backs.clear(); drawn.clear();
