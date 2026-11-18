@@ -7,14 +7,19 @@
   <script>
     // iPhone only: Safari zooms on a double tap or pinch and ignores the
     // viewport for it, which mid-run zoomed the whole game. Android never does.
-    document.addEventListener("gesturestart", e => e.preventDefault(), { passive: false });
-    document.addEventListener("dblclick", e => e.preventDefault(), { passive: false });
+    // Only while a run is on: the menus keep every normal touch.
+    (() => {
+    const running = () => typeof gameState !== "undefined" && gameState === "playing";
+    document.addEventListener("gesturestart", e => { if (running()) e.preventDefault(); }, { passive: false });
+    document.addEventListener("dblclick", e => { if (running()) e.preventDefault(); }, { passive: false });
     let lastTouchEnd = 0;
     document.addEventListener("touchend", e => {
       const now = Date.now();
-      if (now - lastTouchEnd < 350 && !e.target.closest("input, textarea, select")) e.preventDefault();
+      // Buttons are left alone: the pad is tapped all run long, and blocking a quick second tap swallowed Pause.
+      if (running() && now - lastTouchEnd < 350 && !e.target.closest("button, a, input, textarea, select, label, [role=button]")) e.preventDefault();
       lastTouchEnd = now;
     }, { passive: false });
+    })();
   </script>
   <meta name="theme-color" content="#000000">
   <!-- Installed like the Feelz Machine app: full screen, no browser bar -->
@@ -404,6 +409,8 @@
   <script src="games/feelz-run/update.js"></script>
   <script src="engine/sprites.js"></script>
   <script src="engine/char3d.js"></script>
+  <script src="engine/world3d.js"></script>
+  <script src="engine/atmos.js"></script>
   <script src="engine/hud.js"></script>
   <script src="games/feelz-run/world.js"></script>
   <script src="games/feelz-run/characters.js"></script>

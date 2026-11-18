@@ -14,6 +14,7 @@ const WALKABLE = { ground: 1, roof: 1, catwalk: 1, awning: 1, crate: 1, barrel: 
   container: 1, carriage: 1, booth: 1, garden: 1, glass: 1, turnstile: 1 };
 
 function buildLevel(data) {
+  if (typeof World3D !== "undefined") World3D.reset();
   const L = {
     solids: [], climbs: [], mud: [], checkpoints: [], wardens: [], drones: [], boosts: [], rewinds: [],
     records: [], notes: [], journal: [], coin: null, decor: [], sections: [],

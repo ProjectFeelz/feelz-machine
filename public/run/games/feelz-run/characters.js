@@ -216,7 +216,10 @@ function drawPlayers() {
     const [anim3, t3] = typeof Char3D !== "undefined" && modelId ? kodaPose3D(p) : [null, 0];
     const facing3 = p.climb ? -p.climb.side : p.facing;
     const model = anim3 && Char3D.has(modelId, anim3)
-      ? Char3D.render(modelId, "p" + p.id + (p.coopName || ""), anim3, t3, facing3) : null;
+      ? Char3D.render(modelId, "p" + p.id + (p.coopName || ""), anim3, t3, facing3,
+          // On a ladder or a pipe he faces into the picture, back to us, turned a touch so his
+          // side reads. (The climb clip itself turns him round, so the turn here is small.)
+          p.climb && anim3 === "climb" ? { turn: 0.18 } : undefined) : null;
     if (!art.koda.ready && !model) continue;
     const floor = p.ground ? p.ground.y : (floorBelow(p.x, p.y, true) || { y: p.y }).y;
     const lift = Math.max(0, floor - p.y);
@@ -331,17 +334,41 @@ function drawWardens() {
 
 function drawDrones() {
   const s = SPRITES.drone;
-  if (!art.drone.ready) return;
-  for (const dr of level.drones) {
+  for (let i = 0; i < level.drones.length; i++) {
+    const dr = level.drones[i];
     if (!dr.alive || !onScreen(dr.x, 0, 200)) continue;
-    const f = Math.floor(frameTime * s.fps) % s.frames, w = m(1.5), h = w * s.frameHeight / s.frameWidth;
+    const X = sx(dr.x), Y = sy(dr.y);
     // its scanning light
-    const beam = ctx.createLinearGradient(0, sy(dr.y), 0, sy(dr.y) + 140);
+    const beam = ctx.createLinearGradient(0, Y, 0, Y + 140);
     beam.addColorStop(0, "rgba(224, 83, 60, 0.35)"); beam.addColorStop(1, "rgba(224, 83, 60, 0)");
     ctx.fillStyle = beam;
-    ctx.beginPath(); ctx.moveTo(sx(dr.x) - 8, sy(dr.y) + 10); ctx.lineTo(sx(dr.x) + 8, sy(dr.y) + 10); ctx.lineTo(sx(dr.x) + 44, sy(dr.y) + 140); ctx.lineTo(sx(dr.x) - 44, sy(dr.y) + 140); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(X - 8, Y + 10); ctx.lineTo(X + 8, Y + 10); ctx.lineTo(X + 44, Y + 140); ctx.lineTo(X - 44, Y + 140); ctx.closePath(); ctx.fill();
+    // The 3D drone: it turns smoothly to face where it is going (looking at
+    // you on the way round), leans into the sweep and sways as it bobs.
+    const def = (i % 3 === 2 ? CHAR3D.props.watcher : CHAR3D.props.scanner);
+    if (def && typeof Char3D !== "undefined" && Char3D.want(def.id)) {
+      const goal = dr.facing > 0 ? -0.55 : -2.59;
+      const step = Math.max(0, Math.min(0.1, frameTime - (dr.drawnAt || frameTime)));
+      dr.drawnAt = frameTime;
+      if (dr.yaw === undefined) dr.yaw = goal;
+      dr.yaw += (goal - dr.yaw) * Math.min(1, step * 3.2);
+      const turning = Math.abs(goal - dr.yaw);
+      const lean = dr.facing * 0.16 * (1 - Math.min(1, turning));
+      const sway = Math.cos(dr.t * 2.2) * 0.07;
+      const c = Char3D.renderProp(def.id, dr.yaw + (def.yaw || 0), sway, -lean);
+      if (c) {
+        const size = m(Char3D.VIEW_METRES);
+        const eye = ctx.createRadialGradient(X, Y, 2, X, Y, m(0.9));
+        eye.addColorStop(0, "rgba(255, 70, 50, 0.32)"); eye.addColorStop(1, "rgba(255, 70, 50, 0)");
+        ctx.fillStyle = eye; ctx.fillRect(X - m(0.9), Y - m(0.9), m(1.8), m(1.8));
+        ctx.drawImage(c, X - size / 2, Y - size / 2, size, size);
+        continue;
+      }
+    }
+    if (!art.drone.ready) continue;
+    const f = Math.floor(frameTime * s.fps) % s.frames, w = m(1.5), h = w * s.frameHeight / s.frameWidth;
     ctx.save();
-    ctx.translate(sx(dr.x), sy(dr.y));
+    ctx.translate(X, Y);
     if (dr.facing < 0) ctx.scale(-1, 1);
     ctx.shadowColor = "#e0533c"; ctx.shadowBlur = 10;
     ctx.drawImage(art.drone, f * s.frameWidth, 0, s.frameWidth, s.frameHeight, -w / 2, -h / 2, w, h);

@@ -272,7 +272,7 @@ function driveHoldsClock(realDt) {
     if (veil.still > 0.25 || p.finished) {
       songHeld = false;
       sfx.holdPad(false);
-      if (songAudio.paused && soundOn && !reading) { seekSong(songClock); songAudio.play().then(() => { musicBlocked = false; }).catch(() => { musicBlocked = true; }); }
+      if (songAudio.paused && soundOn && !reading) resumeSong();
       return false;
     }
     songHeld = true;
@@ -289,8 +289,7 @@ function driveHoldsClock(realDt) {
     if (drive.active) { drive.active = false; drive.rewinding = false; }
     songHeld = false; sfx.rewindTape(false);
     if (wasHolding && songAudio.paused && soundOn && !reading && gameState === "playing" && !taunt) {
-      seekSong(songClock);
-      songAudio.play().then(() => { musicBlocked = false; }).catch(() => { musicBlocked = true; });
+      resumeSong();
     }
     return false;
   }
@@ -312,8 +311,7 @@ function driveHoldsClock(realDt) {
   if (moving) {
     songHeld = false; sfx.rewindTape(false);
     if (drive.rewinding || drive.stopT > 0.25) {
-      seekSong(songClock);
-      if (soundOn && songAudio.paused && !reading) songAudio.play().then(() => { musicBlocked = false; }).catch(() => { musicBlocked = true; });
+      if (soundOn && songAudio.paused && !reading) resumeSong(); else if (drive.rewinding) seekSong(songClock);
     }
     drive.stopT = 0; drive.rewinding = false; drive.rate = 1;
     if (!drive.trail.length || songClock - drive.trail[drive.trail.length - 1].t > 0.05) {

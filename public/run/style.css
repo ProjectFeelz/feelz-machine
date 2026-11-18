@@ -1384,8 +1384,10 @@ html.rotated .rotate-hint { display: none !important; }
 
 
 /* iPhone: no double-tap zoom, no text selection or grey highlight when the
-   touch buttons are held, no "copy / look up" pop-up on a long press. */
-html, body, #gameFrame, canvas, button, .touch-button {
+   touch buttons are held, no "copy / look up" pop-up on a long press.
+   Only the game itself and its buttons: the menus keep normal touch, so
+   swiping and scrolling them works on phones and tablets. */
+#gameCanvas, .touch-button, #pauseButton {
   touch-action: manipulation;
   -webkit-user-select: none;
   user-select: none;

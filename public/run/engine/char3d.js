@@ -22,6 +22,7 @@
      Char3D.ready(id)                        the model is in and usable
      Char3D.has(id, anim)                    there is a clip for this move
      Char3D.render(id, key, anim, t, facing) pose and render, answers the canvas
+     Char3D.renderProp(id, yaw, pitch, roll) a prop (drone), centred
        t      0..1 through the move (looping moves wrap)
        The canvas is shared: draw it before the next render() call.
 --------------------------------------------------------------------------- */
@@ -111,6 +112,18 @@ const Char3D = (() => {
         const holder = new THREE.Group();
         holder.add(root);
         holder.updateMatrixWorld(true);
+        if (def.prop) {
+          // A thing with no skeleton (a drone): sized by its width, centred in
+          // the canvas so the game can draw it centred on its own position.
+          const box = new THREE.Box3().setFromObject(root), size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3());
+          const k = (def.metres || 1) / Math.max(0.01, Math.max(size.x, size.z));
+          root.scale.multiplyScalar(k);
+          root.position.set(-mid.x * k, VIEW_METRES * (FOOT - 0.5) - mid.y * k, -mid.z * k);
+          holder.visible = false;
+          scene.add(holder);
+          Object.assign(m, { state: "ready", root, holder, mixer: null, actions: {}, height: def.metres || 1 });
+          return;
+        }
         let lo = Infinity, hi = -Infinity;
         const v = new THREE.Vector3();
         root.traverse(o => { if (o.isBone) { o.getWorldPosition(v); lo = Math.min(lo, v.y); hi = Math.max(hi, v.y); } });
@@ -139,8 +152,17 @@ const Char3D = (() => {
         Object.assign(m, { state: "ready", root, holder, mixer, actions, height: def.metres || 1.8 });
         // Keep the run in place: the game moves him, not the clip.
         // His standing hip height, from the idle: the level the game's feet line is drawn against.
-        const standY = hipsStart(actions.idle && actions.idle.clip) || hipsStart(actions.run && actions.run.clip) || 1;
-        for (const a of Object.values(actions)) if (a.inPlace) stripRootMotion(a.clip, a.y, standY);
+        // (borrowed clips are levelled against the model's own one, def.stand)
+        // ("rest": the hips where the model stands in its own rest pose)
+        // Which way is up for the hips (Mixamo rigs often stand on their side
+        // inside a turned armature): the bob and the height use that axis.
+        let hips = null;
+        root.traverse(o => { if (!hips && /hips$/i.test(o.name)) hips = o; });
+        const up = upAxis(hips);
+        const restY = def.stand === "rest" && hips ? up.sign * hips.position.getComponent(up.axis) : 0;
+        const own = def.stand && actions[def.stand];
+        const standY = restY || hipsStart(own && own.clip, up) || hipsStart(actions.idle && actions.idle.clip, up) || hipsStart(actions.run && actions.run.clip, up) || 1;
+        for (const a of Object.values(actions)) if (a.inPlace) stripRootMotion(a.clip, a.y, standY, up);
       }, undefined, err => {
         console.warn("[char3d] could not load", def.src, err && err.message);
         m.state = "failed";
@@ -158,25 +180,41 @@ const Char3D = (() => {
   //          lifts him onto the ledge)
   //   level  hold, and set the hips at standing height (climb: the clip
   //          hangs him far above his feet)
+  //   scale  borrowed from another body: hips scaled to this one's height
   //   cap    never above standing height (vault: the game's arc is the jump,
   //          the clip keeps the tuck and the roll)
   const hipsTrack = clip => clip && clip.tracks.find(t => /hips\.position$/i.test(t.name));
-  function hipsStart(clip) { const t = hipsTrack(clip); return t ? t.values[1] : 0; }
-  function stripRootMotion(clip, mode, standY) {
+  function upAxis(hips) {
+    if (!hips || !hips.parent) return { axis: 1, sign: 1 };
+    hips.parent.updateWorldMatrix(true, false);
+    const q = new THREE.Quaternion();
+    hips.parent.getWorldQuaternion(q);
+    const v = new THREE.Vector3(0, 1, 0).applyQuaternion(q.invert());
+    const c = [v.x, v.y, v.z], axis = [0, 1, 2].reduce((b, i) => Math.abs(c[i]) > Math.abs(c[b]) ? i : b, 1);
+    return { axis, sign: c[axis] < 0 ? -1 : 1 };
+  }
+  function hipsStart(clip, up) { const t = hipsTrack(clip); return t ? up.sign * t.values[up.axis] : 0; }
+  function stripRootMotion(clip, mode, standY, up) {
     const t = hipsTrack(clip);
     if (!t) return;
-    const v = t.values, n = v.length / 3;
-    const x0 = v[0], z0 = v[2], rise = n > 1 ? v[v.length - 2] - v[1] : 0;
+    const v = t.values, n = v.length / 3, U = up.axis, S = up.sign;
+    const flat = [0, 1, 2].filter(i => i !== U);
+    // level (the climb): centred right over his hands' line, not wherever the clip started
+    const f0 = mode === "level" ? 0 : v[flat[0]], f1 = mode === "level" ? 0 : v[flat[1]];
+    const H = i => S * v[i * 3 + U], setH = (i, h) => { v[i * 3 + U] = S * h; };
+    const rise = n > 1 ? H(n - 1) - H(0) : 0;
     for (let i = 0; i < n; i++) {
-      v[i * 3] = x0; v[i * 3 + 2] = z0;
-      if (mode === "hold" || mode === "level") v[i * 3 + 1] -= rise * (i / Math.max(1, n - 1));
+      v[i * 3 + flat[0]] = f0; v[i * 3 + flat[1]] = f1;
+      if (mode === "hold" || mode === "level") setH(i, H(i) - rise * (i / Math.max(1, n - 1)));
     }
     if (mode === "level") {
-      let sum = 0; for (let i = 0; i < n; i++) sum += v[i * 3 + 1];
+      let sum = 0; for (let i = 0; i < n; i++) sum += H(i);
       const shift = standY - sum / n;
-      for (let i = 0; i < n; i++) v[i * 3 + 1] += shift;
+      for (let i = 0; i < n; i++) setH(i, H(i) + shift);
     }
-    if (mode === "cap") for (let i = 0; i < n; i++) v[i * 3 + 1] = Math.min(v[i * 3 + 1], standY);
+    // scale: a clip borrowed from a taller or shorter body, its hips height scaled to this one's
+    if (mode === "scale" && H(0)) { const k = standY / H(0); for (let i = 0; i < n; i++) setH(i, H(i) * k); }
+    if (mode === "cap") for (let i = 0; i < n; i++) setH(i, Math.min(H(i), standY));
   }
 
   // A phone that cannot keep up goes back to the sprites by itself: if the
@@ -252,14 +290,38 @@ const Char3D = (() => {
     return glCanvas;
   }
 
+  /**
+   * Render a prop (no skeleton) turned to yaw / pitch / roll in radians,
+   * centred in the canvas. Same canvas and scale as render().
+   */
+  function renderProp(id, yaw, pitch, roll) {
+    if (!ready(id)) return null;
+    pace();
+    const m = models[id];
+    m.holder.visible = true;
+    m.holder.rotation.set(pitch || 0, yaw || 0, roll || 0, "YXZ");
+    const view = VIEW_METRES;
+    camera.left = -view / 2; camera.right = view / 2;
+    camera.top = view * FOOT; camera.bottom = -view * (1 - FOOT);
+    camera.position.set(0, 0, 10);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    for (const k in models) if (models[k].holder && k !== id) models[k].holder.visible = false;
+    renderer.render(scene, camera);
+    m.holder.visible = false;
+    return glCanvas;
+  }
+  // Load a model the game knows about, without drawing it yet.
+  function want(id) { if (!models[id] && known[id]) preload(known[id]); return ready(id); }
+
   const VIEW_METRES = 3.2;           // world metres across each runner's canvas
   const FOOT = 0.86;                 // how far down the canvas the feet sit
 
-  return { preload, register, ready, has, render, mood, SIZE, VIEW_METRES, FOOT };
+  return { preload, register, ready, has, want, render, renderProp, mood, SIZE, VIEW_METRES, FOOT };
 })();
 
 // Koda loads straight away; Zora and the enemies the first time they appear.
 if (typeof CHAR3D !== "undefined") {
-  for (const def of [CHAR3D.koda, CHAR3D.zora, ...Object.values(CHAR3D.enemies || {})]) Char3D.register(def);
+  for (const def of [CHAR3D.koda, CHAR3D.zora, ...Object.values(CHAR3D.enemies || {}), ...Object.values(CHAR3D.props || {}), ...Object.values(CHAR3D.townsfolk || {})]) Char3D.register(def);
   if (CHAR3D.koda && Object.keys(CHAR3D.koda.clips || {}).length) Char3D.preload(CHAR3D.koda);
 }

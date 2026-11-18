@@ -14,6 +14,8 @@ function render() {
   const mirror = mission && mission.mirror;
   if (mirror) { ctx.translate(W, 0); ctx.scale(-1, 1); ctx.fillText = mirroredText; }
   drawBackground();
+  if (typeof World3D !== "undefined") World3D.draw();
+  if (typeof Atmos !== "undefined") Atmos.back();
   drawDecor();
   drawSetDressing();
   drawTunnels();
@@ -23,6 +25,7 @@ function render() {
     if (s.kind === "awning" && level.stalls.length) continue;   // drawn with the stalls
     drawSolid(s);
   }
+  if (typeof Atmos !== "undefined") Atmos.reflect();
   drawBeatSolids();
   drawValves();
   drawClimbs();
@@ -45,6 +48,7 @@ function render() {
   drawStallFronts();
   drawHedges();
   drawCrowds("front");
+  if (typeof Atmos !== "undefined") Atmos.front();
   drawDebris();
   drawStormFront();
   drawParticles();
@@ -54,6 +58,7 @@ function render() {
   const baseRain = mission.weather && mission.weather.rain !== undefined ? mission.weather.rain : 0.15;
   drawRain(indoors ? 0 : baseRain + storm.strength * 0.9);
   if (mirror) { ctx.restore(); ctx.save(); ctx.fillText = rawFillText; }
+  if (typeof Atmos !== "undefined") Atmos.grade();
   drawScreenFx();
   ctx.restore();
   ctx.fillText = rawFillText;

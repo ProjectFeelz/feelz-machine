@@ -588,6 +588,8 @@ function drawSolid(s) {
       const h = Math.min(s.h, viewBottom - s.y);
       if (h <= 0) return;
       // A building: a modelled front where the world has them, else wall panels, windows and a metal cap.
+      // Drawn in real 3D already (engine/world3d.js): just its gold lip here.
+      if (typeof World3D !== "undefined" && World3D.covers(s)) { goldEdge(s.x, s.y, s.w); return; }
       const roofWorld = sectionAt(s.x + s.w / 2).world;
       // the desert mixes ruins in with its rock
       if ((roofWorld !== "de" || seeded(s.seed * 1.7) < 0.55) && drawMeshyBuildings(s, roofWorld)) { goldEdge(s.x, s.y, s.w); return; }
@@ -837,11 +839,46 @@ function drawSolid(s) {
   }
 }
 
+// A steel ladder bolted to the wall: two rails, rungs, rust and a wet shine.
+// Each one is painted once into its own little canvas and reused.
+function drawLadder(c, h) {
+  const wpx = Math.round(m(0.62)), hpx = Math.round(h + 10);
+  if (!c.ladderArt || c.ladderArt.height !== hpx) {
+    const cv = document.createElement("canvas");
+    cv.width = wpx + 8; cv.height = hpx;
+    const g = cv.getContext("2d"), rail = Math.max(4, Math.round(m(0.07))), L = 4, R = 4 + wpx - rail;
+    // its shadow on the wall
+    g.fillStyle = "rgba(0, 0, 0, 0.35)";
+    g.fillRect(L + 3, 4, rail, hpx - 4); g.fillRect(R + 3, 4, rail, hpx - 4);
+    // rungs
+    const step = Math.round(m(0.3));
+    for (let y = hpx - Math.round(step * 0.6); y > 6; y -= step) {
+      g.fillStyle = "rgba(0, 0, 0, 0.35)"; g.fillRect(L + rail, y + 3, R - L - rail, 3);
+      const rg = g.createLinearGradient(0, y, 0, y + 4);
+      rg.addColorStop(0, "#a9a39a"); rg.addColorStop(0.5, "#5f5a54"); rg.addColorStop(1, "#2a2724");
+      g.fillStyle = rg; g.fillRect(L + rail - 1, y, R - L - rail + 2, 4);
+    }
+    // rails: steel, rust towards the bottom, a bright wet edge
+    for (const x of [L, R]) {
+      const gr = g.createLinearGradient(x, 0, x + rail, 0);
+      gr.addColorStop(0, "#2b2826"); gr.addColorStop(0.35, "#8f8a82"); gr.addColorStop(0.55, "#d4cfc4"); gr.addColorStop(1, "#3a3532");
+      g.fillStyle = gr; g.fillRect(x, 0, rail, hpx);
+      const rust = g.createLinearGradient(0, hpx * 0.4, 0, hpx);
+      rust.addColorStop(0, "rgba(120, 60, 25, 0)"); rust.addColorStop(1, "rgba(120, 60, 25, 0.55)");
+      g.fillStyle = rust; g.fillRect(x, 0, rail, hpx);
+      // brackets into the wall
+      for (let y = 18; y < hpx - 6; y += Math.round(m(1.4))) { g.fillStyle = "#1c1a18"; g.fillRect(x - 2, y, rail + 4, 5); g.fillStyle = "#6d675f"; g.fillRect(x - 2, y, rail + 4, 1); }
+    }
+    c.ladderArt = cv;
+  }
+  ctx.drawImage(c.ladderArt, Math.round(sx(c.x) - c.ladderArt.width / 2), Math.round(sy(c.top) - 10));
+}
+
 function drawClimbs() {
   for (const c of level.climbs) {
     if (!onScreen(c.x, 0)) continue;
     const h = c.bottom - c.top;
-    if (!c.strip) drawKit("pipe_climb", c.x - 8, c.top - 6, 16, h + 6);
+    drawLadder(c, h);
     // Gold chevrons: climb here. Only when someone is close enough to use it, so the street stays clean.
     const near = Math.min(...players.map(p => Math.abs(p.x - c.x) / m(1) + (p.y < c.top - m(0.5) || p.y > c.bottom + m(1.2) ? 99 : 0)));
     const show = Math.max(0, Math.min(1, (4 - near) / 1.5));
@@ -851,7 +888,7 @@ function drawClimbs() {
     ctx.globalAlpha = pulse;
     ctx.strokeStyle = "#f1ca78"; ctx.lineWidth = 2.5;
     ctx.shadowColor = "#f1ca78"; ctx.shadowBlur = 8;
-    const cx = c.strip ? sx(c.x) - 8 : sx(c.x) + 16;
+    const cx = sx(c.x) + m(0.55);
     ctx.beginPath();
     for (let y = c.top + 14; y < c.bottom - 6; y += 26) { ctx.moveTo(cx - 5, sy(y) + 5); ctx.lineTo(cx, sy(y)); ctx.lineTo(cx + 5, sy(y) + 5); }
     ctx.stroke();
@@ -890,7 +927,23 @@ function drawNpcs() {
       continue;
     }
     // The people in the lockup are townsfolk with a walk: standing in the cage, walking off when freed.
-    const caged = (level.cages || []).some(c => level.npcs[c.npc] === n);
+    const cage = (level.cages || []).find(c => level.npcs[c.npc] === n), caged = !!cage;
+    // In 3D when their model is in: waiting, a cheer as the cage lifts, then away up the street.
+    const tf = !n.ghost && typeof Char3D !== "undefined" && CHAR3D.townsfolk && CHAR3D.townsfolk[n.who];
+    if (tf && Char3D.want(tf.id)) {
+      const cheering = cage && cage.open && cage.t < 0.7;
+      const anim = cheering ? "cheer" : n.running ? "walk" : "idle";
+      const t = cheering ? 0.25 + cage.t / 2.2 : n.running ? (n.walked || 0) / 2.2 : (frameTime + n.x * 0.37) / 9.9;
+      // facing the street while they wait, turned a little toward us
+      const c3 = Char3D.render(tf.id, "npc", anim, t, n.running ? (n.facing || 1) : (n.facing || 1), n.running ? undefined : { turn: 0.55 });
+      if (c3) {
+        ctx.save();
+        if (n.running) ctx.globalAlpha = Math.max(0, Math.min(1, 1.6 - (n.walked || 0) / 8));
+        drawModelFrame(c3, x, footY);
+        ctx.restore();
+        continue;
+      }
+    }
     if (caged && art.walkers && art.walkers.ready && WALKER_FOR[n.who] !== undefined) {
       const WK = SPRITES.walkers, size = WK.metres * PX * 0.93;
       const wf = n.running ? Math.floor((n.walked || 0) / WK.stride) % WK.frames : 4;

@@ -453,5 +453,65 @@ const CHAR3D = {
     dock:     warden3D("dock", 2.07),
     guard:    warden3D("guard", 2.15),
     handler:  warden3D("handler", 2.04)
+  },
+  // Things with no skeleton: sized by their width, turned by the game.
+  props: {
+    scanner: { id: "drone-scanner", src: "assets/models/drone-scanner.glb", metres: 1.5, prop: true },
+    watcher: { id: "drone-watcher", src: "assets/models/drone-watcher.glb", metres: 1.35, prop: true, yaw: Math.PI / 2 }
+  },
+  // The townsfolk (the ones you free from the cages), by SPRITES.npcs name.
+  // The moves are shared Mixamo clips, levelled to each one's own standing height.
+  townsfolk: {}
+};
+for (const [who, w] of Object.entries(SPRITES.npcs.who)) {
+  CHAR3D.townsfolk[who] = { id: "tf-" + who.toLowerCase(), src: "assets/models/townsfolk/" + who.toLowerCase() + ".glb",
+    metres: +(w.metres * 0.888).toFixed(3), stand: "rest",
+    clips: { walk: { clip: "walk", y: "scale" }, idle: { clip: "idle", y: "level" }, cheer: { clip: "cheer", y: "level" }, run: { clip: "run", y: "level" } } };
+}
+
+/* ---------------------------------------------------------------------------
+   3D BUILDINGS (engine/world3d.js)
+   Per mission, the worlds whose roofs are drawn as modelled 3D buildings
+   (assets/models/world/<name>.glb), and the row of buildings further back.
+     fronts  the buildings you run across, picked per panel
+     tint    multiplied into their colours (the Lower City's dust)
+     fog     the colour distance fades to
+     back    the row behind: depth (m behind the play plane), gap between
+             them, width of each, and its own models and tint
+--------------------------------------------------------------------------- */
+const WORLD3D = {
+  missions: ["m01"],
+  worlds: {
+    lc: {
+      fronts: ["tenement", "hostel", "kodas-building", "lc-b5", "lc-b6", "lc-b7", "lc-b2"],
+      tint: 0xb3a58f, fog: 0x4a4036
+    },
+    mc: {
+      fronts: ["mc-b7", "mc-b6", "mc-b2", "tenement", "mc-b4", "mc-b8", "kodas-building"],
+      tint: 0xb9b1a6, fog: 0x3d434c
+    }
+  }
+};
+
+/* ---------------------------------------------------------------------------
+   ATMOSPHERE (engine/atmos.js), per mission and world
+     fog        how thick the drifting fog sheets are (0..1)
+     shafts     light through the cloud (0..1), in the colour `light` (r, g, b)
+     wet        how strongly wet floors mirror what stands on them
+     motes      dust or spray floating in the air
+     foreground how often something passes right in front of the lens (0..1)
+     grade      colour multiplied over the picture; lift: colour screened in
+     vignette   how dark the corners go
+--------------------------------------------------------------------------- */
+const ATMOS = {
+  missions: ["m01"],
+  worlds: {
+    // The Lower City: dusty, brown sludge, warm lamp light through the dirt
+    lc: { fog: 0.24, shafts: 0.12, light: "255, 210, 150", wet: 0.32, motes: 0.55, foreground: 0.7, grade: "#f4e2c8", vignette: 0.55 },
+    // The rooftops: colder, more open sky
+    mc: { fog: 0.18, shafts: 0.12, light: "200, 220, 255", wet: 0.38, motes: 0.3, foreground: 0.55, grade: "#e6eaee", vignette: 0.5 },
+    // The storm shelter: indoors, still air, one warm light
+    ve: { fog: 0.18, shafts: 0.16, light: "255, 190, 120", wet: 0, motes: 0.7, foreground: 0.3, grade: "#efd9c2", vignette: 0.62 },
+    uc: { fog: 0.22, shafts: 0.14, light: "255, 230, 190", wet: 0.3, motes: 0.2, foreground: 0.4, grade: "#efe6da", vignette: 0.45 }
   }
 };

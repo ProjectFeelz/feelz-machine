@@ -22,6 +22,13 @@ function seekSong(seconds) {
   try { songAudio.currentTime = songClock; } catch (e) { /* not seekable yet: the clock carries on alone */ }
 }
 
+// Start the song again after the game held it. When it was only held (not rewound) it is already in
+// the right place: jumping in the file anyway makes iPhone stop and load for a second or more.
+function resumeSong() {
+  if (Math.abs((songAudio.currentTime || 0) - songClock) > 0.35) seekSong(songClock);
+  songAudio.play().then(() => { musicBlocked = false; }).catch(() => { musicBlocked = true; });
+}
+
 // The song slows for a few seconds (breathing at a window): the music and the clock both.
 let songSlowT = 0;
 
@@ -86,7 +93,8 @@ function loadSongBlob(src) {
     if (!mission || mission.song.src !== src || songAudio.getAttribute("src") !== src) return;
     // Already playing from the stream: leave it be. Swapping the source mid-song makes the
     // browser load it again, a gap you can hear. The copy in memory is used next time.
-    if (!songAudio.paused) return;
+    // Mid-run (a Music Drive hold pauses it) the swap waits too: iPhone reloads and stalls on it.
+    if (!songAudio.paused || gameState === "playing") return;
     const wasPlaying = false;
     songAudio.src = url;
     songAudio.addEventListener("loadedmetadata", () => {
