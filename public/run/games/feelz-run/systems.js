@@ -1238,12 +1238,12 @@ function drawZoraCompanion() {
     ctx.beginPath(); ctx.arc(tx, ty, 9 * (1 - u) + 2, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
-  // She floats upright beside him, leaning into the way he's going, toes pointed down:
-  // a calm, hovering pose (the 3D Zora when she's loaded, her drawn sheet until then).
+  // She flies beside him like a hero: leaning into the flight, one arm reaching ahead,
+  // the other swept back, one leg trailing (the 3D Zora; her drawn sheet until she's loaded).
   ctx.save();
-  ctx.translate(X, Y - m(0.5)); ctx.rotate(f * (moving ? 0.12 : 0.04) + Math.sin(frameTime * 1.7) * 0.03); ctx.translate(-X, -(Y - m(0.5)));
+  ctx.translate(X, Y - m(0.5)); ctx.rotate(Math.sin(frameTime * 1.7) * 0.03); ctx.translate(-X, -(Y - m(0.5)));
   const z3 = typeof Char3D !== "undefined" && Char3D.want && Char3D.want("zora") && Char3D.has("zora", "idle")
-    ? Char3D.render("zora", "companion", "idle", frameTime * 0.25, f, {}) : null;
+    ? Char3D.render("zora", "companion", "idle", 0.3, f, { fly: true }) : null;
   if (z3) drawModelFrame(z3, veil.zc.x, veil.zc.y - m(0.9) + bob, { glow: "rgba(255, 170, 200, 0.75)", blur: 16, alpha: 0.95 });
   else drawSheetFrame(art.zora, def, "idle", Math.floor(frameTime * 5) % 8, veil.zc.x, veil.zc.y - m(0.9) + bob, f, { glow: "rgba(255, 170, 200, 0.75)", blur: 16, alpha: 0.95 });
   ctx.restore();

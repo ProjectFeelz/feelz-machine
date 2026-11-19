@@ -265,6 +265,13 @@ const Char3D = (() => {
    * model's feet at (SIZE/2, SIZE * FOOT) and `metresTall` of world shown, or
    * null when it cannot.
    */
+// Bones the game turns by hand go back to where they were before each frame, so a
+// bone the clip doesn't move can't keep turning further frame after frame.
+function keepRest(root, bone) {
+  const list = root.userData.rest || (root.userData.rest = []);
+  if (!list.some(r => r.bone === bone)) list.push({ bone, q: bone.quaternion.clone() });
+}
+function restoreRest(root) { for (const r of root.userData.rest || []) r.bone.quaternion.copy(r.q); }
 const ARM_SWING = 0.6, ARM_OUT = 0.25, ARM_FORE = 0.7;
   // Running arms: the run clips hold his arms almost still at his chest, so swing
   // them from the shoulder, each arm opposite its own leg, the way a runner pumps.
@@ -274,7 +281,7 @@ const ARM_SWING = 0.6, ARM_OUT = 0.25, ARM_FORE = 0.7;
     if (!amount) return;
     if (!_sw.v) { _sw.v = new THREE.Vector3(); _sw.a = new THREE.Vector3(); _sw.b = new THREE.Vector3(); _sw.q = new THREE.Quaternion(); _sw.pq = new THREE.Quaternion(); _sw.axis = new THREE.Vector3(); _sw.rq = new THREE.Quaternion(); _sw.fwd = new THREE.Vector3(); _sw.q2 = new THREE.Quaternion(); }
     if (!root.userData.swing) {
-      const find = re => { let f = null; root.traverse(o => { if (!f && o.isBone && re.test(o.name)) f = o; }); return f; };
+      const find = re => { let f = null; root.traverse(o => { if (!f && o.isBone && re.test(o.name)) f = o; }); if (f) keepRest(root, f); return f; };
       root.userData.swing = ["Left", "Right"].map(s => ({ arm: find(new RegExp(s + "Arm$")), fore: find(new RegExp(s + "ForeArm$")), hip: find(new RegExp(s + "UpLeg$")), knee: find(new RegExp(s + "Leg$")) }));
     }
     root.updateMatrixWorld(true);
@@ -309,6 +316,48 @@ const ARM_SWING = 0.6, ARM_OUT = 0.25, ARM_FORE = 0.7;
     }
   }
 
+const FLY_POSE = { lean: 1.2, backLeg: 0.3, backKnee: 0.05, frontLeg: -1.2, frontKnee: 1.7, armOut: 1.0, armFwd: -2.1, armBack: 1.3, foreOut: 0, head: -1.0 };
+  // Flying, superhero style: body leaning forward almost level, arms spread wide,
+  // one leg trailing straight behind, the other knee drawn up. Built on her idle pose
+  // by turning bones about her own axes (the clips have no flying move).
+  const _fp = {};
+  function flyPose(root, P) {
+    if (!_fp.q) { _fp.q = new THREE.Quaternion(); _fp.pq = new THREE.Quaternion(); _fp.rq = new THREE.Quaternion(); _fp.v = new THREE.Vector3(); _fp.ax = new THREE.Vector3(); }
+    if (!root.userData.fly) {
+      const find = re => { let f = null; root.traverse(o => { if (!f && o.isBone && re.test(o.name)) f = o; }); if (f) keepRest(root, f); return f; };
+      root.userData.fly = { hips: find(/Hips$/), spine: find(/Spine1$/), head: find(/Head$/),
+        la: find(/LeftArm$/), ra: find(/RightArm$/), lf: find(/LeftForeArm$/), rf: find(/RightForeArm$/),
+        lu: find(/LeftUpLeg$/), ru: find(/RightUpLeg$/), ll: find(/LeftLeg$/), rl: find(/RightLeg$/) };
+    }
+    const b = root.userData.fly;
+    root.updateMatrixWorld(true);
+    root.getWorldQuaternion(_fp.rq);
+    // turn a bone by `ang` about one of the model's own axes (x across, y up, z forward)
+    const turn = (bone, axis, ang) => {
+      if (!bone || !ang) return;
+      _fp.ax.set(axis === "x" ? 1 : 0, axis === "y" ? 1 : 0, axis === "z" ? 1 : 0).applyQuaternion(_fp.rq).normalize();
+      bone.parent.getWorldQuaternion(_fp.pq);
+      _fp.q.setFromAxisAngle(_fp.ax, ang);
+      bone.quaternion.premultiply(_fp.pq.clone().invert().multiply(_fp.q).multiply(_fp.pq));
+      bone.updateMatrixWorld(true);
+    };
+    const side = bone => { bone.getWorldPosition(_fp.v); root.worldToLocal(_fp.v); return _fp.v.x >= 0 ? 1 : -1; };
+    // legs first (before the body tips, so their axes are the standing ones)
+    turn(b.lu, "x", P.backLeg); turn(b.ll, "x", P.backKnee);
+    turn(b.ru, "x", P.frontLeg); turn(b.rl, "x", P.frontKnee);
+    // arms out wide, a little back, straight
+    // one arm reaching forward into the flight, the other swept back
+    for (const [arm, fore, swing] of [[b.ra, b.rf, P.armFwd], [b.la, b.lf, P.armBack]]) {
+      if (!arm) continue;
+      const s = side(arm);
+      turn(arm, "z", s * P.armOut); turn(arm, "x", swing);
+      if (fore) turn(fore, "z", s * P.foreOut);
+    }
+    turn(b.head, "x", P.head);
+    // and the whole body tips forward into the flight
+    turn(b.hips, "x", P.lean);
+  }
+
   function render(id, key, anim, t, facing, opts) {
     if (!ready(id)) return null;
     pace();
@@ -324,8 +373,10 @@ const ARM_SWING = 0.6, ARM_OUT = 0.25, ARM_FORE = 0.7;
     a.act.enabled = true;
     a.act.setEffectiveWeight(1);
     a.act.time = tt;
+    restoreRest(m.root);
     m.mixer.update(0);
     if (a.clip.name === "run" || a.clip.name === "sprint") armSwing(m.root, ARM_SWING);
+    if (opts && opts.fly) flyPose(m.root, FLY_POSE);
     m.holder.visible = true;
     m.holder.rotation.y = (facing < 0 ? -1 : 1) * Math.PI / 2 * (opts && opts.turn !== undefined ? opts.turn : 1);
     // Frame the shot: the same metres-per-pixel as the 2D world.
