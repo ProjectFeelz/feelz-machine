@@ -13,14 +13,20 @@ const art = {
   tiles: loadImage(SPRITES.tiles.src),
   logo: loadImage(GAME.logo),
   zora: loadImage(SPRITES.zora.src),
-  back: { koda: loadImage(SPRITES.back.koda), koda_mask: loadImage(SPRITES.back.koda_mask), zora: loadImage(SPRITES.back.zora) },
+  back: {},
   enemies: {},
   npcs: loadImage(SPRITES.npcs.src),
   loc: {},
   worlds: {}
 };
 
-for (const [k, d] of Object.entries(SPRITES.enemies)) art.enemies[k] = loadImage(d.src);
+// Loaded the first time they're drawn: a level only pulls in the wardens it has,
+// and the seen-from-behind sheets only for the inward runs.
+const lazyImage = (obj, key, src) => Object.defineProperty(obj, key, { enumerable: true, get() { return this["_" + key] || (this["_" + key] = loadImage(src)); } });
+for (const [k, d] of Object.entries(SPRITES.enemies)) lazyImage(art.enemies, k, d.src);
+lazyImage(art.back, "koda", SPRITES.back.koda);
+lazyImage(art.back, "koda_mask", SPRITES.back.koda_mask);
+lazyImage(art.back, "zora", SPRITES.back.zora);
 
 // Location paintings: loaded when a mission that uses them is chosen.
 function locImage(name) {
@@ -28,8 +34,17 @@ function locImage(name) {
   return art.loc[name];
 }
 
+// Each world's layers load the first time something draws them (a level only
+// pulls in the worlds it visits). near can be a list: the pictures alternate.
 for (const [id, wd] of Object.entries(WORLDS)) {
-  art.worlds[id] = { far: loadImage(wd.far), near: loadImage(wd.near), clouds: loadImage(wd.clouds) };
+  const lazy = {};
+  for (const k of ["far", "near", "clouds"]) {
+    Object.defineProperty(lazy, k, { enumerable: true, get() {
+      if (!this["_" + k]) this["_" + k] = Array.isArray(wd[k]) ? wd[k].map(loadImage) : loadImage(wd[k]);
+      return this["_" + k];
+    } });
+  }
+  art.worlds[id] = lazy;
 }
 
 // Where each piece sits in the city kit sheet: [x, y, width, height]. Rendered from the F.I.L.L. 3D kits.

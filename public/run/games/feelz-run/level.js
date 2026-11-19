@@ -114,7 +114,18 @@ function buildLevel(data) {
   L.gems = [];
   if (freeRoam) freeRoamLevel(L);
   L.dressing = dressStreets(L, data);
+  prefetchArt(L, data);
   return L;
+}
+
+// Start loading the pictures this level uses (its worlds, its wardens, the
+// seen-from-behind runner for inward runs), so they're in before they're needed.
+function prefetchArt(L, data) {
+  try {
+    for (const sec of L.sections || []) { const w = art.worlds[sec.world]; if (w) { void w.far; void w.near; void w.clouds; } if (sec.backdrop) locImage(sec.backdrop); }
+    for (const wd of L.wardens || []) void art.enemies[wd.kind];
+    if ((data.inward || []).length) { void art.back.koda; void art.back.koda_mask; void art.back.zora; }
+  } catch (e) { /* drawing loads anything missed */ }
 }
 
 // Street dressing: every few metres of open street gets something that belongs in that world.

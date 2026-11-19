@@ -189,17 +189,17 @@ const SPRITES = {
 --------------------------------------------------------------------------- */
 
 const WORLDS = {
-  lc: { name: "LOWER CITY",  far: "assets/worlds/lc-far.webp", near: "assets/worlds/lc-near.webp", clouds: "assets/worlds/lc-clouds.webp",
+  lc: { name: "LOWER CITY",  far: "assets/worlds/lc-far.webp", near: "assets/worlds/lc-near-1.webp", clouds: "assets/worlds/lc-clouds.webp",
         sky: ["#3b2a52", "#c0613d", "#f4b35e"], storm: ["#140f22", "#3a2440", "#6a3a3a"] },
-  mc: { name: "MIDDLE CITY", far: "assets/worlds/mc-far.webp", near: "assets/worlds/mc-near.webp", clouds: "assets/worlds/mc-clouds.webp",
+  mc: { name: "MIDDLE CITY", far: "assets/worlds/mc-far.webp", near: ["assets/worlds/mc-near-1.webp", "assets/worlds/mc-near-2.webp"], clouds: "assets/worlds/mc-clouds.webp",
         sky: ["#1f3a66", "#5d7fb0", "#f0a860"], storm: ["#0e1226", "#2a2f5a", "#5a3b62"] },
-  uc: { name: "UPPER CITY",  far: "assets/worlds/uc-far.webp", near: "assets/worlds/uc-near.webp", clouds: "assets/worlds/uc-clouds.webp",
+  uc: { name: "UPPER CITY",  far: "assets/worlds/uc-far.webp", near: ["assets/worlds/uc-near-1.webp", "assets/worlds/uc-near-2.webp"], clouds: "assets/worlds/uc-clouds.webp",
         sky: ["#2a5f9c", "#86b8e0", "#f5dfa8"], storm: ["#16224a", "#3d4f80", "#7a6a88"] },
   de: { name: "THE DESERT",  far: "assets/worlds/de-far.webp", near: "assets/worlds/de-near.webp", clouds: "assets/worlds/de-clouds.webp",
         sky: ["#2b2350", "#c27a48", "#f2c47e"], storm: ["#2a1c18", "#6b4630", "#a77a4c"] },
-  rc: { name: "THE RESTORED CITY", far: "assets/worlds/rc-far.webp", near: "assets/worlds/rc-near.webp", clouds: "assets/worlds/rc-clouds.webp",
+  rc: { name: "THE RESTORED CITY", far: "assets/worlds/rc-far.webp", near: "assets/worlds/rc-near-1.webp", clouds: "assets/worlds/rc-clouds.webp",
         sky: ["#3a6aa0", "#f0b878", "#ffe2a8"], storm: ["#2a3450", "#6a6a88", "#a89a98"] },
-  ve: { name: "THE VEIL",    far: "assets/worlds/ve-far.webp", near: "assets/worlds/ve-near.webp", clouds: "assets/worlds/ve-clouds.webp",
+  ve: { name: "THE VEIL",    far: "assets/worlds/ve-far.webp", near: "assets/worlds/ve-near-1.webp", clouds: "assets/worlds/ve-clouds.webp",
         sky: ["#0c1230", "#24307a", "#4a4aa8"], storm: ["#0c1230", "#24307a", "#4a4aa8"] }
 };
 

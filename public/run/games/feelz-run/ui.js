@@ -797,7 +797,7 @@ function renderSkills() {
   body.append(grid);
 }
 
-// Koda posed for the card (assets/cards/<id>.webp), on a soft glow.
+// Card picture (assets/cards/<id>.webp): painted scenes for skills, posed Koda on a soft glow for styles.
 function cardArt(id, cls, glow) {
   const box = el("span", cls);
   if (glow) box.style.setProperty("--glow", glow);

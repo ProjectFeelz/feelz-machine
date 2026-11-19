@@ -170,41 +170,60 @@ function drawMeshyStand(name, cx, bottom, h) {
   return true;
 }
 
-// A rooftop: one or more modelled building fronts side by side, their flat roofs on the line you run on.
-// Taller than the model: the upper floors, then its middle storeys repeated, then its ground floor on the street.
+// A rooftop: modelled building fronts side by side, their flat roofs on the line you run on.
+// Neighbours are never the same building, widths and shading vary a little, and a
+// building taller than its model stands on the storeys of others (a different one
+// for each band, with a ledge between), so a street never repeats one pattern.
 function drawMeshyBuildings(s, world) {
   const list = MESHY_BUILDINGS[world];
   if (!list || !meshyReady()) return false;
   const img = art.meshyKit;
-  const n = Math.max(1, Math.round(s.w / m(8))), pw = s.w / n;
+  const n = Math.max(1, Math.round(s.w / m(8)));
   const lift = MESHY_LIFT[world];
   const top = sy(s.y), bottom = sy(Math.min(s.y + s.h, 0) > s.y + m(1) ? Math.min(s.y + s.h, 0) : s.y + s.h);
   const bodyH = bottom - top;
   if (bodyH <= 0) return true;
+  const SHADES = [0.88, 1, 1.08];
+  const piece = (name, shade) => {
+    const r = MESHY_KIT[name];
+    const filter = [lift, shade !== 1 ? "brightness(" + shade + ")" : ""].filter(Boolean).join(" ");
+    // made once per building and shade, never a filter on every draw (very slow)
+    const c = filter ? baked(img, r[0], r[1], r[2], r[3], filter) : null;
+    return c ? { src: c, ax: 0, ay: 0, aw: r[2], ah: r[3], roof: r[4] } : { src: img, ax: r[0], ay: r[1], aw: r[2], ah: r[3], roof: r[4] };
+  };
+  // widths that vary but fill the roof exactly
+  const wts = []; let tot = 0;
+  for (let i = 0; i < n; i++) { const w = 0.78 + seeded(s.seed * 5.3 + i * 2.9) * 0.44; wts.push(w); tot += w; }
+  let X = sx(s.x), prev = -1;
   for (let i = 0; i < n; i++) {
-    const r = MESHY_KIT[list[Math.floor(seeded(s.seed * 3.1 + i * 7.7) * list.length) % list.length]];
-    const [ax0, ay0, aw, ah, roof] = r;
-    // The world's lift (brighter concrete) comes from a copy of this building made
-    // once, not from a filter on every draw: a filter per draw is very slow.
-    const lifted = lift ? baked(img, ax0, ay0, aw, ah, lift) : null;
-    const src = lifted || img, ax = lifted ? 0 : ax0, ay = lifted ? 0 : ay0;
-    const X = sx(s.x) + i * pw, k = pw / aw;
+    const pw = s.w * wts[i] / tot;
+    let idx = Math.floor(seeded(s.seed * 3.1 + i * 7.7) * list.length) % list.length;
+    if (idx === prev && list.length > 1) idx = (idx + 1) % list.length;
+    prev = idx;
+    const shade = SHADES[Math.floor(seeded(s.seed * 1.9 + i * 4.1) * SHADES.length)];
+    const P = piece(list[idx], shade);
+    const { src, ax, ay, aw, ah, roof } = P, k = pw / aw;
     if (roof > 0) ctx.drawImage(src, ax, ay, aw, roof, X, top - roof * k, pw, roof * k);
     const bodySrc = ah - roof, bodyNat = bodySrc * k;
     if (bodyH <= bodyNat * 1.08) {
       if (bodyH / bodyNat >= 0.7) ctx.drawImage(src, ax, ay + roof, aw, bodySrc, X, top, pw, bodyH);
       else ctx.drawImage(src, ax, ay + roof, aw, bodyH / k, X, top, pw, bodyH);
     } else {
-      const upSrc = bodySrc * 0.42, baseSrc = bodySrc * 0.3, bandSrc = bodySrc * 0.28;
+      // its own upper floors, then the storeys of other buildings, then a ground floor on the street
+      const upSrc = bodySrc * 0.55;
       ctx.drawImage(src, ax, ay + roof, aw, upSrc, X, top, pw, upSrc * k);
-      const baseH = baseSrc * k;
-      if (bottom - baseH < H + 10) ctx.drawImage(src, ax, ay + ah - baseSrc, aw, baseSrc, X, bottom - baseH, pw, baseH);
-      const bandH = bandSrc * k, bandY = ay + roof + upSrc;
-      for (let y = top + upSrc * k; y < bottom - baseH && y < H + 10; y += bandH) {
-        const hh = Math.min(bandH, bottom - baseH - y);
-        ctx.drawImage(src, ax, bandY, aw, hh / k, X, y, pw, hh);
+      const base = piece(list[(idx + 2) % list.length], shade), bk = pw / base.aw, baseSrc = (base.ah - base.roof) * 0.32, baseH = baseSrc * bk;
+      let y = top + upSrc * k, j = 0;
+      while (y < bottom - baseH && y < H + 10) {
+        const B = piece(list[(idx + 1 + j) % list.length], SHADES[(j + i) % SHADES.length]), bk2 = pw / B.aw;
+        const bSrc = (B.ah - B.roof) * 0.5, bH = bSrc * bk2, hh = Math.min(bH, bottom - baseH - y);
+        ctx.drawImage(B.src, B.ax, B.ay + B.roof + (B.ah - B.roof) * 0.2, B.aw, hh / bk2, X, y, pw, hh);
+        ctx.fillStyle = "rgba(10, 10, 14, 0.55)"; ctx.fillRect(X, y, pw, Math.max(2, pw * 0.012));   // the ledge between
+        y += hh; j++;
       }
+      if (bottom - baseH < H + 10) ctx.drawImage(base.src, base.ax, base.ay + base.ah - baseSrc, base.aw, baseSrc, X, bottom - baseH, pw, baseH);
     }
+    X += pw;
   }
   return true;
 }
@@ -380,6 +399,7 @@ function drawMesa(s, h) {
 /* ---------- the sky and the city behind ---------- */
 
 function drawTiled(img, parallax, y, height, alpha) {
+  if (Array.isArray(img)) return drawTiledSet(img, parallax, y, height, alpha);
   if (!img.ready || alpha <= 0) return;
   const scale = height / img.height;
   const tileW = img.width * scale;
@@ -390,6 +410,24 @@ function drawTiled(img, parallax, y, height, alpha) {
     if (((k % 2) + 2) % 2 === 1) {
       ctx.save(); ctx.translate(x + tileW, y); ctx.scale(-1, 1); ctx.drawImage(img, 0, 0, tileW + 1, height); ctx.restore();
     } else ctx.drawImage(img, x, y, tileW + 1, height);
+  }
+  ctx.restore();
+}
+
+// Several pictures of the same kind of street, laid end to end in a seeded order
+// so the strip never repeats one picture.
+function drawTiledSet(imgs, parallax, y, height, alpha) {
+  const ready = imgs.filter(i => i.ready);
+  if (!ready.length || alpha <= 0) return;
+  const tw = ready.map(i => i.width * height / i.height), avg = tw.reduce((a, b) => a + b, 0) / tw.length;
+  const off = cameraX * parallax;
+  let k = Math.floor(off / avg) - 1, x = k * avg - off;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  while (x < W) {
+    const i = Math.floor(seeded(k * 7.3 + 11) * ready.length) % ready.length;
+    ctx.drawImage(ready[i], x, y + height - ready[i].height * height / ready[i].height, avg + 1, height);
+    x += avg; k++;
   }
   ctx.restore();
 }
