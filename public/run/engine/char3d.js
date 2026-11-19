@@ -322,11 +322,11 @@ const ARM_SWING = 0.3, ARM_OUT = 0, ARM_FORE = 0;
 // elbow is beside his body (no more than ARM_CLEAR_MAX). The collarbone takes a
 // share of the turn so the shoulder moves with the arm and stays joined to it.
 // Measured in his chest's own frame, so it works whichever way the move turns him.
-const ARM_CLEAR = 1.05, ARM_CLEAR_MAX = 0.7, ARM_CLAVICLE = 0.3, HAND_CLEAR = 0.85, HAND_CLEAR_MAX = 0.9;
+const ARM_CLEAR = 1.05, ARM_CLEAR_MAX = 0.7, ARM_CLAVICLE = 0.3, HAND_CLEAR = 0.85, HAND_CLEAR_MAX = 0.9, BODY_DEPTH = 0.55;
 // crouched, he keeps his arms spread wide for balance, well clear of his knees
 const ARM_WIDE = 1.9, ARM_WIDE_MAX = 1.1, ARM_WIDE_LIFT = 0.45;
 const _ac = {};
-function armClear(root, wide) {
+function armClear(root, wide, back) {
   if (!_ac.c) for (const k of ["c", "l", "r", "e", "s", "lat", "up", "fwd", "n", "t"]) _ac[k] = new THREE.Vector3();
   if (!_ac.q) { _ac.q = new THREE.Quaternion(); _ac.pq = new THREE.Quaternion(); }
   if (!root.userData.clear) {
@@ -359,8 +359,10 @@ function armClear(root, wide) {
     _ac.n.subVectors(_ac.e, _ac.s);
     if (_ac.n.dot(_ac.up) > 0) return;                                 // arm raised: leave it
     const ex = outOf(sd, k);
-    const want = wide ? ARM_WIDE : ARM_CLEAR;
+    const want = wide ? ARM_WIDE : back ? BACK_CLEAR : ARM_CLEAR;
     if (ex >= want) return;
+    // well in front of him or behind him, the elbow is clear of his body already
+    if (!wide && Math.abs(_ac.e.copy(_ac.n).add(_ac.s).sub(_ac.c).dot(_ac.fwd)) / sw > BODY_DEPTH) return;
     const upper = Math.max(0.2, Math.hypot(_ac.n.dot(_ac.lat), _ac.n.dot(_ac.up)) / sw);
     const ang = Math.min(wide ? ARM_WIDE_MAX : ARM_CLEAR_MAX, (want - ex) / upper);
     // which way is "out" for this arm: try it, and turn back the other way if it went in
@@ -377,12 +379,21 @@ function armClear(root, wide) {
     if (!hand) return;
     const handOut = () => { W(hand, _ac.e); return k * _ac.e.sub(_ac.c).dot(_ac.lat) / sw; };
     const hx = handOut();
-    if (hx >= HAND_CLEAR) return;
+    const handWant = back ? BACK_CLEAR : HAND_CLEAR;
+    if (hx >= handWant) return;
+    W(hand, _ac.e); if (Math.abs(_ac.e.sub(_ac.c).dot(_ac.fwd)) / sw > BODY_DEPTH + 0.15) return;   // out in front: clear
     W(sd.fore, _ac.s); W(hand, _ac.e);
     const fore = Math.max(0.2, _ac.s.distanceTo(_ac.e) / sw);
-    const ang = Math.min(HAND_CLEAR_MAX, (HAND_CLEAR - hx) / fore);
-    turn(sd.fore, ang);
-    if (handOut() < hx) turn(sd.fore, -2 * ang);
+    const ang = Math.min(HAND_CLEAR_MAX, (handWant - hx) / fore);
+    // turn the forearm about the axis that swings the hand sideways, whichever
+    // way the forearm points (forward, down, or back behind him)
+    _ac.n.subVectors(_ac.e, _ac.s).normalize();
+    _ac.t.crossVectors(_ac.n, _ac.lat);
+    if (_ac.t.lengthSq() < 1e-6) return;
+    _ac.t.normalize();
+    const spin = (bone, a) => { bone.parent.getWorldQuaternion(_ac.pq); _ac.q.setFromAxisAngle(_ac.t, a); bone.quaternion.premultiply(_ac.pq.clone().invert().multiply(_ac.q).multiply(_ac.pq)); bone.updateMatrixWorld(true); };
+    spin(sd.fore, ang);
+    if (handOut() < hx) spin(sd.fore, -2 * ang);
   });
   // crouched: swing both arms forward a little too, so the hands ride out in
   // front of his knees, not down beside them
@@ -401,7 +412,8 @@ function armClear(root, wide) {
 // (the card stands upright in a scene seen from above, so an upright runner reads
 // as leaning back), and each foot kept in line under its hip instead of flicking
 // out to the side.
-const BACK_SWING = 0.1, BACK_LEAN = 0.3, BACK_FOOT = 0.25;
+// from behind his body hides anything in front of it, so his arms and hands are kept out past his sides
+const BACK_SWING = 0.15, BACK_LEAN = 0.12, BACK_FOOT = 0.25, BACK_CLEAR = 1.7;
 const _bk = {};
 function backRun(root) {
   if (!_bk.l) for (const k of ["l", "r", "c", "lat", "up", "fwd", "a", "b", "t"]) _bk[k] = new THREE.Vector3();
@@ -512,7 +524,7 @@ const FLY_POSE = { lean: 1.2, backLeg: 0.3, backKnee: 0.05, frontLeg: -1.2, fron
     if (running) armSwing(m.root, back ? BACK_SWING : ARM_SWING);
     if (back && running) backRun(m.root);
     if (opts && opts.fly) flyPose(m.root, FLY_POSE);
-    else armClear(m.root, /^crouch/.test(a.clip.name));
+    else armClear(m.root, /^crouch/.test(a.clip.name), back);
     m.holder.visible = true;
     m.holder.rotation.y = (facing < 0 ? -1 : 1) * Math.PI / 2 * (opts && opts.turn !== undefined ? opts.turn : 1);
     // Frame the shot: the same metres-per-pixel as the 2D world.
