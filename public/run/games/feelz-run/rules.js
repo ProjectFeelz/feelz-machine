@@ -303,7 +303,7 @@ function updatePickups(dt) {
     // Shutters start closing as a runner reaches their trigger.
     for (const s of level.solids) if (s.gate && !s.gate.closing && !s.gate.pulse && p.x >= s.gate.trigger && p.x < s.x + m(1) && runTime > (s.gate.rearm || 0)) { s.gate.closing = true; s.gate.shutT = 0; sfx.gate(); }
     // Touching the finish counts however you got there (a high route can pass a checkpoint's marker overhead).
-    if (overlap(box, level.goal) && (p.cp >= level.checkpoints.length - 2 || (aiRival && p.id === 2))) { p.cp = Math.max(p.cp, level.checkpoints.length - 2); finishPlayer(p); }
+    if (overlap(box, level.goal) && (p.cp >= level.checkpoints.length - 2 || freeRoam || (aiRival && p.id === 2))) { p.cp = Math.max(p.cp, level.checkpoints.length - 2); finishPlayer(p); }
   }
 }
 

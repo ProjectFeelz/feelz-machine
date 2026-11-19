@@ -533,16 +533,26 @@ function updatePlayer(p, i, dt) {
   }
   if (dropThrough && wasGround && wasGround.oneWay) { p.y += 3; p.ground = null; p.coyote = 0; p.jumpBuffer = 0; p.vy = 60 * K; }
   if (p.ground && !wasGround && prevY < p.y - 0.5) { sfx.land(); burst(p.x, p.y, "#c9b79a", 5, 90); }
-  // Footsteps: one per stride, the sound of whatever is underfoot.
+  // Footsteps: on the beat of his feet. The run cycle follows the distance
+  // covered (runPhase); a step sounds each time the cycle passes a moment where
+  // a foot comes down in the animation, the sound of whatever is underfoot.
   if (p.ground && wasGround && Math.abs(p.vx) > 40 && p.state !== "slide") {
-    p.stride = (p.stride || 0) + Math.abs(p.vx) * dt;
-    if (p.stride > m(p.crouch ? 0.55 : 0.85)) {
-      p.stride = 0;
+    const anim = p.crouch ? "crouch_walk" : p.boostTime > 0 ? "sprint" : "run";
+    const A = SPRITES.koda && SPRITES.koda.animations && SPRITES.koda.animations[anim];
+    const per = A && A.phasePerCycle ? A.phasePerCycle : 11;
+    const now = p.runPhase / per, was = p.stepPhase === undefined || p.stepAnim !== anim ? now : p.stepPhase;
+    const model = typeof mission !== "undefined" && mission && mission.player === "zora" ? "zora" : "koda";
+    const lands = (typeof Char3D !== "undefined" && Char3D.footfalls && Char3D.footfalls(model, anim)) || [0, 0.5];
+    // did the cycle pass a landing since last frame? (it only ever moves forward)
+    let hit = false;
+    if (now > was) for (const f of lands) { const c = Math.floor(was - f) + 1 + f; if (c <= now) { hit = true; break; } }
+    p.stepPhase = now; p.stepAnim = anim;
+    if (hit) {
       const k = p.ground.kind;
       const surface = p.mudT > 0 ? "wet" : (k === "catwalk" || k === "carriage" || k === "container" || k === "glass" || k === "grate" || k === "vent" || k === "flicker" || k === "turnflat" || k === "broken") ? "metal" : k === "garden" ? "soft" : "stone";
       sfx.step(surface);
     }
-  } else if (!p.ground) p.stride = m(0.6);
+  } else p.stepPhase = undefined;
   if (p.ground) p.dashUsed = false;
   if (p.ground && p.pounding) groundPoundLand(p, i);
   // Ground pound: press down in the air.

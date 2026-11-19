@@ -272,7 +272,7 @@ function keepRest(root, bone) {
   if (!list.some(r => r.bone === bone)) list.push({ bone, q: bone.quaternion.clone() });
 }
 function restoreRest(root) { for (const r of root.userData.rest || []) r.bone.quaternion.copy(r.q); }
-const ARM_SWING = 0.3, ARM_OUT = 0, ARM_FORE = 0.4;
+const ARM_SWING = 0.3, ARM_OUT = 0, ARM_FORE = 0;
   // Running arms: the run clips hold his arms almost still at his chest, so swing
   // them from the shoulder, each arm opposite its own leg, the way a runner pumps.
   // (amount is the swing in radians either side; 0 leaves the clip as it is)
@@ -322,9 +322,11 @@ const ARM_SWING = 0.3, ARM_OUT = 0, ARM_FORE = 0.4;
 // elbow is beside his body (no more than ARM_CLEAR_MAX). The collarbone takes a
 // share of the turn so the shoulder moves with the arm and stays joined to it.
 // Measured in his chest's own frame, so it works whichever way the move turns him.
-const ARM_CLEAR = 1.05, ARM_CLEAR_MAX = 0.7, ARM_CLAVICLE = 0.3;
+const ARM_CLEAR = 1.05, ARM_CLEAR_MAX = 0.7, ARM_CLAVICLE = 0.3, HAND_CLEAR = 0.85, HAND_CLEAR_MAX = 0.9;
+// crouched, he keeps his arms spread wide for balance, well clear of his knees
+const ARM_WIDE = 1.9, ARM_WIDE_MAX = 1.1, ARM_WIDE_LIFT = 0.45;
 const _ac = {};
-function armClear(root) {
+function armClear(root, wide) {
   if (!_ac.c) for (const k of ["c", "l", "r", "e", "s", "lat", "up", "fwd", "n", "t"]) _ac[k] = new THREE.Vector3();
   if (!_ac.q) { _ac.q = new THREE.Quaternion(); _ac.pq = new THREE.Quaternion(); }
   if (!root.userData.clear) {
@@ -357,14 +359,92 @@ function armClear(root) {
     _ac.n.subVectors(_ac.e, _ac.s);
     if (_ac.n.dot(_ac.up) > 0) return;                                 // arm raised: leave it
     const ex = outOf(sd, k);
-    if (ex >= ARM_CLEAR) return;
+    const want = wide ? ARM_WIDE : ARM_CLEAR;
+    if (ex >= want) return;
     const upper = Math.max(0.2, Math.hypot(_ac.n.dot(_ac.lat), _ac.n.dot(_ac.up)) / sw);
-    const ang = Math.min(ARM_CLEAR_MAX, (ARM_CLEAR - ex) / upper);
+    const ang = Math.min(wide ? ARM_WIDE_MAX : ARM_CLEAR_MAX, (want - ex) / upper);
     // which way is "out" for this arm: try it, and turn back the other way if it went in
     const share = sd.clav ? ARM_CLAVICLE : 0;
     if (sd.clav) turn(sd.clav, ang * share);
     turn(sd.arm, ang * (1 - share));
     if (outOf(sd, k) < ex) { if (sd.clav) turn(sd.clav, -2 * ang * share); turn(sd.arm, -2 * ang * (1 - share)); }
+  });
+  // and the hands: a forearm folded in across his middle is turned out at the
+  // elbow, so the hand passes in front of his side instead of through his body
+  C.sides.forEach((sd, i) => {
+    const k = i === 0 ? 1 : -1;
+    const hand = sd.hand || (sd.hand = (() => { let f = null; sd.fore.traverse(o => { if (!f && o !== sd.fore && o.isBone && /Hand$/.test(o.name)) f = o; }); return f; })());
+    if (!hand) return;
+    const handOut = () => { W(hand, _ac.e); return k * _ac.e.sub(_ac.c).dot(_ac.lat) / sw; };
+    const hx = handOut();
+    if (hx >= HAND_CLEAR) return;
+    W(sd.fore, _ac.s); W(hand, _ac.e);
+    const fore = Math.max(0.2, _ac.s.distanceTo(_ac.e) / sw);
+    const ang = Math.min(HAND_CLEAR_MAX, (HAND_CLEAR - hx) / fore);
+    turn(sd.fore, ang);
+    if (handOut() < hx) turn(sd.fore, -2 * ang);
+  });
+  // crouched: swing both arms forward a little too, so the hands ride out in
+  // front of his knees, not down beside them
+  if (wide) for (const sd of C.sides) {
+    const hand = sd.hand || (sd.hand = (() => { let f = null; sd.fore.traverse(o => { if (!f && o !== sd.fore && o.isBone && /Hand$/.test(o.name)) f = o; }); return f; })());
+    if (!hand) continue;
+    const ahead = () => { W(hand, _ac.e); W(sd.arm, _ac.s); return _ac.e.sub(_ac.s).dot(_ac.fwd); };
+    const before = ahead();
+    const swing = a => { sd.arm.parent.getWorldQuaternion(_ac.pq); _ac.q.setFromAxisAngle(_ac.lat, a); sd.arm.quaternion.premultiply(_ac.pq.clone().invert().multiply(_ac.q).multiply(_ac.pq)); sd.arm.updateMatrixWorld(true); };
+    swing(ARM_WIDE_LIFT);
+    if (ahead() < before) swing(-2 * ARM_WIDE_LIFT);
+  }
+}
+
+// Seen from behind (the inward runs): a lighter arm swing, a lean into the run
+// (the card stands upright in a scene seen from above, so an upright runner reads
+// as leaning back), and each foot kept in line under its hip instead of flicking
+// out to the side.
+const BACK_SWING = 0.1, BACK_LEAN = 0.3, BACK_FOOT = 0.25;
+const _bk = {};
+function backRun(root) {
+  if (!_bk.l) for (const k of ["l", "r", "c", "lat", "up", "fwd", "a", "b", "t"]) _bk[k] = new THREE.Vector3();
+  if (!_bk.q) { _bk.q = new THREE.Quaternion(); _bk.pq = new THREE.Quaternion(); }
+  if (!root.userData.back) {
+    const find = re => { let f = null; root.traverse(o => { if (!f && o.isBone && re.test(o.name)) f = o; }); if (f) keepRest(root, f); return f; };
+    root.userData.back = { spine: find(/Spine$/), neck: find(/Neck$/), chest: find(/Spine2$/) || find(/Spine1$/),
+      legs: ["Left", "Right"].map(sd => ({ hip: find(new RegExp(sd + "UpLeg$")), knee: find(new RegExp(sd + "Leg$")), foot: find(new RegExp(sd + "Foot$")) })) };
+  }
+  const K = root.userData.back;
+  if (!K.spine || !K.neck || !K.chest || K.legs.some(l => !l.hip || !l.foot)) return;
+  const W = (b, v) => b.getWorldPosition(v);
+  const rot = (bone, axis, ang) => { bone.parent.getWorldQuaternion(_bk.pq); _bk.q.setFromAxisAngle(axis, ang); bone.quaternion.premultiply(_bk.pq.clone().invert().multiply(_bk.q).multiply(_bk.pq)); bone.updateMatrixWorld(true); };
+  const frame = () => {
+    root.updateMatrixWorld(true);
+    W(K.legs[0].hip, _bk.l); W(K.legs[1].hip, _bk.r);
+    _bk.lat.subVectors(_bk.l, _bk.r).normalize();
+    W(K.neck, _bk.up); W(K.spine, _bk.t); _bk.up.sub(_bk.t);
+    _bk.up.addScaledVector(_bk.lat, -_bk.up.dot(_bk.lat)).normalize();
+    _bk.fwd.crossVectors(_bk.lat, _bk.up).normalize();
+  };
+  frame();
+  // lean into it: whichever way takes the neck forward
+  W(K.neck, _bk.a); const n0 = _bk.a.dot(_bk.fwd);
+  rot(K.spine, _bk.lat, BACK_LEAN);
+  W(K.neck, _bk.a); if (_bk.a.dot(_bk.fwd) < n0) rot(K.spine, _bk.lat, -2 * BACK_LEAN);
+  frame();
+  // feet under the hips
+  const hw = _bk.l.distanceTo(_bk.r) / 2;
+  K.legs.forEach((lg, i) => {
+    const k = i === 0 ? 1 : -1;
+    W(lg.hip, _bk.a); W(lg.foot, _bk.b);
+    const off = k * _bk.b.clone().sub(_bk.a).dot(_bk.lat) / Math.max(1e-5, hw);   // + = out to his side
+    if (Math.abs(off) <= BACK_FOOT) return;
+    // the lower leg flicks out from the knee: turn it back in at the knee
+    const pivot = lg.knee || lg.hip;
+    W(pivot, _bk.t);
+    const len = Math.max(1e-5, _bk.t.distanceTo(_bk.b) / hw);
+    const ang = Math.min(0.8, (Math.abs(off) - BACK_FOOT) / len);
+    const was = Math.abs(off);
+    rot(pivot, _bk.fwd, ang);
+    W(lg.hip, _bk.a); W(lg.foot, _bk.b);
+    if (Math.abs(k * _bk.b.clone().sub(_bk.a).dot(_bk.lat) / hw) > was) rot(pivot, _bk.fwd, -2 * ang);
   });
 }
 
@@ -428,9 +508,11 @@ const FLY_POSE = { lean: 1.2, backLeg: 0.3, backKnee: 0.05, frontLeg: -1.2, fron
     a.act.time = tt;
     restoreRest(m.root);
     m.mixer.update(0);
-    if (a.clip.name === "run" || a.clip.name === "sprint") armSwing(m.root, ARM_SWING);
+    const back = !!(opts && opts.turn === 2), running = a.clip.name === "run" || a.clip.name === "sprint";
+    if (running) armSwing(m.root, back ? BACK_SWING : ARM_SWING);
+    if (back && running) backRun(m.root);
     if (opts && opts.fly) flyPose(m.root, FLY_POSE);
-    else armClear(m.root);
+    else armClear(m.root, /^crouch/.test(a.clip.name));
     m.holder.visible = true;
     m.holder.rotation.y = (facing < 0 ? -1 : 1) * Math.PI / 2 * (opts && opts.turn !== undefined ? opts.turn : 1);
     // Frame the shot: the same metres-per-pixel as the 2D world.
@@ -548,7 +630,42 @@ const FLY_POSE = { lean: 1.2, backLeg: 0.3, backKnee: 0.05, frontLeg: -1.2, fron
   const FOOT = 0.86;                 // how far down the canvas the feet sit
 
 
-  return { preload, register, ready, settled, has, want, wantProp, render, renderProp, bake, mood, SIZE, VIEW_METRES, FOOT };
+  // When each foot lands in a looping move, as parts of its cycle (0 to 1): the
+  // footsteps sound on these, so what you hear is what you see. Worked out once
+  // per move by stepping through the clip and watching each foot come down.
+  const footCache = {};
+  function footfalls(id, anim) {
+    const key = id + ":" + anim;
+    if (footCache[key]) return footCache[key];
+    const m = models[id];
+    if (!loaded(id) || !m.actions[anim]) return null;
+    const a = m.actions[anim];
+    const find = re => { let f = null; m.root.traverse(o => { if (!f && o.isBone && re.test(o.name)) f = o; }); return f; };
+    const feet = [find(/LeftFoot$/), find(/RightFoot$/)].filter(Boolean);
+    if (!feet.length) return null;
+    for (const other of Object.values(m.actions)) other.act.enabled = other === a;
+    a.act.enabled = true; a.act.setEffectiveWeight(1);
+    const d = a.clip.duration || 1, t0 = Math.min(a.from, d), t1 = a.to > t0 ? Math.min(a.to, d) : d;
+    const N = 96, v = new THREE.Vector3(), hs = feet.map(() => []);
+    for (let i = 0; i < N; i++) {
+      a.act.time = t0 + (i / N) * (t1 - t0);
+      restoreRest(m.root); m.mixer.update(0); m.root.updateMatrixWorld(true);
+      feet.forEach((f, j) => { f.getWorldPosition(v); m.root.worldToLocal(v); hs[j].push(v.y); });
+    }
+    const out = [];
+    for (const h of hs) {
+      const lo = Math.min(...h), hi = Math.max(...h), thr = lo + 0.18 * (hi - lo);
+      for (let i = 0; i < N; i++) {
+        const prev = h.at(i - 1);
+        if (h[i] <= thr && prev > thr) out.push(i / N);
+      }
+    }
+    out.sort((x, y) => x - y);
+    footCache[key] = out.length ? out : [0, 0.5];
+    return footCache[key];
+  }
+
+  return { footfalls, preload, register, ready, settled, has, want, wantProp, render, renderProp, bake, mood, SIZE, VIEW_METRES, FOOT };
 })();
 
 // Koda loads straight away; Zora and the enemies the first time they appear.
