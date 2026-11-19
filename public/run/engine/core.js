@@ -139,6 +139,25 @@ function freeze(c) {
   };
 })();
 
+// Is this device keeping up? Each effect asks once a frame. It answers yes
+// (too slow) only when the average frame has stayed over `limit` ms for `hold`
+// ms of play, never in the first few seconds of a run or after a pause, when
+// loading makes a few frames slow on any machine.
+function slowWatch(limit, hold) {
+  let avg = 16.7, last = 0, since = 0, bad = 0;
+  return () => {
+    const now = performance.now(), dt = now - last;
+    if (dt < 4) return false;                 // asked again in the same frame
+    last = now;
+    if (dt > 250) { since = now; bad = 0; avg = 16.7; return false; }   // a load or a hidden tab: start over
+    if (!since) since = now;
+    avg += (dt - avg) * 0.05;
+    if (now - since < 5000) return false;
+    bad = avg > limit ? bad + dt : 0;
+    return bad > hold;
+  };
+}
+
 // A filtered copy of part of a picture, made once and kept. Drawing with
 // ctx.filter on every frame is very slow on many devices (each filtered draw
 // can cost several milliseconds); a copy made once costs nothing after.

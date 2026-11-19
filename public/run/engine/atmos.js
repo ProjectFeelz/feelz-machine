@@ -25,13 +25,10 @@ const Atmos = (() => {
   // Phones start on 2 (fog, dust and the vignette only). Any device that falls under about 48 frames a second
   // for two seconds steps down a level (and stays there for the visit), so the
   // look never costs the game its speed. ?fx=full keeps 0 for testing.
-  let quality = phone ? 2 : 0, slowMs = 0, lastAt = 0;
+  let quality = phone ? 2 : 0, watch = slowWatch(21, 2000);
   function pace() {
-    const now = performance.now(), dt = now - lastAt;
-    lastAt = now;
-    if (flag === "full" || dt <= 0 || dt > 250) return;
-    slowMs = dt > 21 ? slowMs + dt : Math.max(0, slowMs - dt * 0.5);
-    if (slowMs > 2000 && quality < 2) { quality += 1; slowMs = 0; console.warn("[atmos] lighter effects for this device, level", quality); }
+    if (flag === "full" || quality >= 2) return;
+    if (watch()) { quality += 1; watch = slowWatch(21, 2000); console.warn("[atmos] lighter effects for this device, level", quality); }
   }
   let fogArt = null, blurArt = null;
   const splashes = [];
@@ -207,44 +204,36 @@ const Atmos = (() => {
     return out.slice(0, max);
   }
 
-  // Wet floors: what stands above them, mirrored in the water, rippling.
-  // Wet floors: what stands above them, mirrored in the water, rippling.
-  // The strip above the floor is copied once into a small buffer, then laid
-  // down upside down in a few slices from there (copying the game canvas onto
-  // itself slice by slice is very slow on some devices).
-  let refBuf = null;
+  // Wet floors: a cold shine on the water and a few ripples of light,
+  // brighter in the lightning. (Painted, not copied from the screen: copying
+  // the game's own canvas back onto itself stalls many PCs.)
   function reflect() {
     const L = look();
     if (!L || mission.mirror) { return; }
     if (L.wet && quality === 0) {
       const rain = rainAmount(), fk = flashK();
-      for (const f of floorsOnScreen(2)) {
-        const depth = Math.min(40, H - f.Y - 3), w = Math.round(f.x1 - f.x0);
-        if (depth < 8 || f.Y - depth < 0 || w < 8) continue;
-        if (!refBuf) { refBuf = document.createElement("canvas"); }
-        if (refBuf.width < w || refBuf.height < depth) { refBuf.width = Math.max(refBuf.width, w); refBuf.height = Math.max(refBuf.height, depth); }
-        const g2 = refBuf.getContext("2d");
-        g2.clearRect(0, 0, w, depth);
-        g2.drawImage(canvas, f.x0, f.Y - depth, w, depth, 0, 0, w, depth);
-        ctx.save();
-        ctx.globalAlpha = L.wet * (0.45 + fk * 0.6);
-        const step = 8;
-        for (let y = 0; y < depth; y += step) {
-          const wob = Math.sin(frameTime * 6 + y * 0.7 + f.x0 * 0.01) * (1 + rain * 2) * (y / depth + 0.3);
-          // row y below the floor mirrors row (depth - y) above it
-          const sy0 = depth - y - step;
-          if (sy0 < 0) break;
-          ctx.save();
-          ctx.translate(0, f.Y + 3 + y + step);
-          ctx.scale(1, -1);
-          ctx.drawImage(refBuf, 0, sy0, w, step, f.x0 + wob, 0, w, step);
-          ctx.restore();
-        }
-        ctx.restore();
+      ctx.save();
+      for (const f of floorsOnScreen(3)) {
+        const depth = Math.min(40, H - f.Y - 3), w = f.x1 - f.x0;
+        if (depth < 8 || w < 8) continue;
+        const a = L.wet * (0.35 + fk * 0.7);
         const g = ctx.createLinearGradient(0, f.Y + 3, 0, f.Y + 3 + depth);
-        g.addColorStop(0, "rgba(6, 8, 12, 0)"); g.addColorStop(1, "rgba(6, 8, 12, 0.5)");
+        g.addColorStop(0, `rgba(${L.light || "200, 215, 235"}, ${0.16 * a})`); g.addColorStop(1, `rgba(${L.light || "200, 215, 235"}, 0)`);
         ctx.fillStyle = g; ctx.fillRect(f.x0, f.Y + 3, w, depth);
+        // ripples of light that slide as you run
+        ctx.strokeStyle = `rgba(225, 235, 255, ${0.18 * a})`; ctx.lineWidth = 1;
+        ctx.beginPath();
+        const step = 46, off = ((cameraX * 0.9 + frameTime * (10 + rain * 30)) % step + step) % step;
+        for (let x = f.x0 - off; x < f.x1; x += step) {
+          for (let row = 0; row < 3; row++) {
+            const y = f.Y + 7 + row * 9 + Math.sin(frameTime * 3 + x * 0.05 + row) * 1.2, len = 14 - row * 3;
+            const x0 = Math.max(f.x0, x + row * 13), x1 = Math.min(f.x1, x0 + len);
+            if (x1 > x0) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
+          }
+        }
+        ctx.stroke();
       }
+      ctx.restore();
     }
     if (typeof drawSludgeAll === "function") drawSludgeAll();
   }

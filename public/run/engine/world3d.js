@@ -30,7 +30,8 @@ const World3D = (() => {
   const backs = new Map();            // slot key -> object
   const drawn = new Set();            // roof solids drawn in 3D this frame
   let fillMat = null, fillGeo = null;
-  let slow = 0, lastAt = 0, preloaded = false;
+  let preloaded = false;
+  const watch = slowWatch(22, 2500);
   // Load the buildings of every world this mission passes through, up front.
   function preloadHere() {
     preloaded = true;
@@ -210,10 +211,7 @@ const World3D = (() => {
     if (state !== "ready") return;
     if (!preloaded) preloadHere();
     // A device that can't keep up goes back to the painted buildings by itself.
-    const now = performance.now(), dt = now - lastAt;
-    lastAt = now;
-    if (dt > 0 && dt < 250) slow = dt > 22 ? slow + dt : Math.max(0, slow - dt * 0.5);
-    if ((slow > 2500 || (typeof Atmos !== "undefined" && Atmos.quality() >= 2)) && flag !== "1") { console.warn("[world3d] too slow on this device, using the painted buildings"); state = "failed"; hideAll(); drawn.clear(); return; }
+    if ((watch() || (typeof Atmos !== "undefined" && Atmos.quality() >= 2)) && flag !== "1") { console.warn("[world3d] too slow on this device, using the painted buildings"); state = "failed"; hideAll(); drawn.clear(); return; }
     const camXm = (cameraX + W / 2) / PX, camYm = -(cameraY + H / 2) / PX, viewW = W / PX;
     camera.position.set(camXm, camYm, D);
     camera.lookAt(camXm, camYm, 0);
