@@ -55,7 +55,9 @@ const World3D = (() => {
 
   function start() {
     if (state !== "idle") return;
-    if (!webgl()) { state = "failed"; return; }
+    // Phones keep the painted buildings: a second full-screen 3D picture every
+    // frame is more than they can carry alongside the game (?world3d=1 to try it).
+    if (!webgl() || (phone && flag !== "1")) { state = "failed"; return; }
     state = "loading";
     Promise.all([import(new URL(THREE_URL, document.baseURI).href), import(new URL(LIB_URL, document.baseURI).href)]).then(([three, lib]) => {
       THREE = three; LIB = lib;

@@ -22,10 +22,10 @@ const Atmos = (() => {
   const flag = (() => { try { return new URLSearchParams(location.search).get("fx"); } catch (e) { return null; } })();
   const phone = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
   // How much it draws: 0 everything, 1 the lighter set, 2 the bare minimum.
-  // Phones start on 1. Any device that falls under about 48 frames a second
+  // Phones start on 2 (fog, dust and the vignette only). Any device that falls under about 48 frames a second
   // for two seconds steps down a level (and stays there for the visit), so the
   // look never costs the game its speed. ?fx=full keeps 0 for testing.
-  let quality = phone ? 1 : 0, slowMs = 0, lastAt = 0;
+  let quality = phone ? 2 : 0, slowMs = 0, lastAt = 0;
   function pace() {
     const now = performance.now(), dt = now - lastAt;
     lastAt = now;
