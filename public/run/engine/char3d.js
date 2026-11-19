@@ -226,7 +226,8 @@ const Char3D = (() => {
     if (!tooSlow && flag !== "1" && watch()) { tooSlow = true; console.warn("[char3d] too slow on this device, using sprites"); }
   }
 
-  const ready = id => !tooSlow && !!(models[id] && models[id].state === "ready" && libState === "ready");
+  const loaded = id => !!(models[id] && models[id].state === "ready" && libState === "ready");
+  const ready = id => !tooSlow && loaded(id);
   // Models the game knows about but has not needed yet: each loads the
   // first time something asks for it (the sprite stands in until it is in).
   const known = {};
@@ -291,8 +292,7 @@ const Char3D = (() => {
    * centred in the canvas. Same canvas and scale as render().
    */
   function renderProp(id, yaw, pitch, roll) {
-    if (!ready(id)) return null;
-    pace();
+    if (!loaded(id)) return null;
     const m = models[id];
     m.holder.visible = true;
     m.holder.rotation.set(pitch || 0, yaw || 0, roll || 0, "YXZ");
@@ -317,7 +317,7 @@ const Char3D = (() => {
   function bake(id, yaw0, yaw1, frames, extraYaw) {
     const key = id + ":" + yaw0 + ":" + yaw1 + ":" + frames;
     if (baked[key]) return baked[key];
-    if (!ready(id)) return null;
+    if (!loaded(id)) return null;
     const cell = Math.round(SIZE * 0.56), off = Math.round((SIZE - cell) / 2);
     const strip = document.createElement("canvas");
     strip.width = cell * frames; strip.height = cell;
@@ -332,11 +332,14 @@ const Char3D = (() => {
 
   // Load a model the game knows about, without drawing it yet.
   function want(id) { if (!models[id] && known[id]) preload(known[id]); return ready(id); }
+  // A prop baked into a strip once (the drones) costs nothing per frame, so it
+  // stays 3D even on a device that has gone back to sprites for the runners.
+  function wantProp(id) { if (!models[id] && known[id]) preload(known[id]); return loaded(id); }
 
   const VIEW_METRES = 3.2;           // world metres across each runner's canvas
   const FOOT = 0.86;                 // how far down the canvas the feet sit
 
-  return { preload, register, ready, has, want, render, renderProp, bake, mood, SIZE, VIEW_METRES, FOOT };
+  return { preload, register, ready, has, want, wantProp, render, renderProp, bake, mood, SIZE, VIEW_METRES, FOOT };
 })();
 
 // Koda loads straight away; Zora and the enemies the first time they appear.

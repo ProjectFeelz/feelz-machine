@@ -352,7 +352,7 @@ function drawDrones() {
     // The 3D drone: it turns smoothly to face where it is going (looking at
     // you on the way round), leans into the sweep and sways as it bobs.
     const def = (i % 3 === 2 ? CHAR3D.props.watcher : CHAR3D.props.scanner);
-    if (def && typeof Char3D !== "undefined" && Char3D.want(def.id)) {
+    if (def && typeof Char3D !== "undefined" && Char3D.wantProp(def.id)) {
       const goal = dr.facing > 0 ? -0.55 : -2.59;
       const step = Math.max(0, Math.min(0.1, frameTime - (dr.drawnAt || frameTime)));
       dr.drawnAt = frameTime;
