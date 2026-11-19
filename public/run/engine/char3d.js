@@ -221,7 +221,7 @@ const Char3D = (() => {
   // game runs under 40 frames a second for three seconds while the model is
   // drawing, the model switches off for the rest of the visit.
   let slow = 0, lastAt = 0, tooSlow = false;
-  const watch = slowWatch(25, 6000);
+  const watch = slowWatch(34, 8000);   // the last thing to drop: only when play is truly below 30 fps
   function pace() {
     if (!tooSlow && flag !== "1" && watch()) { tooSlow = true; console.warn("[char3d] too slow on this device, using sprites"); }
   }
@@ -236,6 +236,8 @@ const Char3D = (() => {
   }
   const loaded = id => !!(models[id] && models[id].state === "ready") && alive();
   const ready = id => !tooSlow && loaded(id);
+  // Finished loading one way or the other (in, failed, or never asked for).
+  const settled = id => libState === "failed" || !models[id] || models[id].state === "ready" || models[id].state === "failed";
   // Models the game knows about but has not needed yet: each loads the
   // first time something asks for it (the sprite stands in until it is in).
   const known = {};
@@ -395,7 +397,7 @@ const Char3D = (() => {
   const VIEW_METRES = 3.2;           // world metres across each runner's canvas
   const FOOT = 0.86;                 // how far down the canvas the feet sit
 
-  return { preload, register, ready, has, want, wantProp, render, renderProp, bake, mood, SIZE, VIEW_METRES, FOOT };
+  return { preload, register, ready, settled, has, want, wantProp, render, renderProp, bake, mood, SIZE, VIEW_METRES, FOOT };
 })();
 
 // Koda loads straight away; Zora and the enemies the first time they appear.

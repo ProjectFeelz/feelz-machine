@@ -79,7 +79,7 @@ function buildLevel(data) {
   }
   for (const b of data.boosts || []) L.boosts.push({ x: m(b.x), y: -m(b.y), taken: false });
   for (const r of data.rewinds || []) L.rewinds.push({ x: m(r.x), y: -m(r.y), taken: false });
-  if (data.coin) L.coin = { x: m(data.coin.x), y: -m(data.coin.y), taken: false };
+  if (data.coin && coinTurnsUp(data)) L.coin = { x: m(data.coin.x), y: -m(data.coin.y), taken: false };
   for (const j of data.journal || []) L.journal.push({ id: j.id, x: m(j.x), y: -m(j.y), taken: false });
   for (const d of data.decor || []) L.decor.push(d);
   L.npcs = (data.npcs || []).map(n => Object.assign({}, n));
@@ -126,6 +126,16 @@ function prefetchArt(L, data) {
     for (const wd of L.wardens || []) void art.enemies[wd.kind];
     if ((data.inward || []).length) { void art.back.koda; void art.back.koda_mask; void art.back.zora; }
   } catch (e) { /* drawing loads anything missed */ }
+}
+
+// The F.I.L.L. coin is worth real money off the album, so it is a rare find: it turns up
+// on about one run in twenty-five, and once a mission's coin is found it never turns up
+// there again. (The server also counts each mission's coin only once.)
+const COIN_CHANCE = 0.04;
+function coinTurnsUp(data) {
+  const found = (typeof Progress !== "undefined" && Progress.data.coinMissions) || [];
+  if (found.includes(data.id)) return false;
+  return Math.random() < COIN_CHANCE;
 }
 
 // Street dressing: every few metres of open street gets something that belongs in that world.

@@ -4,6 +4,31 @@
    THE MAIN UPDATE
 --------------------------------------------------------------------------- */
 
+// The start of a run. First the mission's pictures and Koda's model finish loading
+// (never longer than 15 seconds, so a slow picture can't hold a run for ever),
+// then 3, 2, 1, and the run begins with Koda already running: the player takes over
+// from there. The song waits with it.
+let runGate = { phase: "go", t: 0, total: 0 };
+function updateRunGate(dt) {
+  runGate.t += dt;
+  if (songAudio && !songAudio.paused) { try { songAudio.pause(); songAudio.currentTime = 0; } catch (e) { /* not loaded yet */ } }
+  if (runGate.phase === "load") {
+    const model = typeof Char3D !== "undefined" && Char3D.settled ? !Char3D.settled("koda") : false;
+    const left = artPending.size + (model ? 1 : 0);
+    runGate.total = Math.max(runGate.total, left);
+    if (left === 0 || runGate.t > 15) { runGate.phase = "count"; runGate.t = 0; return; }
+    const pct = runGate.total ? Math.round(100 * (1 - left / runGate.total)) : 100;
+    banner = { text: "LOADING", sub: missionLabel(mission) + " · " + pct + "%", time: 0.5 };
+    return;
+  }
+  const n = 3 - Math.floor(runGate.t / 0.75);
+  if (n > 0) { banner = { text: String(n), sub: missionLabel(mission), time: 0.5 }; return; }
+  runGate.phase = "go";
+  banner = { text: mission.parts[0].name, sub: missionLabel(mission), time: 2.5 };
+  startMusic();
+  for (const p of players) p.autoRun = 1.4;
+}
+
 function update(realDt) {
   banner.time = Math.max(0, banner.time - realDt);
   toast.time = Math.max(0, toast.time - realDt);
@@ -14,6 +39,8 @@ function update(realDt) {
 
   // A journal page is open: the world holds still while you read.
   if (reading) { updateReading(realDt); return; }
+  // The start of a run: everything loads first, then a count of three, then he's off.
+  if (runGate.phase !== "go") { updateRunGate(realDt); updateParticles(realDt); return; }
   // The top of a run: the run waits for the song's first note, so the two start together.
   // (No sound, sound blocked, or a song still not playing after 8 seconds: it goes anyway.)
   if (!songStarted) {

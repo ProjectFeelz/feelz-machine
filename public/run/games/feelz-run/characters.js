@@ -261,9 +261,9 @@ function drawPlayers() {
       ctx.restore();
     }
     const mainGlow = { glow: p.id === 1 ? "rgba(255, 186, 70, 0.22)" : "rgba(110, 220, 255, 0.4)", blur: 3 };
-    // On a ladder the game holds him beside it; the model goes on the ladder itself.
+    // On a ladder the game holds him beside it; he is drawn on the ladder itself.
     if (model) drawModelFrame(model, p.climb && anim3 === "climb" ? p.climb.x : p.x, p.y, mainGlow);
-    else drawSheetFrame(img, SPRITES.koda, anim, frame, p.x, p.y + (p.state === "slide" ? 3 : 0), facing, mainGlow);
+    else drawSheetFrame(img, SPRITES.koda, anim, frame, p.climb ? p.climb.x : p.x, p.y + (p.state === "slide" ? 3 : 0), facing, mainGlow);
     if (twoPlayer) {
       ctx.fillStyle = p.id === 1 ? "#f1ca78" : "#7fe3ff";
       ctx.font = "800 14px 'Barlow Condensed', Impact, sans-serif";

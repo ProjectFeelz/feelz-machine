@@ -175,7 +175,7 @@ const SPRITES = {
   },
   dance:  { frameWidth: 295, frameHeight: 520, frames: 16, fps: 10 },
   dance_zora: { src: "assets/sprites/dance3d-zora.webp" },
-  coin:   { src: "assets/sprites/fill-coin.webp", frameWidth: 72, frameHeight: 72, frames: 8, fps: 12 },
+  coin:   { src: "assets/sprites/fill-coin-gold.webp", frameWidth: 72, frameHeight: 72, frames: 8, fps: 12 },
   drone:  { src: "assets/sprites/scanner-drone.webp", frameWidth: 150, frameHeight: 95, frames: 3, fps: 10 },
   kit:    { src: "assets/worlds/city-kit.webp" },
   meshyKit: { src: "assets/worlds/meshy-kit.webp" },

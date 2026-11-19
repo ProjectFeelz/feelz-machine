@@ -146,6 +146,51 @@ function drawBillboard(X, Y, w, h, seed) {
   ctx.fillStyle = lit; ctx.fillRect(X, Y, w, h);
 }
 
+// A tall, narrow board hanging over the way: chains up into the dark, the Feelz
+// Machine logo and the name down its face, warning stripes along the bottom edge.
+let bannerCache = {};
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { bannerCache = {}; });
+function bannerPanel(w, h) {
+  const key = Math.round(w) + "x" + Math.round(h) + ":" + (art.logo.ready ? 1 : 0);
+  if (bannerCache[key]) return bannerCache[key];
+  const k = 2, c = document.createElement("canvas");
+  c.width = Math.max(4, Math.round(w * k)); c.height = Math.max(4, Math.round(h * k));
+  const g = c.getContext("2d"), W2 = c.width, H2 = c.height;
+  const bg = g.createLinearGradient(0, 0, W2, 0);
+  bg.addColorStop(0, "#0c0d10"); bg.addColorStop(0.5, "#1b1a17"); bg.addColorStop(1, "#0c0d10");
+  g.fillStyle = bg; g.fillRect(0, 0, W2, H2);
+  g.strokeStyle = "#c79a4d"; g.lineWidth = 3; g.strokeRect(3, 3, W2 - 6, H2 - 6);
+  const stripeH = Math.min(H2 * 0.12, W2 * 0.5);
+  let y = W2 * 0.18;
+  if (art.logo.ready) { const sz = W2 * 0.72; g.drawImage(art.logo, (W2 - sz) / 2, y, sz, sz); y += sz + W2 * 0.12; }
+  const letters = "FEELZ".split(""), room = H2 - stripeH - y - W2 * 0.15, step = room / letters.length;
+  const fs = Math.min(step * 0.92, W2 * 0.7);
+  g.font = `900 ${fs}px 'Barlow Condensed', Impact, sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
+  const gold = g.createLinearGradient(0, y, 0, y + room);
+  gold.addColorStop(0, "#fff3c8"); gold.addColorStop(0.5, "#f5b942"); gold.addColorStop(1, "#b8741a");
+  g.fillStyle = gold;
+  letters.forEach((ch, i) => g.fillText(ch, W2 / 2, y + step * (i + 0.5)));
+  // warning stripes: duck under this
+  g.save(); g.beginPath(); g.rect(3, H2 - stripeH - 3, W2 - 6, stripeH); g.clip();
+  g.fillStyle = "#f5b942"; g.fillRect(0, H2 - stripeH - 3, W2, stripeH);
+  g.fillStyle = "#15130f";
+  for (let x = -stripeH; x < W2 + stripeH; x += stripeH * 0.8) { g.beginPath(); g.moveTo(x, H2); g.lineTo(x + stripeH * 0.4, H2); g.lineTo(x + stripeH * 0.4 + stripeH, H2 - stripeH - 3); g.lineTo(x + stripeH, H2 - stripeH - 3); g.fill(); }
+  g.restore();
+  bannerCache[key] = freeze(c);
+  return c;
+}
+
+function drawHangingBanner(s) {
+  const X = sx(s.x), Y = sy(s.y);
+  // chains up out of sight
+  ctx.strokeStyle = "#3a352c"; ctx.lineWidth = 2;
+  for (const cx of [X + s.w * 0.22, X + s.w * 0.78]) { ctx.beginPath(); ctx.moveTo(cx, Math.min(Y, 0) - 10); ctx.lineTo(cx, Y); ctx.stroke(); }
+  ctx.drawImage(bannerPanel(s.w, s.h), X, Y, s.w, s.h);
+  const lit = ctx.createLinearGradient(0, Y + s.h, 0, Y);
+  lit.addColorStop(0, "rgba(241, 202, 120, 0.18)"); lit.addColorStop(1, "rgba(241, 202, 120, 0)");
+  ctx.fillStyle = lit; ctx.fillRect(X, Y, s.w, s.h);
+}
+
 /* ---------- the Meshy kit ---------- */
 
 // The industrial blocks are modelled in dark concrete; lift them so they read against the dusk.
@@ -833,14 +878,11 @@ function drawSolid(s) {
     case "cart": if (!drawWorldProp("cart", s)) drawKit("cart", s.x, s.y - 4, s.w, s.h + 4); return;
     case "vent": drawKit("vent", s.x - 4, s.y - 4, s.w + 8, s.h + 4); return;
     case "overhang": {
-      if (s.art === "sign") {
+      // Every board you duck under carries something: a flipping billboard when it's wide,
+      // a hanging Feelz Machine banner when it's narrow.
+      if (s.art === "sign" || s.w >= m(1.5)) {
         drawBillboard(sx(s.x), sy(s.y), s.w, s.h, s.x);
-      } else {
-        ctx.fillStyle = "#151a18";
-        ctx.fillRect(sx(s.x), sy(s.y), s.w, s.h - m(0.3));
-        goldEdge(s.x, s.y, s.w);
-        drawKit("pipe", s.x - 10, s.y + s.h - m(0.32), s.w + 20, m(0.32));
-      }
+      } else drawHangingBanner(s);
       return;
     }
     case "gate": {
@@ -1265,11 +1307,38 @@ function drawPickups() {
   for (const g of level.gems || []) if (!g.taken && onScreen(g.x, 0, 60)) drawGem(sx(g.x), sy(g.y) + Math.sin(frameTime * 2.6 + g.x) * 5);
   const c = level.coin;
   if (c && !c.taken && onScreen(c.x, 0) && art.coin.ready) {
-    const s = SPRITES.coin, f = Math.floor(frameTime * s.fps) % s.frames, size = 38;
-    const glow = ctx.createRadialGradient(sx(c.x), sy(c.y), 2, sx(c.x), sy(c.y), 40);
-    glow.addColorStop(0, "rgba(255, 212, 106, 0.6)"); glow.addColorStop(1, "rgba(255, 212, 106, 0)");
-    ctx.fillStyle = glow; ctx.fillRect(sx(c.x) - 40, sy(c.y) - 40, 80, 80);
-    ctx.drawImage(art.coin, f * s.frameWidth, 0, s.frameWidth, s.frameHeight, sx(c.x) - size / 2, sy(c.y) - size / 2 + Math.sin(frameTime * 3) * 3, size, size);
+    // A rare find, so it shines: a warm pulsing glow, a glint across the face and sparkles round it.
+    const s = SPRITES.coin, f = Math.floor(frameTime * s.fps) % s.frames, size = 48;
+    const X = sx(c.x), Y = sy(c.y) + Math.sin(frameTime * 3) * 3, pulse = 0.75 + Math.sin(frameTime * 4) * 0.25;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const glow = ctx.createRadialGradient(X, Y, 2, X, Y, 64);
+    glow.addColorStop(0, `rgba(255, 214, 110, ${0.75 * pulse})`); glow.addColorStop(0.45, `rgba(255, 170, 40, ${0.28 * pulse})`); glow.addColorStop(1, "rgba(255, 170, 40, 0)");
+    ctx.fillStyle = glow; ctx.fillRect(X - 64, Y - 64, 128, 128);
+    ctx.restore();
+    ctx.drawImage(art.coin, f * s.frameWidth, 0, s.frameWidth, s.frameHeight, X - size / 2, Y - size / 2, size, size);
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    // the glint: a bright band sweeping across every couple of seconds
+    const gt = (frameTime % 2.2) / 0.5;
+    if (gt < 1) {
+      ctx.beginPath(); ctx.arc(X, Y, size * 0.44, 0, Math.PI * 2); ctx.clip();
+      const gx = X - size + gt * size * 2;
+      const band = ctx.createLinearGradient(gx - 10, Y - 20, gx + 10, Y + 20);
+      band.addColorStop(0, "rgba(255, 255, 255, 0)"); band.addColorStop(0.5, "rgba(255, 252, 230, 0.85)"); band.addColorStop(1, "rgba(255, 255, 255, 0)");
+      ctx.fillStyle = band; ctx.fillRect(X - size, Y - size, size * 2, size * 2);
+    }
+    ctx.restore();
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let k = 0; k < 4; k++) {
+      const t = (frameTime * 0.9 + k * 0.25) % 1, a = Math.sin(t * Math.PI);
+      const ang = k * 1.7 + Math.floor(frameTime * 0.9 + k * 0.25) * 2.3, r = size * (0.55 + 0.25 * seeded(k + Math.floor(frameTime * 0.9 + k * 0.25)));
+      const px = X + Math.cos(ang) * r, py = Y + Math.sin(ang) * r, l = 3 + a * 5;
+      ctx.strokeStyle = `rgba(255, 246, 200, ${a * 0.95})`; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(px - l, py); ctx.lineTo(px + l, py); ctx.moveTo(px, py - l); ctx.lineTo(px, py + l); ctx.stroke();
+    }
+    ctx.restore();
   }
   for (const j of level.journal) {
     if (j.taken || !onScreen(j.x, 0)) continue;

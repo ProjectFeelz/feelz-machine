@@ -44,7 +44,7 @@ let selectedMission = "m01";
 const PROGRESS_KEY = "feelzrun-progress";
 
 const Progress = {
-  data: { xp: 0, vinyl: 0, notes: 0, kos: 0, coins: 0, journal: [], runs: 0, best: {}, name: null, country: null, online: false,
+  data: { xp: 0, vinyl: 0, notes: 0, kos: 0, coins: 0, coinMissions: [], journal: [], runs: 0, best: {}, name: null, country: null, online: false,
           rp_bank: 0, credits: 0, stash: { records: 0, notes: 0, pages: 0, coins: 0 }, unlocks: [], outfit: "gold", dance: "default", vouchers: [] },
 
   load() {
@@ -76,7 +76,7 @@ const Progress = {
     if (!profile) return;
     Object.assign(this.data, {
       xp: profile.xp, vinyl: profile.vinyl_total, notes: profile.notes_total, kos: profile.kos_total,
-      coins: profile.coins_total, journal: profile.journal || [], runs: profile.runs, best: profile.best || {},
+      coins: profile.coins_total, coinMissions: profile.coin_missions || [], journal: profile.journal || [], runs: profile.runs, best: profile.best || {},
       name: profile.player_name, country: profile.country, online: true,
       rp_bank: profile.rp_bank || 0, credits: profile.credits || 0, stash: profile.stash || this.data.stash,
       unlocks: profile.unlocks || [], outfit: profile.outfit || "gold", dance: profile.dance || "default",
@@ -92,7 +92,7 @@ Progress.load();
 
 if (Backend.online) {
   // Online, nothing carries over from a guest session on this device.
-  Object.assign(Progress.data, { xp: 0, vinyl: 0, notes: 0, kos: 0, coins: 0, journal: [], runs: 0, best: {}, rp_bank: 0, credits: 0, unlocks: [], outfit: "gold", dance: "default", vouchers: [], online: false });
+  Object.assign(Progress.data, { xp: 0, vinyl: 0, notes: 0, kos: 0, coins: 0, coinMissions: [], journal: [], runs: 0, best: {}, rp_bank: 0, credits: 0, unlocks: [], outfit: "gold", dance: "default", vouchers: [], online: false });
 }
 
 Progress.save = function () {
@@ -260,6 +260,10 @@ function showResults(result) {
   } else {
     const d = Progress.data;
     d.xp += result.xp; d.vinyl += result.records; d.notes += notes; d.kos += result.kos; d.rp_bank += Math.ceil(result.rp / 2);
+    // a mission's coin counts once, ever
+    d.coinMissions = d.coinMissions || [];
+    if (result.coin && d.coinMissions.includes(result.mission)) result.coin = 0;
+    if (result.coin) d.coinMissions.push(result.mission);
     d.coins += result.coin; d.runs += 1;
     // what this run is worth in credits, waiting to be turned into credits when you sign in
     d.stash = d.stash || { records: 0, notes: 0, pages: 0, coins: 0 };
@@ -325,6 +329,7 @@ async function postResult(result, levelBefore) {
       misses: result.misses, spare_seconds: result.spare, wipeouts: result.wipeouts
     });
     result.posted = true;
+    if (result.coin && res.coin_counted !== false) { const cm = Progress.data.coinMissions = Progress.data.coinMissions || []; if (!cm.includes(result.mission)) cm.push(result.mission); }
     setText("finalRp", Number(res.rp).toLocaleString());
     const banked = res.rp_earned !== undefined ? Number(res.rp_earned) : Number(res.rp);
     setText("finalXp", "+" + res.xp_gained + " XP");
@@ -1220,20 +1225,9 @@ function drawAttract(now) {
     goldEdge(cameraX, roofY, W);
     cameraX = cx; cameraY = cy;
   }
-  // crates to vault
-  attract.next -= dt;
-  if (attract.next <= 0) { attract.vents.push({ x: W + 60 }); attract.next = 1.6 + Math.random() * 1.2; }
+  // Koda running the rooftops, nothing in his way
   const kx = W * 0.55;
-  let pose = "sprint", frame = Math.floor(t * 14) % 8;
-  for (const v of attract.vents) {
-    v.x -= speed * dt;
-    const cr = PROP2D.mc_crate_half;
-    if (cr && art.props2d && art.props2d.ready) { const ch = 66, cw = ch * cr[2] / cr[3]; ctx.drawImage(art.props2d, cr[0], cr[1], cr[2], cr[3], v.x - cw / 2, roofY - ch + 2, cw, ch); }
-    else drawKitScreen("crate", v.x - 34, roofY - 68, 68, 70);
-    const d = v.x - kx;
-    if (d < 90 && d > -60) { pose = "vault"; frame = Math.min(7, Math.floor((90 - d) / 150 * 8)); }
-  }
-  attract.vents = attract.vents.filter(v => v.x > -100);
+  const pose = "sprint", frame = Math.floor(t * 14) % 8;
   // Koda: the 3D model when it's in, the drawn sheet until then (and for outfit colours)
   let kodaDone = false;
   if (typeof Char3D !== "undefined" && Char3D.has("koda", pose)) {
