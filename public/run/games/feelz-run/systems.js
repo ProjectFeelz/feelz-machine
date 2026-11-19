@@ -485,8 +485,8 @@ function drawCrowds(layer) {
         ctx.save();
         ctx.translate(sx(wx), sy(c.y) + (front ? m(0.18) : -m(0.12)));
         if (wdir < 0) ctx.scale(-1, 1);
-        ctx.filter = front ? "brightness(0.55) saturate(0.7) contrast(1.1)" : "brightness(0.72) saturate(0.8)";
-        ctx.drawImage(art.walkers, wf * WK.cell, row * WK.cell, WK.cell, WK.cell, -wsize / 2, -wsize * WK.footY, wsize, wsize);
+        drawBaked(art.walkers, wf * WK.cell, row * WK.cell, WK.cell, WK.cell, -wsize / 2, -wsize * WK.footY, wsize, wsize,
+          front ? "brightness(0.55) saturate(0.7) contrast(1.1)" : "brightness(0.72) saturate(0.8)");
         ctx.restore();
         continue;
       }
@@ -503,8 +503,8 @@ function drawCrowds(layer) {
       ctx.translate(sx(x), sy(c.y) + (front ? m(0.18) : -m(0.12)) + bob);
       if (dir < 0) ctx.scale(-1, 1);
       ctx.scale(NPC_WIDEN, 1);
-      ctx.filter = front ? "brightness(0.5) saturate(0.65) contrast(1.1)" : "brightness(0.68) saturate(0.75)";
-      ctx.drawImage(art.npcs, frame * N.cell, who.row * N.cell, N.cell, N.cell, -size / 2, -size * who.footY, size, size);
+      drawBaked(art.npcs, frame * N.cell, who.row * N.cell, N.cell, N.cell, -size / 2, -size * who.footY, size, size,
+        front ? "brightness(0.5) saturate(0.65) contrast(1.1)" : "brightness(0.68) saturate(0.75)");
       ctx.restore();
     }
   }

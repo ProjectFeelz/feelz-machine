@@ -70,7 +70,7 @@ const Atmos = (() => {
         g.fillStyle = gr; g.fillRect(x + dx - r, y - r, r * 2, r * 2);
       }
     }
-    return (fogArt = c);
+    return (fogArt = freeze(c));
   }
 
   // Things right in front of the lens, out of focus: a sagging cable, a
@@ -94,7 +94,7 @@ const Atmos = (() => {
     // 4: a bundle of wires (900..1200 x 0..300)
     g.lineWidth = 4;
     for (let i = 0; i < 4; i++) { g.beginPath(); g.moveTo(900, 20 + i * 14); g.quadraticCurveTo(1050, 150 + i * 20, 1220, 40 + i * 10); g.stroke(); }
-    return (blurArt = c);
+    return (blurArt = freeze(c));
   }
   const BLUR_PARTS = [[0, 0, 620, 220, "top"], [620, 0, 160, 600, "side"], [800, 0, 100, 400, "top"], [0, 440, 600, 160, "bottom"], [880, 0, 320, 260, "top"]];
 
@@ -115,7 +115,7 @@ const Atmos = (() => {
       gr.addColorStop(0, `rgba(${col}, 0.9)`); gr.addColorStop(0.35, `rgba(${col}, 0.35)`); gr.addColorStop(1, `rgba(${col}, 0)`);
       g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
     }
-    return (moteArts[kind] = c);
+    return (moteArts[kind] = freeze(c));
   }
 
   // Fog sheets at a depth: `par` how fast it slides with the camera, `y` its band.
@@ -130,7 +130,7 @@ const Atmos = (() => {
     g.drawImage(src, 0, 0);
     g.globalCompositeOperation = "source-in";
     g.fillStyle = tint; g.fillRect(0, 0, c.width, c.height);
-    return (tinted[tint] = c);
+    return (tinted[tint] = freeze(c));
   }
   let fogTint = null;
   function fogLayer(par, y, h, alpha, drift) {

@@ -119,7 +119,7 @@ function billboardPanel(i, w, h) {
   g.fillText(ad.big, x, y + bigSize / 2); y += bigSize;
   g.font = `700 ${smallSize}px 'DM Sans', Arial, sans-serif`; g.fillStyle = "#d8d4cc";
   g.fillText(ad.small, x, y + smallSize / 2 + 2);
-  billboardCache[key] = c;
+  billboardCache[key] = freeze(c);
   return c;
 }
 
@@ -178,32 +178,34 @@ function drawMeshyBuildings(s, world) {
   const img = art.meshyKit;
   const n = Math.max(1, Math.round(s.w / m(8))), pw = s.w / n;
   const lift = MESHY_LIFT[world];
-  if (lift) { ctx.save(); ctx.filter = lift; }
   const top = sy(s.y), bottom = sy(Math.min(s.y + s.h, 0) > s.y + m(1) ? Math.min(s.y + s.h, 0) : s.y + s.h);
   const bodyH = bottom - top;
   if (bodyH <= 0) return true;
   for (let i = 0; i < n; i++) {
     const r = MESHY_KIT[list[Math.floor(seeded(s.seed * 3.1 + i * 7.7) * list.length) % list.length]];
-    const [ax, ay, aw, ah, roof] = r;
+    const [ax0, ay0, aw, ah, roof] = r;
+    // The world's lift (brighter concrete) comes from a copy of this building made
+    // once, not from a filter on every draw: a filter per draw is very slow.
+    const lifted = lift ? baked(img, ax0, ay0, aw, ah, lift) : null;
+    const src = lifted || img, ax = lifted ? 0 : ax0, ay = lifted ? 0 : ay0;
     const X = sx(s.x) + i * pw, k = pw / aw;
-    if (roof > 0) ctx.drawImage(img, ax, ay, aw, roof, X, top - roof * k, pw, roof * k);
+    if (roof > 0) ctx.drawImage(src, ax, ay, aw, roof, X, top - roof * k, pw, roof * k);
     const bodySrc = ah - roof, bodyNat = bodySrc * k;
     if (bodyH <= bodyNat * 1.08) {
-      if (bodyH / bodyNat >= 0.7) ctx.drawImage(img, ax, ay + roof, aw, bodySrc, X, top, pw, bodyH);
-      else ctx.drawImage(img, ax, ay + roof, aw, bodyH / k, X, top, pw, bodyH);
+      if (bodyH / bodyNat >= 0.7) ctx.drawImage(src, ax, ay + roof, aw, bodySrc, X, top, pw, bodyH);
+      else ctx.drawImage(src, ax, ay + roof, aw, bodyH / k, X, top, pw, bodyH);
     } else {
       const upSrc = bodySrc * 0.42, baseSrc = bodySrc * 0.3, bandSrc = bodySrc * 0.28;
-      ctx.drawImage(img, ax, ay + roof, aw, upSrc, X, top, pw, upSrc * k);
+      ctx.drawImage(src, ax, ay + roof, aw, upSrc, X, top, pw, upSrc * k);
       const baseH = baseSrc * k;
-      if (bottom - baseH < H + 10) ctx.drawImage(img, ax, ay + ah - baseSrc, aw, baseSrc, X, bottom - baseH, pw, baseH);
+      if (bottom - baseH < H + 10) ctx.drawImage(src, ax, ay + ah - baseSrc, aw, baseSrc, X, bottom - baseH, pw, baseH);
       const bandH = bandSrc * k, bandY = ay + roof + upSrc;
       for (let y = top + upSrc * k; y < bottom - baseH && y < H + 10; y += bandH) {
         const hh = Math.min(bandH, bottom - baseH - y);
-        ctx.drawImage(img, ax, bandY, aw, hh / k, X, y, pw, hh);
+        ctx.drawImage(src, ax, bandY, aw, hh / k, X, y, pw, hh);
       }
     }
   }
-  if (lift) ctx.restore();
   return true;
 }
 
@@ -227,10 +229,7 @@ function drawSetDressing() {
     const r = PROP2D[d.name];
     if (!r) continue;
     const h = m(d.h), w = h * r[2] / r[3];
-    ctx.save();
-    ctx.filter = "brightness(0.82) saturate(0.92)";
-    ctx.drawImage(art.props2d, r[0], r[1], r[2], r[3], sx(d.x) - w / 2, sy(d.y) - h + 3, w, h);
-    ctx.restore();
+    drawBaked(art.props2d, r[0], r[1], r[2], r[3], sx(d.x) - w / 2, sy(d.y) - h + 3, w, h, "brightness(0.82) saturate(0.92)");
   }
 }
 
@@ -421,7 +420,7 @@ function softClouds(img) {
     mk.restore();
   }
   k.drawImage(mask, 0, 0);
-  img._soft = c;
+  img._soft = freeze(c);
   return c;
 }
 
@@ -608,9 +607,9 @@ function drawSolid(s) {
       if (meshyReady()) {
         // the modelled container, its paint shifted per box so the stacks aren't all one colour
         const hue = [0, 170, 40, 210, 320, 95][(s.seed + s.tier * 3) % 6];
-        ctx.save(); if (hue) ctx.filter = `hue-rotate(${hue}deg)`;
-        drawMeshy("p_container", X - 2, Y - 2, w + 4, h + 4);
-        ctx.restore();
+        const cr = MESHY_KIT.p_container;
+        if (hue && cr) drawBaked(art.meshyKit, cr[0], cr[1], cr[2], cr[3], X - 2, Y - 2, w + 4, h + 4, `hue-rotate(${hue}deg)`);
+        else drawMeshy("p_container", X - 2, Y - 2, w + 4, h + 4);
         goldEdge(s.x, s.y, s.w);
         return;
       }
@@ -869,7 +868,7 @@ function drawLadder(c, h) {
       // brackets into the wall
       for (let y = 18; y < hpx - 6; y += Math.round(m(1.4))) { g.fillStyle = "#1c1a18"; g.fillRect(x - 2, y, rail + 4, 5); g.fillStyle = "#6d675f"; g.fillRect(x - 2, y, rail + 4, 1); }
     }
-    c.ladderArt = cv;
+    c.ladderArt = freeze(cv);
   }
   ctx.drawImage(c.ladderArt, Math.round(sx(c.x) - c.ladderArt.width / 2), Math.round(sy(c.top) - 10));
 }
@@ -1018,8 +1017,10 @@ function drawNpcs() {
     ctx.translate(sx(x), sy(footY));
     if ((n.facing || 1) < 0) ctx.scale(-1, 1);
     ctx.scale(NPC_WIDEN, 1);
-    if (n.ghost) { ctx.globalAlpha = 0.42 + Math.sin(frameTime * 1.3 + n.x) * 0.08; ctx.filter = "sepia(0.8) brightness(1.15) blur(0.6px)"; }
-    ctx.drawImage(art.npcs, f * N.cell, w.row * N.cell, N.cell, N.cell, -size / 2, -size * w.footY, size, size);
+    if (n.ghost) {
+      ctx.globalAlpha = 0.42 + Math.sin(frameTime * 1.3 + n.x) * 0.08;
+      drawBaked(art.npcs, f * N.cell, w.row * N.cell, N.cell, N.cell, -size / 2, -size * w.footY, size, size, "sepia(0.8) brightness(1.15) blur(0.6px)");
+    } else ctx.drawImage(art.npcs, f * N.cell, w.row * N.cell, N.cell, N.cell, -size / 2, -size * w.footY, size, size);
     ctx.restore();
   }
 }
@@ -1111,9 +1112,7 @@ function drawGoal() {
   light.addColorStop(0, `rgba(255, 214, 130, ${0.75 * pulse + 0.2})`); light.addColorStop(1, "rgba(242, 158, 31, 0.95)");
   ctx.fillStyle = light;
   ctx.fillRect(sx(dx) + dw * 0.22, sy(dy) + dh * 0.26, dw * 0.54, dh * 0.74);
-  ctx.save(); ctx.filter = "brightness(0.5) saturate(0.8)";
-  drawKit("wall_door", dx, dy, dw, dh);
-  ctx.restore();
+  { const kr = KIT.wall_door; if (kr && art.kit.ready) drawBaked(art.kit, kr[0], kr[1], kr[2], kr[3], sx(dx), sy(dy), dw, dh, "brightness(0.5) saturate(0.8)"); }
   ctx.fillStyle = "#f29e1f"; ctx.fillRect(sx(dx), sy(dy), dw, 3);
   // a billboard on two posts over the door, flipping between the ads
   const bw = m(2.6), bh = m(1.0), bx = x + w / 2 - bw / 2, by = sy(dy) - m(1.5);
@@ -1373,7 +1372,7 @@ function stormCloudSheet() {
     k.globalCompositeOperation = "source-atop";
     k.fillStyle = "rgba(22, 16, 40, 0.82)";
     k.fillRect(0, 0, c.width, c.height);
-    stormClouds[id] = c;
+    stormClouds[id] = freeze(c);
   }
   return stormClouds[id];
 }

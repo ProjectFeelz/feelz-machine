@@ -27,7 +27,7 @@ function recolorSheet(color, mask, outfitId) {
     }
   }
   k.putImageData(img, 0, 0);
-  return c;
+  return freeze(c);
 }
 
 function tintSheet(img) {
@@ -38,7 +38,7 @@ function tintSheet(img) {
   k.globalCompositeOperation = "source-atop";
   k.fillStyle = "rgba(40, 190, 255, 0.38)";
   k.fillRect(0, 0, c.width, c.height);
-  return c;
+  return freeze(c);
 }
 
 // Co-op: each other runner in their own colour, each sheet made once.
@@ -55,7 +55,7 @@ function coopTinted(img, tint) {
     k.fillStyle = tint;
     k.fillRect(0, 0, c.width, c.height);
     if (img === art.zora) c._zora = true;
-    coopSheets[key] = c;
+    coopSheets[key] = freeze(c);
   }
   return coopSheets[key] || img;
 }

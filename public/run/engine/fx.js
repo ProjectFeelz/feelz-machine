@@ -76,7 +76,7 @@ function postFinish() {
     const top = vk.createLinearGradient(0, 0, 0, H * 0.32);
     top.addColorStop(0, "rgba(255, 255, 255, 0.05)"); top.addColorStop(1, "rgba(255, 255, 255, 0)");
     vk.fillStyle = top; vk.fillRect(0, 0, W, H * 0.32);
-    fx.vignette = v;
+    fx.vignette = freeze(v);
   }
   ctx.drawImage(fx.vignette, 0, 0);
 }

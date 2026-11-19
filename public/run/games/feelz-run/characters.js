@@ -40,7 +40,7 @@ function kodaSheetFor(p) {
     k.globalCompositeOperation = "source-atop";
     k.fillStyle = "rgba(40, 190, 255, 0.4)";
     k.fillRect(0, 0, c.width, c.height);
-    tintedKoda = c;
+    tintedKoda = freeze(c);
   }
   return tintedKoda;
 }

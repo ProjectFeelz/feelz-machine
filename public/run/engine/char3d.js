@@ -331,7 +331,7 @@ const Char3D = (() => {
       const c = renderProp(id, yaw + (extraYaw || 0), 0, 0);
       if (c) g.drawImage(c, off, off, cell, cell, i * cell, 0, cell, cell);
     }
-    return (baked[key] = { canvas: strip, frames, cell, yaw0, yaw1 });
+    return (baked[key] = { canvas: freeze(strip), frames, cell, yaw0, yaw1 });
   }
 
   // Load a model the game knows about, without drawing it yet.

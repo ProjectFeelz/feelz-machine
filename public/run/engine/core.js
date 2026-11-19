@@ -111,3 +111,57 @@ let mirrorInput = true;   // right-to-left missions: the controls follow the scr
 
 // Online co-op (coop.js): this phone runs one Koda, the partner is drawn from the network.
 function coopOn() { return typeof Coop !== "undefined" && Coop.on; }
+
+// A canvas painted once and then only drawn from (soft clouds, fog, tinted
+// sheets): turned into a plain picture as soon as it's made. On some PCs
+// Chrome re-paints such a canvas, every step of it, each time it is drawn,
+// which took the game down to a few frames a second; a picture costs nothing.
+// Until the picture is ready the canvas itself is drawn.
+const frozenArt = new WeakMap();
+function freeze(c) {
+  if (!c || !c.toBlob || frozenArt.has(c)) return c;
+  frozenArt.set(c, null);
+  try {
+    c.toBlob(b => {
+      if (!b) return;
+      const im = new Image();
+      im.onload = () => frozenArt.set(c, im);
+      im.src = URL.createObjectURL(b);
+    }, "image/png");
+  } catch (e) { /* a canvas that can't be read: keep drawing it as it is */ }
+  return c;
+}
+(() => {
+  const P = CanvasRenderingContext2D.prototype, raw = P.drawImage;
+  P.drawImage = function (src, ...rest) {
+    const im = src && src.toBlob ? frozenArt.get(src) : null;
+    return raw.call(this, im || src, ...rest);
+  };
+})();
+
+// A filtered copy of part of a picture, made once and kept. Drawing with
+// ctx.filter on every frame is very slow on many devices (each filtered draw
+// can cost several milliseconds); a copy made once costs nothing after.
+//   ctx.drawImage(baked(img, sx, sy, sw, sh, "brightness(0.8)"), 0, 0, sw, sh, dx, dy, dw, dh)
+// Answers the picture itself, unfiltered, when it isn't loaded yet or the
+// browser has no canvas filters.
+const bakedCache = new Map();
+function baked(img, sx, sy, sw, sh, filter) {
+  if (!filter || !img || !(img.naturalWidth || img.width)) return null;
+  const key = (img.src || img.id || "") + "|" + sx + "," + sy + "," + sw + "," + sh + "|" + filter;
+  let c = bakedCache.get(key);
+  if (c) return c;
+  c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(sw)); c.height = Math.max(1, Math.round(sh));
+  const g = c.getContext("2d");
+  g.filter = filter;
+  g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  bakedCache.set(key, freeze(c));
+  return c;
+}
+// Draw part of a picture with a filter, from the copy made once.
+function drawBaked(img, sx, sy, sw, sh, dx, dy, dw, dh, filter) {
+  const c = baked(img, sx, sy, sw, sh, filter);
+  if (c) ctx.drawImage(c, 0, 0, c.width, c.height, dx, dy, dw, dh);
+  else ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+}
