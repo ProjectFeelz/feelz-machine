@@ -221,7 +221,7 @@ const Char3D = (() => {
   // game runs under 40 frames a second for three seconds while the model is
   // drawing, the model switches off for the rest of the visit.
   let slow = 0, lastAt = 0, tooSlow = false;
-  const watch = slowWatch(25, 3000);
+  const watch = slowWatch(25, 6000);
   function pace() {
     if (!tooSlow && flag !== "1" && watch()) { tooSlow = true; console.warn("[char3d] too slow on this device, using sprites"); }
   }

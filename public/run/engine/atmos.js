@@ -23,12 +23,12 @@ const Atmos = (() => {
   const phone = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
   // How much it draws: 0 everything, 1 the lighter set, 2 the bare minimum.
   // Phones start on 2 (fog, dust and the vignette only). Any device that falls under about 48 frames a second
-  // for two seconds steps down a level (and stays there for the visit), so the
+  // for four and a half seconds steps down a level (and stays there for the visit), so the
   // look never costs the game its speed. ?fx=full keeps 0 for testing.
-  let quality = phone ? 2 : 0, watch = slowWatch(21, 2000);
+  let quality = phone ? 2 : 0, watch = slowWatch(21, 4500);
   function pace() {
     if (flag === "full" || quality >= 2) return;
-    if (watch()) { quality += 1; watch = slowWatch(21, 2000); console.warn("[atmos] lighter effects for this device, level", quality); }
+    if (watch()) { quality += 1; watch = slowWatch(21, 4500); console.warn("[atmos] lighter effects for this device, level", quality); }
   }
   let fogArt = null, blurArt = null;
   const splashes = [];

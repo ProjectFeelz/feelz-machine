@@ -357,24 +357,23 @@ const danceArt = {};      // dance id -> { img, mask }
 
 const danceSheets = {};   // dance id + outfit (or "rival") -> canvas
 
-SPRITES.dances.zora = { name: "Zora", src: SPRITES.dance_zora.src, mask: SPRITES.dance_zora.src };
+SPRITES.dances.zora = { name: "Zora", src: SPRITES.dance_zora.src };
 
-function danceImages(id) {
+// The sheet for a dance in an outfit colour ("gold" is the plain one).
+function danceImages(id, outfit) {
   const def = SPRITES.dances[id] || SPRITES.dances.default;
-  if (!danceArt[id]) danceArt[id] = { img: loadImage(def.src), mask: loadImage(def.mask) };
-  return danceArt[id];
+  const o = def.outfits && outfit && outfit !== "gold" && OUTFITS[outfit] ? outfit : "gold";
+  const key = id + ":" + o;
+  if (!danceArt[key]) danceArt[key] = { img: loadImage(o === "gold" ? def.src : def.src.replace(/\.webp$/, "-" + o + ".webp")) };
+  return danceArt[key];
 }
 
 function danceSheet(id, outfit, rival) {
-  const a = danceImages(id);
+  const a = danceImages(id, rival ? "gold" : outfit);
   if (!a.img.ready) return null;
   const key = id + ":" + (rival ? "rival" : outfit);
   if (danceSheets[key]) return danceSheets[key];
   let sheet = a.img;
-  if (!rival && outfit && outfit !== "gold" && id !== "zora") {
-    if (!a.mask.ready) return a.img;
-    sheet = recolorSheet(a.img, a.mask, outfit) || a.img;
-  }
   if (rival) {
     const c = document.createElement("canvas");
     c.width = a.img.width; c.height = a.img.height;
@@ -399,7 +398,7 @@ function startDance(playerId) {
   const dctx = c.getContext("2d");
   const rival = playerId === 2;
   const id = mission && mission.player === "zora" ? "zora" : rival ? "default" : (Progress.data.dance || "default");
-  danceImages(id);
+  danceImages(id, rival ? "gold" : playerOutfit);
   if (danceTimer) clearInterval(danceTimer);
   let frame = 0;
   danceTimer = setInterval(() => {
@@ -780,8 +779,8 @@ function renderSkills() {
   const grid = el("div", "skill-grid");
   for (const sk of SKILLS.filter(x => x.kind === skillsTab)) {
     const owned = d.unlocks.includes(sk.id);
-    const card = el("div", "skill-card" + (owned ? " owned" : ""));
-    card.append(el("h3", "", sk.name), el("p", "skill-how", sk.how), el("p", "skill-text", sk.text));
+    const card = el("div", "skill-card " + sk.kind + (owned ? " owned" : ""));
+    card.append(cardArt(sk.id, "skill-art"), el("h3", "", sk.name), el("p", "skill-how", sk.how), el("p", "skill-text", sk.text));
     const foot = el("div", "skill-foot");
     if (owned) foot.append(el("span", "skill-tag", "UNLOCKED"));
     else {
@@ -798,6 +797,17 @@ function renderSkills() {
   body.append(grid);
 }
 
+// Koda posed for the card (assets/cards/<id>.webp), on a soft glow.
+function cardArt(id, cls, glow) {
+  const box = el("span", cls);
+  if (glow) box.style.setProperty("--glow", glow);
+  const img = document.createElement("img");
+  img.src = "assets/cards/" + id + ".webp"; img.alt = ""; img.loading = "lazy"; img.decoding = "async";
+  img.addEventListener("error", () => box.remove());
+  box.append(img);
+  return box;
+}
+
 function renderStyle(body) {
   const d = Progress.data, lv = Progress.level(d.xp);
   body.append(el("p", "skills-sub", "OUTFIT"));
@@ -808,7 +818,7 @@ function renderStyle(body) {
     const card = el("button", "style-card" + (d.outfit === id ? " active" : "") + (owned ? "" : " locked"));
     card.type = "button";
     const sw = el("span", "swatch"); sw.style.background = o.swatch;
-    card.append(sw, el("span", "style-name", o.name), el("span", "style-tag", d.outfit === id ? "WEARING" : owned ? "WEAR" : "LV " + sk.level + " · " + sk.rp + " RP"));
+    card.append(cardArt("outfit_" + id, "style-art", o.swatch + "66"), sw, el("span", "style-name", o.name), el("span", "style-tag", d.outfit === id ? "WEARING" : owned ? "WEAR" : "LV " + sk.level + " · " + sk.rp + " RP"));
     card.addEventListener("click", () => runSkillAction(card, async () => {
       if (!owned) await unlockSkill(sk);
       await equipStyle(id, Progress.data.dance);
@@ -824,7 +834,7 @@ function renderStyle(body) {
     const owned = id === "default" || d.unlocks.includes(sk.id);
     const card = el("button", "style-card" + (d.dance === id ? " active" : "") + (owned ? "" : " locked"));
     card.type = "button";
-    card.append(el("span", "style-name", dn.name), el("span", "style-tag", d.dance === id ? "DANCING" : owned ? "PICK" : "LV " + sk.level + " · " + sk.rp + " RP"));
+    card.append(cardArt("dance_" + id, "style-art", "#b58cff55"), el("span", "style-name", dn.name), el("span", "style-tag", d.dance === id ? "DANCING" : owned ? "PICK" : "LV " + sk.level + " · " + sk.rp + " RP"));
     card.addEventListener("click", () => runSkillAction(card, async () => {
       if (!owned) await unlockSkill(sk);
       await equipStyle(Progress.data.outfit, id);
@@ -1189,19 +1199,20 @@ function drawAttract(now) {
   const saveCam = [cameraX, cameraY];
   cameraX = t * speed; cameraY = -410;
   storm.strength = 0.45 + Math.sin(t * 0.4) * 0.25;
-  drawWorld("mc", 1, storm.strength);
+  // The chosen mission's own painting, drifting slowly behind him.
+  const md = MISSION_DATA[selectedMission], first = md && (md.sections || []).find(s => s.backdrop);
+  const place = first ? locImage(first.backdrop) : null;
+  if (place && place.ready) {
+    const ph = H * 1.16, pw = place.width * ph / place.height, span = Math.max(1, pw - W);
+    ctx.drawImage(place, -span * (Math.sin(t * 0.045) + 1) / 2, -H * 0.08, pw, ph);
+    ctx.fillStyle = `rgba(8, 10, 22, ${0.3 + storm.strength * 0.25})`;
+    ctx.fillRect(0, 0, W, H);
+  } else drawWorld("mc", 1, storm.strength);
   if (lightningBolt) { lightningBolt.t -= dt; drawBolt(lightningBolt, 0.8, true); if (lightningBolt.t <= 0) lightningBolt = null; }
   // the roof he runs on
-  ctx.fillStyle = "#141917"; ctx.fillRect(0, roofY, W, H - roofY);
-  const scroll = (t * speed) % 48;
-  for (let row = 0; row < 4; row++) {
-    for (let x = -scroll; x < W; x += 48) {
-      const r = seeded(Math.floor((x + t * speed) / 48) * 13 + row * 7);
-      if (r < 0.25) continue;
-      ctx.fillStyle = r > 0.88 ? "rgba(255, 196, 110, 0.6)" : r > 0.8 ? "rgba(127, 227, 255, 0.22)" : "rgba(0, 0, 0, 0.35)";
-      ctx.fillRect(x + 14, roofY + 60 + row * 54, 18, 26);
-    }
-  }
+  const roof = ctx.createLinearGradient(0, roofY, 0, H);
+  roof.addColorStop(0, "#1a1f1d"); roof.addColorStop(1, "#07090a");
+  ctx.fillStyle = roof; ctx.fillRect(0, roofY, W, H - roofY);
   {
     const cx = cameraX, cy = cameraY;
     cameraX = t * speed; cameraY = 0;
@@ -1216,13 +1227,24 @@ function drawAttract(now) {
   let pose = "sprint", frame = Math.floor(t * 14) % 8;
   for (const v of attract.vents) {
     v.x -= speed * dt;
-    drawKitScreen("crate", v.x - 34, roofY - 68, 68, 70);
+    const cr = PROP2D.mc_crate_half;
+    if (cr && art.props2d && art.props2d.ready) { const ch = 66, cw = ch * cr[2] / cr[3]; ctx.drawImage(art.props2d, cr[0], cr[1], cr[2], cr[3], v.x - cw / 2, roofY - ch + 2, cw, ch); }
+    else drawKitScreen("crate", v.x - 34, roofY - 68, 68, 70);
     const d = v.x - kx;
     if (d < 90 && d > -60) { pose = "vault"; frame = Math.min(7, Math.floor((90 - d) / 150 * 8)); }
   }
   attract.vents = attract.vents.filter(v => v.x > -100);
-  // Koda
-  if (art.koda.ready) {
+  // Koda: the 3D model when it's in, the drawn sheet until then (and for outfit colours)
+  let kodaDone = false;
+  if (typeof Char3D !== "undefined" && kodaSheet(playerOutfit) === art.koda && Char3D.has("koda", pose)) {
+    const c = Char3D.render("koda", "attract", pose, pose === "vault" ? frame / 8 : t * 1.4, 1);
+    if (c) {
+      const size = Char3D.VIEW_METRES * PX * 1.2, lift = pose === "vault" ? Math.sin(frame / 7 * Math.PI) * 60 : 0;
+      ctx.drawImage(c, kx - size / 2, roofY - lift - size * Char3D.FOOT, size, size);
+      kodaDone = true;
+    }
+  }
+  if (!kodaDone && art.koda.ready) {
     const def = SPRITES.koda, a = def.animations[pose], size = def.metres * PX * 1.2, cell = def.cell;
     const lift = pose === "vault" ? Math.sin(frame / 7 * Math.PI) * 60 : 0;
     ctx.save();
@@ -1232,7 +1254,17 @@ function drawAttract(now) {
   }
   // a drone overhead
   attract.droneX = W * 0.82 + Math.sin(t * 0.7) * 80;
-  if (art.drone.ready) {
+  const dd = CHAR3D.props && CHAR3D.props.scanner;
+  const strip = dd && typeof Char3D !== "undefined" && Char3D.wantProp && Char3D.wantProp(dd.id) ? Char3D.bake(dd.id, -2.59, -0.55, 32, dd.yaw || 0) : null;
+  if (strip) {
+    const dy = 130 + Math.sin(t * 2.4) * 10, size = m(Char3D.VIEW_METRES) * 0.4;
+    const eye = ctx.createRadialGradient(attract.droneX, dy, 2, attract.droneX, dy, 70);
+    eye.addColorStop(0, "rgba(255, 70, 50, 0.32)"); eye.addColorStop(1, "rgba(255, 70, 50, 0)");
+    ctx.fillStyle = eye; ctx.fillRect(attract.droneX - 70, dy - 70, 140, 140);
+    ctx.save(); ctx.translate(attract.droneX, dy); ctx.rotate(Math.cos(t * 0.7) * 0.08);
+    ctx.drawImage(strip.canvas, 0, 0, strip.cell, strip.cell, -size / 2, -size / 2, size, size);
+    ctx.restore();
+  } else if (art.drone.ready) {
     const s = SPRITES.drone, f = Math.floor(t * s.fps) % s.frames, w = 110, h = w * s.frameHeight / s.frameWidth;
     const dy = 120 + Math.sin(t * 2.4) * 10;
     ctx.save(); ctx.translate(attract.droneX, dy); ctx.scale(-1, 1); ctx.shadowColor = "#e0533c"; ctx.shadowBlur = 10;

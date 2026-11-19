@@ -165,15 +165,16 @@ const SPRITES = {
     THE_SNAKE: { row: 17, metres: 2.135, footY: 0.985 }
     }
   },
-  // Finish-screen dances: the default one, and the ones you unlock.
+  // Finish-screen dances: the default one, and the ones you unlock. The 3D
+  // Koda rendered into 16-frame sheets, one per outfit colour ("-ice" etc.).
   dances: {
-    default: { name: "Two-Step", src: "assets/sprites/dance-default.webp", mask: "assets/sprites/dance-default-mask.webp" },
-    bboy:    { name: "B-Boy",    src: "assets/sprites/dance-bboy.webp",    mask: "assets/sprites/dance-bboy-mask.webp" },
-    swing:   { name: "Swing",    src: "assets/sprites/dance-swing.webp",   mask: "assets/sprites/dance-swing-mask.webp" },
-    robot:   { name: "Robot",    src: "assets/sprites/dance-robot.webp",   mask: "assets/sprites/dance-robot-mask.webp" }
+    default: { name: "Two-Step", src: "assets/sprites/dance3d-default.webp", outfits: true },
+    bboy:    { name: "B-Boy",    src: "assets/sprites/dance3d-bboy.webp",    outfits: true },
+    swing:   { name: "Swing",    src: "assets/sprites/dance3d-swing.webp",   outfits: true },
+    robot:   { name: "Robot",    src: "assets/sprites/dance3d-robot.webp",   outfits: true }
   },
   dance:  { frameWidth: 295, frameHeight: 520, frames: 16, fps: 10 },
-  dance_zora: { src: "assets/sprites/dance-zora.webp" },
+  dance_zora: { src: "assets/sprites/dance3d-zora.webp" },
   coin:   { src: "assets/sprites/fill-coin.webp", frameWidth: 72, frameHeight: 72, frames: 8, fps: 12 },
   drone:  { src: "assets/sprites/scanner-drone.webp", frameWidth: 150, frameHeight: 95, frames: 3, fps: 10 },
   kit:    { src: "assets/worlds/city-kit.webp" },
