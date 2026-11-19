@@ -71,6 +71,37 @@ const Inward3D = (() => {
   const fromSheet = (img, r) => (g, w, h) => { if (img && img.ready !== false && r) g.drawImage(img, r[0], r[1], r[2], r[3], 0, 0, w, h); };
   const tileTex = name => canvasTex("tile:" + name, 256, 256, fromSheet(art.tiles, TILES[name]), true);
   const kitTex = (name, w, h) => canvasTex("kit:" + name, w || 256, h || 256, fromSheet(art.kit, KIT[name]), false);
+  // The painted props (crates, barrels, carts) and townsfolk, cut from the side-on art.
+  const PROP_WORLD = { lc: "mc", mc: "mc", uc: "uc", rc: "rc", de: "de", ve: "ve" };
+  function propCard(world, kind, metresH) {
+    const name = (PROP_WORLD[world] || "mc") + "_" + kind, r = PROP2D[name] || PROP2D["mc_" + kind];
+    if (!r || !art.props2d || !art.props2d.ready) return null;
+    const tex = canvasTex("p2d:" + name, 256, Math.round(256 * r[3] / r[2]), fromSheet(art.props2d, r), false);
+    const h = metresH, w = h * r[2] / r[3];
+    const card = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }));
+    card.position.y = h / 2;
+    return card;
+  }
+  const NPC_LIST = () => Object.values(SPRITES.npcs.who).filter(w => w.metres > 1.4);
+  function personCard(i) {
+    if (!art.npcs || !art.npcs.ready) return null;
+    const N = SPRITES.npcs, list = NPC_LIST(), who = list[Math.abs(i) % list.length];
+    const f = Math.abs(i * 3) % N.frames;
+    const tex = canvasTex("npc:" + who.row + ":" + f, 160, 160, fromSheet(art.npcs, [f * N.cell, who.row * N.cell, N.cell, N.cell]), false);
+    const size = who.metres * 0.95;
+    const card = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.4, side: THREE.DoubleSide }));
+    card.position.y = size / 2 - size * (1 - who.footY);
+    if (seeded(i * 1.7) < 0.5) card.scale.x = -1;
+    return card;
+  }
+  // A painted building front from the side-on kit (art.meshyKit), for the street-facing wall.
+  function buildingTex(name) {
+    const r = MESHY_KIT[name];
+    if (!r || !art.meshyKit || !art.meshyKit.ready) return null;
+    const w = 384, h = Math.round(384 * r[3] / r[2]);
+    return { tex: canvasTex("bld:" + name, w, h, fromSheet(art.meshyKit, [r[0], r[1], r[2], r[3]]), false), aspect: r[3] / r[2] };
+  }
+
   function repeated(tex, rx, ry) { const t = tex.clone(); t.needsUpdate = true; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); return t; }
 
   function floorTex() {
@@ -141,7 +172,7 @@ const Inward3D = (() => {
     const haze = sceneHaze();
     const fogCol = rgb(haze).multiplyScalar(1.15);
     scene.background = fogCol.clone();
-    scene.fog = new THREE.Fog(fogCol, 16, Math.min(85, L + 40));
+    scene.fog = new THREE.Fog(fogCol, 30, Math.min(160, L + 70));
 
     // light: a warm key from behind the camera, the sky above, the dark street below
     scene.add(new THREE.HemisphereLight(0xffe7c4, 0x2a2633, 2.3));
@@ -151,7 +182,7 @@ const Inward3D = (() => {
     // the painting at the far end: you run into it
     const bt = backdropTex(sec);
     if (bt) {
-      const img = bt.image, ph = 70, pw = ph * img.width / img.height;
+      const img = bt.image, ph = 110, pw = ph * img.width / img.height;
       const paint = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), new THREE.MeshBasicMaterial({ map: bt, fog: false }));
       paint.position.set(0, ph * 0.36, -(L + 70));
       bt.userData.shared = true;
@@ -177,27 +208,48 @@ const Inward3D = (() => {
 
     if (!voidRun) {
       // pavements, then a canyon of buildings either side, from the same wall panels as the side-on streets
+      // wide pavements with people on them, then painted buildings either side,
+      // each one different, from the same painted kit as the side-on streets
+      const kitList = MESHY_BUILDINGS[worldId] || MESHY_BUILDINGS.mc;
+      const PAVE = 6;
       for (const side of [-1, 1]) {
-        const pave = new THREE.Mesh(new THREE.PlaneGeometry(3, far + 30), lam({ map: repeated(floorTex(), 1.4, (far + 30) / 2.2), color: 0x8f8a86 }));
-        pave.rotation.x = -Math.PI / 2; pave.position.set(side * (runW / 2 + 1.5), 0.04, -(far + 30) / 2 + 12); scene.add(pave);
+        const pave = new THREE.Mesh(new THREE.PlaneGeometry(PAVE, far + 30), lam({ map: repeated(floorTex(), PAVE / 2.2, (far + 30) / 2.2), color: 0x8f8a86 }));
+        pave.rotation.x = -Math.PI / 2; pave.position.set(side * (runW / 2 + PAVE / 2), 0.04, -(far + 30) / 2 + 12); scene.add(pave);
         const kerb = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, far + 30), lam({ color: 0x3a3632 }));
         kerb.position.set(side * (runW / 2 + 0.09), 0.08, -(far + 30) / 2 + 12); scene.add(kerb);
         let z = 14, i = 0;
         while (z > -(L + 60)) {
-          const wdt = 5 + seeded(i * 3.1 + side) * 5, dep = 6 + seeded(i * 5.7 + side) * 6, hgt = 7 + seeded(i * 7.3 + side * 2) * 16;
-          const lit = seeded(i * 2.3 + side * 9) < 0.45;
-          const wall = tileTex("wall_" + ww.wall + "_win" + (lit ? "_lit" : ""));
-          const shade = 0.75 + ww.shade * 0.5;
-          const mat = lam({ map: repeated(wall, wdt / 2, hgt / 2), color: new THREE.Color(shade, shade * 0.97, shade * 0.95) });
-          if (lit) { mat.emissive = new THREE.Color(0xffb35a); mat.emissiveMap = mat.map; mat.emissiveIntensity = 0.06; }
-          const b = new THREE.Mesh(new THREE.BoxGeometry(dep, hgt, wdt), mat);
-          b.position.set(side * (runW / 2 + 3 + dep / 2), hgt / 2, z - wdt / 2);
-          scene.add(b);
-          const cap = new THREE.Mesh(new THREE.BoxGeometry(dep + 0.3, 0.35, wdt + 0.3), lam({ color: 0x2a2b30 }));
-          cap.position.set(b.position.x, hgt + 0.17, b.position.z); scene.add(cap);
+          const bt = buildingTex(kitList[Math.floor(seeded(i * 3.9 + side * 5) * kitList.length) % kitList.length]);
+          const wdt = 6 + seeded(i * 3.1 + side) * 6, dep = 8;
+          const hgt = bt ? Math.max(7, Math.min(30, wdt * bt.aspect)) : 7 + seeded(i * 7.3 + side * 2) * 16;
+          const dark = lam({ color: 0x24252b });
+          let mats;
+          if (bt) {
+            const face = lam({ map: bt.tex });
+            mats = side < 0 ? [face, dark, dark, dark, dark, dark] : [dark, face, dark, dark, dark, dark];
+          } else {
+            const wall = tileTex("wall_" + ww.wall + "_win");
+            mats = lam({ map: repeated(wall, wdt / 2, hgt / 2) });
+          }
+          const bld = new THREE.Mesh(new THREE.BoxGeometry(dep, hgt, wdt), mats);
+          bld.position.set(side * (runW / 2 + PAVE + dep / 2), hgt / 2, z - wdt / 2);
+          scene.add(bld);
+          // people on the pavement in front of it, and now and then a crate or barrel by the door
+          const folk = 1 + Math.floor(seeded(i * 6.1 + side) * 3);
+          for (let k = 0; k < folk; k++) {
+            const pc = personCard(i * 7 + k * 3 + (side > 0 ? 50 : 0));
+            if (!pc) break;
+            const g = new THREE.Group();
+            g.position.set(side * (runW / 2 + 0.9 + seeded(i * 2.2 + k + side) * (PAVE - 1.8)), 0, z - seeded(i * 4.4 + k * 1.3 + side) * wdt);
+            g.add(pc); scene.add(g);
+          }
+          if (seeded(i * 8.3 + side) < 0.45) {
+            const pr = propCard(worldId, seeded(i * 9.1 + side) < 0.5 ? "barrel" : "crate", 0.95);
+            if (pr) { const g = new THREE.Group(); g.position.set(side * (runW / 2 + PAVE - 0.9), 0, z - wdt * 0.5); g.add(pr); scene.add(g); }
+          }
           if (seeded(i * 4.9 + side) < 0.35) {   // a lamp post on the pavement, with a warm pool of light
             const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 4.2, 6), lam({ color: 0x1c1c22 }));
-            post.position.set(side * (runW / 2 + 0.9), 2.1, z - wdt / 2); scene.add(post);
+            post.position.set(side * (runW / 2 + 0.6), 2.1, z - wdt / 2); scene.add(post);
             const bulb = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0xffc070, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
             bulb.scale.set(1.6, 1.6, 1); bulb.position.set(post.position.x - side * 0.3, 4.2, post.position.z); scene.add(bulb);
           }
@@ -222,9 +274,9 @@ const Inward3D = (() => {
         const pick = Math.floor(seeded(Math.round(o.d * 10) + lane * 7) * 3);
         const g = new THREE.Group(), x = lane * LANE;
         g.position.set(x, 0, -o.d);
-        if (o.kind === "low") addLow(g, pick);
+        if (o.kind === "low") addLow(g, pick, worldId) || addLowKit(g, pick);
         else if (o.kind === "high") addHigh(g, o, lane);
-        else addBlock(g, ww, o, lane, pick);
+        else addBlock(g, ww, o, lane, pick, worldId);
         addShadow(g, o.kind === "block" ? 2.4 : 1.2);
         scene.add(g);
         dyn.obstacles.push(g);
@@ -260,7 +312,14 @@ const Inward3D = (() => {
   }
 
   const wood = () => lam({ color: 0x6b4a2c });
-  function addLow(g, pick) {
+  // Something to jump: the painted crates, barrels or a cart of this world.
+  function addLow(g, pick, world) {
+    const put = (kind, h, x, z) => { const c = propCard(world, kind, h); if (!c) return false; c.position.x = x; c.position.z = z; g.add(c); return true; };
+    if (pick === 0) return put("crate", 0.9, -0.32, -0.3) && put("crate_half", 0.55, 0.42, -0.1);
+    if (pick === 1) return put("barrel", 0.95, -0.42, -0.2) && put("barrel", 0.9, 0.38, -0.35);
+    return put("cart", 0.95, 0, -0.4);
+  }
+  function addLowKit(g, pick) {
     const crate = kitTex("crate", 128, 128), half = kitTex("crate_half", 96, 96);
     if (pick === 0) {   // a stack of crates
       const cm = lam({ map: crate });
@@ -281,21 +340,69 @@ const Inward3D = (() => {
     }
   }
 
+  // Something to duck under: a market awning strung across the lane, and now
+  // and then a Feelz Machine billboard on a beam.
+  function awningTex(hue) {
+    return canvasTex("awning:" + hue, 256, 64, (g, w, h) => {
+      const cols = [["#b3402f", "#e9dcc0"], ["#2f6b8a", "#e9dcc0"], ["#c58a2a", "#2a2320"], ["#5a7a3a", "#e9dcc0"]][hue % 4];
+      for (let i = 0; i < 8; i++) { g.fillStyle = cols[i % 2]; g.fillRect(i * w / 8, 0, w / 8, h); }
+      g.fillStyle = "rgba(0,0,0,0.25)"; g.fillRect(0, h * 0.8, w, h * 0.2);
+      for (let i = 0; i < 8; i++) { g.fillStyle = cols[i % 2]; g.beginPath(); g.moveTo(i * w / 8, h * 0.8); g.lineTo((i + 1) * w / 8, h * 0.8); g.lineTo((i + 0.5) * w / 8, h); g.fill(); }
+    }, false);
+  }
   function addHigh(g, o, lane) {
     const steel = lam({ color: 0x3a3f47 });
-    for (const s of [-1, 1]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.6, 0.25), steel); post.position.set(s * 0.43 * LANE, 1.3, -0.12); g.add(post); }
-    // the beam carries a Feelz Machine billboard, flipping between the ads
     const idx = (Math.round(o.d * 3) + lane + 5) % BILLBOARD_ADS.length;
-    const panel = billboardPanel(idx, 340, 150);
-    const tex = new THREE.CanvasTexture(panel); tex.colorSpace = THREE.SRGBColorSpace;
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.98 * LANE, 1.17, 0.4), [steel, steel, lam({ color: 0x262a31 }), steel, new THREE.MeshBasicMaterial({ map: tex }), steel]);
-    beam.position.set(0, 1.28 + 1.17 / 2, -0.15); g.add(beam);
-    const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.96 * LANE, 0.1), new THREE.MeshBasicMaterial({ map: hazardTex() }));
-    stripe.position.set(0, 1.25, 0.06); g.add(stripe);
-    dyn.boards.push({ tex, seed: idx, at: idx });
+    if (seeded(o.d * 2.3 + lane) < 0.18) {
+      for (const s of [-1, 1]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.6, 0.25), steel); post.position.set(s * 0.43 * LANE, 1.3, -0.12); g.add(post); }
+      const panel = billboardPanel(idx, 340, 150);
+      const tex = new THREE.CanvasTexture(panel); tex.colorSpace = THREE.SRGBColorSpace;
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.98 * LANE, 1.17, 0.4), [steel, steel, lam({ color: 0x262a31 }), steel, new THREE.MeshBasicMaterial({ map: tex }), steel]);
+      beam.position.set(0, 1.28 + 1.17 / 2, -0.15); g.add(beam);
+      const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.96 * LANE, 0.1), new THREE.MeshBasicMaterial({ map: hazardTex() }));
+      stripe.position.set(0, 1.25, 0.06); g.add(stripe);
+      dyn.boards.push({ tex, seed: idx, at: idx });
+      return;
+    }
+    // poles, a sloping striped canvas, its scalloped edge low enough to duck under
+    const pole = lam({ color: 0x3b2a1c }), cloth = lam({ map: awningTex(idx), side: THREE.DoubleSide });
+    for (const s of [-1, 1]) for (const zz of [0, -1.6]) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.3, 6), pole); p.position.set(s * 0.46 * LANE, 1.15, zz); g.add(p); }
+    const roof = new THREE.Mesh(new THREE.PlaneGeometry(0.98 * LANE, 1.8), cloth);
+    roof.rotation.x = -Math.PI / 2 + 0.28; roof.position.set(0, 2.0, -0.8); g.add(roof);
+    const edge = new THREE.Mesh(new THREE.PlaneGeometry(0.98 * LANE, 0.45), cloth);
+    edge.position.set(0, 1.55, 0.05); g.add(edge);
+    // goods hanging from the front rail
+    for (let k = 0; k < 4; k++) {
+      const c = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.32, 0.1), lam({ color: [0x9a6a3a, 0x6f8a4a, 0xb04a3a, 0xd8c070][k] }));
+      c.position.set((-0.32 + k * 0.21) * LANE, 1.22, 0.02); g.add(c);
+    }
   }
 
-  function addBlock(g, ww, o, lane, pick) {
+  // Something to go round: a knot of people, a cart piled high, or a market stall.
+  function addBlock(g, ww, o, lane, pick, world) {
+    if (pick === 0) {
+      let ok = true;
+      for (let k = 0; k < 3 && ok; k++) {
+        const pc = personCard(Math.round(o.d * 5) + lane * 11 + k * 4);
+        if (!pc) { ok = false; break; }
+        const h = new THREE.Group(); h.position.set((k - 1) * 0.36 * LANE, 0, -0.25 * (k % 2)); h.add(pc); g.add(h);
+      }
+      if (ok) return;
+    } else {
+      const put = (kind, hh, x, y, z) => { const c = propCard(world, kind, hh); if (!c) return false; c.position.x = x; c.position.y += y; c.position.z = z; g.add(c); return true; };
+      const base = put("cart", 1.15, 0, 0, -0.5);
+      if (base && pick === 1) { put("crate", 0.8, -0.3, 0.95, -0.6); put("crate_half", 0.55, 0.35, 0.95, -0.55); put("crate", 0.75, 0, 1.6, -0.65); return; }
+      if (base) {
+        const pole = lam({ color: 0x3b2a1c }), cloth = lam({ map: awningTex(Math.round(o.d) + lane), side: THREE.DoubleSide });
+        for (const s of [-1, 1]) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6), pole); p.position.set(s * 0.44 * LANE, 1.3, -0.1); g.add(p); }
+        const roof = new THREE.Mesh(new THREE.PlaneGeometry(0.95 * LANE, 1.4), cloth); roof.rotation.x = -Math.PI / 2 + 0.3; roof.position.set(0, 2.55, -0.6); g.add(roof);
+        put("barrel", 0.8, -0.38, 1.15, -0.7); put("crate_half", 0.5, 0.35, 1.15, -0.7);
+        return;
+      }
+    }
+    addBlockKit(g, ww, o, lane, pick);
+  }
+  function addBlockKit(g, ww, o, lane, pick) {
     const lit = seeded(Math.round(o.d * 3) + lane) < 0.5 ? "_lit" : "";
     const front = canvasTex("blockfront:" + ww.wall + lit + pick, 256, 340, (gg, w, h) => {
       const t = (name, x, y, ww2, hh) => { const r = TILES[name]; if (r && art.tiles.ready) gg.drawImage(art.tiles, r[0], r[1], r[2], r[3], x, y, ww2, hh); };
@@ -344,8 +451,18 @@ const Inward3D = (() => {
       card.position.y = size / 2 - size * (1 - B.footY);
       const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.4, depthWrite: false }));
       shadow.rotation.x = -Math.PI / 2; shadow.scale.set(1, 0.32, 1); shadow.position.y = 0.025;
-      const group = new THREE.Group(); group.add(card); scene.add(group); scene.add(shadow);
-      r = { group, card, shadow, tex, img };
+      // the 3D runner, seen from behind: drawn by engine/char3d.js each frame onto its own card
+      let card3 = null, c3 = null, tex3 = null;
+      if (typeof Char3D !== "undefined") {
+        c3 = document.createElement("canvas"); c3.width = c3.height = Char3D.SIZE;
+        tex3 = new THREE.CanvasTexture(c3); tex3.colorSpace = THREE.SRGBColorSpace; tex3.generateMipmaps = false; tex3.minFilter = THREE.LinearFilter;
+        const vm = Char3D.VIEW_METRES;
+        card3 = new THREE.Mesh(new THREE.PlaneGeometry(vm, vm), new THREE.MeshBasicMaterial({ map: tex3, transparent: true, alphaTest: 0.3, fog: false }));
+        card3.position.y = vm / 2 - vm * (1 - Char3D.FOOT);
+        card3.visible = false;
+      }
+      const group = new THREE.Group(); group.add(card); if (card3) group.add(card3); scene.add(group); scene.add(shadow);
+      r = { group, card, shadow, tex, img, card3, c3, tex3 };
       dyn.runners.set(p.id, r);
     }
     return r;
@@ -361,6 +478,23 @@ const Inward3D = (() => {
     const a = B.animations[anim];
     const cw = B.cell / r.img.width, ch = B.cell / r.img.height;
     r.tex.offset.set(frame * cw, 1 - (a.row + 1) * ch);
+    // the 3D runner when it can be drawn (player one; the co-op partner keeps the tinted sheet)
+    let used3 = false;
+    if (r.card3 && p.id === 1) {
+      const id = mission.player === "zora" ? "zora" : "koda";
+      const an = p.islide > 0 ? "slide" : p.iy > 0 ? (p.ivy > 0 ? "jump" : "fall") : "run";
+      if (Char3D.has(id, an)) {
+        const t = an === "run" ? p.animClock * 1.45 : an === "slide" ? (0.75 - p.islide) / 0.75 : an === "jump" ? Math.min(0.95, 0.25 + (1 - p.ivy / IN_JUMP) * 0.5) : p.animClock;
+        const outfit = id === "koda" && OUTFITS[playerOutfit] ? OUTFITS[playerOutfit].jacket : null;
+        const c = Char3D.render(id, "inward" + p.id, an, t, 1, { turn: 2, outfit });   // turned right round: back to the camera
+        if (c) {
+          const g = r.c3.getContext("2d"); g.clearRect(0, 0, r.c3.width, r.c3.height); g.drawImage(c, 0, 0);
+          r.tex3.needsUpdate = true; used3 = true;
+        }
+      }
+    }
+    r.card.visible = !used3;
+    if (r.card3) r.card3.visible = used3;
     const x = p.laneX * LANE, z = -p.iz;
     r.group.position.set(x, p.iy, z);
     r.shadow.position.set(x, 0.025, z);

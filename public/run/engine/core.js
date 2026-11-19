@@ -142,10 +142,12 @@ function freeze(c) {
 // Is this device keeping up? Each effect asks once a frame. It answers yes
 // (too slow) only when the average frame has stayed over `limit` ms for `hold`
 // ms of play, never in the first few seconds of a run or after a pause, when
-// loading makes a few frames slow on any machine.
+// loading makes a few frames slow on any machine. Only frames of play count:
+// the menus draw at a calm pace on purpose.
 function slowWatch(limit, hold) {
   let avg = 16.7, last = 0, since = 0, bad = 0;
   return () => {
+    if (typeof gameState !== "undefined" && gameState !== "playing") { since = 0; bad = 0; last = 0; return false; }
     const now = performance.now(), dt = now - last;
     if (dt < 4) return false;                 // asked again in the same frame
     last = now;

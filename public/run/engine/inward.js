@@ -29,11 +29,25 @@ function checkInward() {
   }
 }
 
+// Inward runs are laid out longer than the stretch of street they replace,
+// and run a little quicker, so they last but the song still fits.
+const IN_STRETCH = 1.6, IN_PACE = 1.15;
+
 function startInward(sec) {
   inward.active = true; inward.sec = sec; inward.fade = 0.4;
-  inward.length = sec.to - sec.from;
-  inward.items = (sec.obstacles || []).map(o => ({ d: o[0], lane: o[1], kind: o[2] }));
-  inward.pick = (sec.records || []).map(r => ({ d: r[0], lane: r[1], taken: [] }));
+  inward.stretch = IN_STRETCH;
+  inward.length = (sec.to - sec.from) * IN_STRETCH;
+  inward.items = (sec.obstacles || []).map(o => ({ d: o[0] * IN_STRETCH, lane: o[1], kind: o[2] }));
+  // Long empty stretches get a box or barrel in one lane (there is always a way past).
+  const ds = inward.items.map(o => o.d).concat([0, inward.length]).sort((a, b) => a - b);
+  for (let i = 1; i < ds.length; i++) {
+    const gap = ds[i] - ds[i - 1];
+    if (gap < 11) continue;
+    const d = ds[i - 1] + gap / 2, lane = Math.floor(seeded(d * 3.7 + sec.from) * 3) - 1;
+    if (d > 6 && d < inward.length - 4) inward.items.push({ d, lane, kind: "low", extra: true });
+  }
+  inward.items.sort((a, b) => a.d - b.d);
+  inward.pick = (sec.records || []).map(r => ({ d: r[0] * IN_STRETCH, lane: r[1], taken: [] }));
   const lead = leader();
   for (const p of players) {
     p.iz = p === lead ? 0 : Math.max(-6, -(lead.x - p.x) / PX);
@@ -54,7 +68,7 @@ function endInward(cancel) {
   if (cancel) return;
   const lead = leader();
   for (const p of players) {
-    const behind = p === lead ? 0 : Math.max(0, inward.length - p.iz);
+    const behind = p === lead ? 0 : Math.max(0, inward.length - p.iz) / (inward.stretch || 1);
     const x = m(sec.to) - m(Math.min(4, behind));
     const f = floorUnder(x, -m(30)) || { y: -m(sec.y || 0) };
     p.x = x; p.y = f.y; p.vx = RUN_SPEED; p.vy = 0; p.ground = null; p.facing = 1;
@@ -113,7 +127,7 @@ function updateInward(dt) {
     if (p.iy <= 0) { p.ivy = Math.max(0, p.ivy); p.ijumps = 1; }
     // forward
     p.istun = Math.max(0, p.istun - dt);
-    const speed = RUN_SPEED / PX * (p.boostTime > 0 ? BOOST_SPEED : 1) * (p.istun > 0 ? 0.45 : 1);
+    const speed = RUN_SPEED / PX * IN_PACE * (p.boostTime > 0 ? BOOST_SPEED : 1) * (p.istun > 0 ? 0.45 : 1);
     const z0 = p.iz;
     p.iz += speed * dt;
     // things in the way
@@ -134,7 +148,7 @@ function updateInward(dt) {
       r.taken.push(p.id); p.records += 1; sfx.record();
     }
     // a little of the side-on position moves with you, for the camera and the storm
-    p.x = m(sec.from) + m(Math.min(inward.length, Math.max(0, p.iz)));
+    p.x = m(sec.from) + m(Math.min(sec.to - sec.from, Math.max(0, p.iz) / (inward.stretch || 1)));
   }
   if (lead.iz >= inward.length) endInward(false);
 }

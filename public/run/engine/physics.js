@@ -246,7 +246,11 @@ function tryMantle(p, dir) {
     const top = s.y;
     if (top < p.y - p.h - m(0.45) || top > p.y - p.h * 0.45) continue;
     if (!s.oneWay && !(dir > 0 ? p.x < s.x : p.x > s.x + s.w)) continue;
-    const landX = dir > 0 ? Math.max(s.x + p.w / 2 + 6, Math.min(s.x + s.w - p.w / 2, faceX + p.w / 2 + 14)) : Math.min(s.x + s.w - p.w / 2 - 6, faceX - p.w / 2 - 14);
+    // Reaching up through something thin from underneath (an awning): pull up onto it
+    // right where he is, not at its near end.
+    const inside = reach > s.x && reach < s.x + s.w && Math.abs(reach - faceX) > 12;
+    const landX = inside ? Math.max(s.x + p.w / 2 + 2, Math.min(s.x + s.w - p.w / 2 - 2, p.x + dir * 6))
+      : dir > 0 ? Math.max(s.x + p.w / 2 + 6, Math.min(s.x + s.w - p.w / 2, faceX + p.w / 2 + 14)) : Math.min(s.x + s.w - p.w / 2 - 6, faceX - p.w / 2 - 14);
     if (s.w < p.w * 0.6) continue;
     if (!roomAt(landX, top, STAND_H)) continue;
     startMove(p, "mantle", landX, top, 0.42, 0);
