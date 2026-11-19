@@ -226,10 +226,20 @@ function drawPlayers() {
           // round, so no extra turn here.)
           Object.assign(p.climb && anim3 === "climb" ? { turn: 0 } : {}, { outfit: outfit3 })) : null;
     if (!art.koda.ready && !model) continue;
-    const floor = p.ground ? p.ground.y : (floorBelow(p.x, p.y, true) || { y: p.y }).y;
-    const lift = Math.max(0, floor - p.y);
-    ctx.fillStyle = `rgba(0, 0, 0, ${Math.max(0.08, 0.35 - lift / 600)})`;
-    ctx.beginPath(); ctx.ellipse(sx(p.x), sy(floor) - 1, Math.max(8, 20 - lift / 20), 4, 0, 0, Math.PI * 2); ctx.fill();
+    const under = p.ground || floorBelow(p.x, p.y, true);
+    const floor = under ? under.y : p.y, lift = Math.max(0, floor - p.y);
+    // A soft shadow that stays on the ground: as he rises it spreads out and fades,
+    // like a real shadow, and gathers back under his feet as he lands.
+    if (under && !p.climb) {
+      const k = Math.min(1, lift / m(3)), rx = 24 + k * 22, ry = 5 + k * 3, a = 0.42 * (1 - k * 0.75);
+      const X = sx(p.x), Y = sy(floor) - 1;
+      ctx.save();
+      ctx.translate(X, Y); ctx.scale(1, ry / rx);
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+      g.addColorStop(0, `rgba(0, 0, 0, ${a})`); g.addColorStop(0.55, `rgba(0, 0, 0, ${a * 0.6})`); g.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, rx, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
     // Feelz Boost: afterimages of Koda trailing behind him, and wind rushing past.
     p.ghosts = p.ghosts || [];
     if (p.boostTime > 0 && gameState === "playing" && !reading) {

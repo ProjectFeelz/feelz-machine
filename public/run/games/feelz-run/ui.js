@@ -1266,7 +1266,7 @@ function drawAttract(now) {
     ctx.restore();
   }
   // debris on the wind
-  if (Math.random() < dt * 0.9) attract.debris.push({ x: -40, y: roofY - (Math.random() < 0.5 ? 30 : 110), rot: 0, art: DEBRIS_LOW[Math.floor(Math.random() * 5)] });
+  if (Math.random() < dt * 0.9) attract.debris.push({ x: -40, y: roofY - (Math.random() < 0.5 ? 30 : 110), rot: 0, art: debrisThing("lc") });
   for (const d of attract.debris) {
     d.x += 620 * dt; d.rot -= 6 * dt;
     const glow = ctx.createRadialGradient(d.x, d.y, 4, d.x, d.y, 60);

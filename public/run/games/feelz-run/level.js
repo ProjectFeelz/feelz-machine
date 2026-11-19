@@ -124,6 +124,7 @@ function prefetchArt(L, data) {
   try {
     for (const sec of L.sections || []) { const w = art.worlds[sec.world]; if (w) { void w.far; void w.near; void w.clouds; } if (sec.backdrop) locImage(sec.backdrop); }
     for (const wd of L.wardens || []) void art.enemies[wd.kind];
+    void art.propsSmall;   // street dressing and storm debris
     if ((data.inward || []).length) { void art.back.koda; void art.back.koda_mask; void art.back.zora; }
   } catch (e) { /* drawing loads anything missed */ }
 }

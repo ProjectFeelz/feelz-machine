@@ -1385,15 +1385,21 @@ function drawDebris() {
     ctx.save();
     ctx.translate(sx(d.x), sy(d.y));
     ctx.rotate(d.rot);
-    drawDebrisPiece(d.art, d.size, d.low ? d.size : d.half * 2.2);
+    drawDebrisPiece(d.art, d.size, d.low ? d.size : String(d.art).startsWith("s_") ? m(0.9) : d.half * 2.2);
     ctx.restore();
   }
 }
 
-// One piece of storm debris, centred on (0, 0): the painted props where there
-// is one (crates, barrels), the kit's pipes and grates otherwise.
+// One piece of storm debris, centred on (0, 0): a small thing off the street
+// (assets/worlds/props-small.webp), a painted crate or barrel, or the kit's pipes and grates.
 const DEBRIS_PROP = { crate: "mc_crate_half", barrel: "mc_barrel", crate_half: "mc_crate_half", vent: "rc_barrel" };
 function drawDebrisPiece(name, w, h) {
+  const sr = PROPS_SMALL[name];
+  if (sr) {
+    const im = art.propsSmall;
+    if (im && im.ready) { const k = Math.min(w / sr[2], h / sr[3]) * 1.1, pw = sr[2] * k, ph = sr[3] * k; ctx.drawImage(im, sr[0], sr[1], sr[2], sr[3], -pw / 2, -ph / 2, pw, ph); }
+    return;
+  }
   const pr = PROP2D[DEBRIS_PROP[name]];
   if (pr && art.props2d && art.props2d.ready) {
     const k = Math.min(w / pr[2], h / pr[3]) * 1.15, pw = pr[2] * k, ph = pr[3] * k;

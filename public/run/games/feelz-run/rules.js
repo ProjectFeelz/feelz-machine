@@ -11,6 +11,14 @@ const DEBRIS_LOW = ["crate", "barrel", "crate_half", "vent", "crate"];
 
 const DEBRIS_HIGH = ["pipe", "grate", "pipe", "grate", "pipe"];
 
+// What the wind picks up: the small things lying about in this part of the city
+// (cans, buckets, chairs, tyres, crates of bottles...), so no two storms throw the same.
+function debrisThing(world) {
+  const list = (WORLD_SMALL[world] || []).concat(world === "ve" ? [] : WORLD_SMALL.lc || []);
+  if (!list.length) return DEBRIS_LOW[Math.floor(Math.random() * DEBRIS_LOW.length)];
+  return list[Math.floor(Math.random() * list.length)][0];
+}
+
 function updateStorm(dt, realDt) {
   const partIndex = playingPartIndex();
   const part = mission.parts[partIndex];
@@ -26,7 +34,7 @@ function updateStorm(dt, realDt) {
     const low = Math.random() < 0.55;
     const floor = lead.ground ? lead.ground.y : lead.y;
     storm.debris.push({
-      low, art: (low ? DEBRIS_LOW : DEBRIS_HIGH)[Math.floor(Math.random() * 5)],
+      low, art: low || Math.random() < 0.5 ? debrisThing(sectionAt(lead.x).world) : DEBRIS_HIGH[Math.floor(Math.random() * 5)],
       x: Math.max(storm.front, cameraX - m(2)), y: floor - (low ? m(0.36) : m(1.56)), half: low ? m(0.32) : m(0.17),
       size: low ? m(0.72) : m(1.5), rot: Math.random() * 6, hit: [], trail: []
     });
