@@ -147,7 +147,7 @@ function freeze(c) {
 function slowWatch(limit, hold) {
   let avg = 16.7, last = 0, since = 0, bad = 0;
   return () => {
-    if (typeof gameState !== "undefined" && gameState !== "playing") { since = 0; bad = 0; last = 0; return false; }
+    if ((typeof gameState !== "undefined" && gameState !== "playing") || (typeof runGate !== "undefined" && runGate.phase !== "go")) { since = 0; bad = 0; last = 0; return false; }
     const now = performance.now(), dt = now - last;
     if (dt < 4) return false;                 // asked again in the same frame
     last = now;

@@ -41,6 +41,17 @@ function update(realDt) {
   if (reading) { updateReading(realDt); return; }
   // The start of a run: everything loads first, then a count of three, then he's off.
   if (runGate.phase !== "go") { updateRunGate(realDt); updateParticles(realDt); return; }
+  // He runs the first stretch on his own; if nobody takes over, the run goes back
+  // to the start and counts down again, so a run can never play itself through.
+  if (!runGate.started && !twoPlayer && !(typeof coopOn === "function" && coopOn())) {
+    const c = rawControls(0), auto = players[0].autoRun > 0;   // what the player is pressing, not the auto-run
+    if (c.left || c.right || c.jump || c.down || c.attack || c.up) runGate.started = true;
+    else if (songStarted && !auto && (runGate.idle = (runGate.idle || 0) + realDt) > 6) {
+      resetRun();
+      runGate.phase = "count";
+      return;
+    }
+  }
   // The top of a run: the run waits for the song's first note, so the two start together.
   // (No sound, sound blocked, or a song still not playing after 8 seconds: it goes anyway.)
   if (!songStarted) {

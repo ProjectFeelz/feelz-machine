@@ -518,18 +518,23 @@ function softClouds(img) {
   return c;
 }
 
-function drawClouds(img, alpha, speed) {
+// Which pieces of each world's cloud sheet are real clouds: the tall smoke plumes,
+// wisps, rain, tornado, birds, lanterns and kites read as shapes or figures in the sky.
+const CLOUD_PIECES = { lc: [0, 1, 2, 3], mc: [0, 1, 3, 5, 6], uc: [0, 1, 2, 3, 4, 6, 7], de: [0, 2, 3, 6, 1], rc: [0, 1, 2, 3], ve: [0, 1, 4, 5, 6] };
+function drawClouds(img, alpha, speed, world) {
   if (!img.ready) return;
+  const pieces = CLOUD_PIECES[world];
   img = softClouds(img);
   const cw = img.width / 4, ch = img.height / 2, span = 1700;
   ctx.save();
   ctx.globalAlpha = alpha * 0.85;
-  for (const c of CLOUD_SLOTS) {
-    const px = (c.piece % 4) * cw, py = Math.floor(c.piece / 4) * ch;
+  CLOUD_SLOTS.forEach((c, i) => {
+    const piece = pieces ? pieces[(c.piece + i) % pieces.length] : c.piece;
+    const px = (piece % 4) * cw, py = Math.floor(piece / 4) * ch;
     let x = c.x - cameraX * 0.05 - cloudDrift * speed * c.s;
     x = ((x % span) + span) % span - 200;
     ctx.drawImage(img, px, py, cw, ch, x, c.y, cw * c.s, ch * c.s);
-  }
+  });
   ctx.restore();
 }
 
@@ -555,7 +560,7 @@ function drawWorld(id, alpha, stormK) {
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, H);
   ctx.restore();
-  drawClouds(layers.clouds, alpha, 7);
+  drawClouds(layers.clouds, alpha, 7, id);
   drawTiled(layers.far, 0.12, 4 - lift, 536, alpha * (1 - stormK * 0.35));
   drawTiled(layers.near, 0.35, 250 - lift * 1.6, 230, alpha * (1 - stormK * 0.25));
 }
@@ -583,7 +588,7 @@ function drawPlace(sec, alpha, stormK) {
   if (sec.backdrop && art.loc[sec.backdrop] && art.loc[sec.backdrop].ready) {
     const wd = WORLDS[sec.world], layers = art.worlds[sec.world];
     drawBackdrop(sec, alpha, stormK);
-    if (layers) drawClouds(layers.clouds, alpha * 0.8, 7);
+    if (layers) drawClouds(layers.clouds, alpha * 0.8, 7, sec.world);
     if (layers) drawTiled(layers.near, 0.35, 250 - Math.max(-60, Math.min(80, (cameraY + 410) * 0.08)) * 1.6, 230, alpha * 0.55 * (1 - stormK * 0.25));
     void wd;
   } else drawWorld(sec.world, alpha, stormK);
