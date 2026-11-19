@@ -77,9 +77,9 @@ exports.handler = async (event) => {
 
   try {
     // ── What is new ─────────────────────────────────────────────────────────
-    const { data: fresh, error: freshErr } = await supabase
+    const { data: freshRows, error: freshErr } = await supabase
       .from('tracks')
-      .select('id, title, slug, genre, mood, artist_id, stream_count, created_at, artists!tracks_artist_id_fkey(artist_name, slug)')
+      .select('id, title, slug, genre, mood, artist_id, stream_count, created_at, artists!tracks_artist_id_fkey(artist_name, slug, is_published)')
       .eq('is_published', true)
       .gte('created_at', iso(RELEASE_WINDOW_DAYS))
       .not('genre', 'is', null)
@@ -92,7 +92,43 @@ exports.handler = async (event) => {
       return { statusCode: 500, body: JSON.stringify({ error: freshErr.message }) };
     }
 
-    if (!fresh || !fresh.length) {
+    // ── Nobody deleted gets announced ───────────────────────────────────────
+    //
+    // On 19 November this job sent:
+    //
+    //   [Deleted Artist] just released "Started From Zero". You play a lot of
+    //   Trap, and nobody has heard this one yet.
+    //
+    // Deleting an account is a soft delete: AuthContext renames the artist to
+    // '[Deleted Artist]', clears the bio and picture and unpublishes the
+    // profile, so collaborations other artists were part of survive. What it
+    // never did was touch their tracks, so the music stayed published and
+    // this job quite correctly announced it.
+    //
+    // Migration 254 fixed the root: a trigger unpublishes a deleted artist's
+    // tracks, so nothing like this should reach here again. This is the
+    // second line of defence, because the cost of being wrong is a
+    // notification sent to real people that cannot be recalled.
+    //
+    // A missing artist row is skipped for the same reason. The old fallback
+    // said "An artist just released", which is not wrong but is not worth
+    // anybody's notification either.
+    const DELETED_ARTIST = '[Deleted Artist]';
+
+    const fresh = (freshRows || []).filter((t) => {
+      const name = t.artists?.artist_name;
+      return name && name !== DELETED_ARTIST;
+    });
+
+    const skipped = (freshRows || []).length - fresh.length;
+    if (skipped > 0) {
+      // Logged rather than swallowed. If this number is ever not zero the
+      // trigger from 254 has a hole in it and somebody should look.
+      console.warn('[notify-new-in-genre]', skipped,
+        'track(s) skipped: deleted or nameless artist. Migration 254 should have caught these.');
+    }
+
+    if (!fresh.length) {
       // A quiet week is not a failure. Said out loud so a silent run is
       // distinguishable from a run that did not happen.
       console.log('[notify-new-in-genre] nothing published in the last', RELEASE_WINDOW_DAYS, 'days');
