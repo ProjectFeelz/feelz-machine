@@ -31,7 +31,14 @@ const World3D = (() => {
   const drawn = new Set();            // roof solids drawn in 3D this frame
   let fillMat = null, fillGeo = null;
   let preloaded = false;
-  let watch = slowWatch(22, 2500), lite = false;   // too slow: first draw them at a smaller size, then give up on them
+  let watch = slowWatch(22, 2500);
+  // A mission whose 3D buildings this device couldn't keep up with goes straight to the
+  // painted ones (for a week), so it never starts with a few slow seconds while it finds
+  // out again. Missions it can manage keep them.
+  const slowKey = id => "feelzrun.world3dSlow." + id;
+  const slowHere = new Set();
+  const knownSlow = id => { if (slowHere.has(id)) return true; try { return Date.now() - (+localStorage.getItem(slowKey(id)) || 0) < 7 * 864e5; } catch (e) { return false; } };
+  const markSlow = id => { slowHere.add(id); try { localStorage.setItem(slowKey(id), String(Date.now())); } catch (e) { /* private mode */ } };
   // Load the buildings of every world this mission passes through, up front.
   function preloadHere() {
     preloaded = true;
@@ -207,19 +214,12 @@ const World3D = (() => {
     const sec = sectionAt(cameraX + W / 2);
     const set = sec && worldSet(sec.world);
     if (!set) { hideAll(); return; }
+    if (mission && flag !== "1" && knownSlow(mission.id)) { hideAll(); return; }
     if (state === "idle") start();
     if (state !== "ready") return;
     if (!preloaded) preloadHere();
     // A device that can't keep up goes back to the painted buildings by itself.
-    if (flag !== "1") {
-      const slow = watch();
-      if (slow && !lite) {
-        // a smaller picture first (about half the pixels to fill); only if that's still too slow do they go
-        lite = true; watch = slowWatch(22, 2500);
-        renderer.setSize(Math.round(W * QUALITY * 0.7), Math.round(H * QUALITY * 0.7), false);
-        console.warn("[world3d] lighter 3D buildings for this device");
-      } else if (slow || (typeof Atmos !== "undefined" && Atmos.quality() >= 2)) { console.warn("[world3d] too slow on this device, using the painted buildings"); state = "failed"; hideAll(); drawn.clear(); return; }
-    }
+    if ((watch() || (typeof Atmos !== "undefined" && Atmos.quality() >= 2)) && flag !== "1") { console.warn("[world3d] too slow here, using the painted buildings"); if (mission) markSlow(mission.id); hideAll(); drawn.clear(); return; }
     const camXm = (cameraX + W / 2) / PX, camYm = -(cameraY + H / 2) / PX, viewW = W / PX;
     camera.position.set(camXm, camYm, D);
     camera.lookAt(camXm, camYm, 0);
@@ -262,12 +262,13 @@ const World3D = (() => {
   // A new run: drop everything built for the last level.
   function reset() {
     preloaded = false;
+    watch = slowWatch(22, 2500);
     for (const f of fronts.values()) scene && scene.remove(f.group);
     for (const b of backs.values()) scene && scene.remove(b);
     fronts.clear(); backs.clear(); drawn.clear();
   }
 
-  const debug = () => ({ state, fronts: fronts.size, backs: backs.size, drawn: drawn.size, mission: mission && mission.id, world: sectionAt(cameraX + W / 2).world,
+  const debug = () => ({ state: mission && flag !== "1" && knownSlow(mission.id) ? "painted" : state, fronts: fronts.size, backs: backs.size, drawn: drawn.size, mission: mission && mission.id, world: sectionAt(cameraX + W / 2).world,
     models: Object.fromEntries(Object.entries(models).map(([k, v]) => [k, v.state])) });
   return { draw, covers: s => drawn.has(s), reset, debug };
 })();

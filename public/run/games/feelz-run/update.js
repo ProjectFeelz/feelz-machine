@@ -22,7 +22,11 @@ function updateRunGate(dt) {
     return;
   }
   const n = 3 - Math.floor(runGate.t / 0.75);
-  if (n > 0) { banner = { text: String(n), sub: missionLabel(mission), time: 0.5 }; return; }
+  if (n > 0) {
+    if (runGate.said !== n) { runGate.said = n; sfx.init(); sfx.count && sfx.count(n); }
+    banner = { text: String(n), sub: missionLabel(mission), time: 0.5 }; return;
+  }
+  sfx.go && sfx.go();
   runGate.phase = "go";
   banner = { text: mission.parts[0].name, sub: missionLabel(mission), time: 2.5 };
   startMusic();

@@ -310,18 +310,27 @@ const Atmos = (() => {
     ctx.restore();
   }
 
+  // The colour wash eases from one place to the next over a second or two, so
+  // walking into a new painting never snaps the whole picture to a new colour.
+  const hexRgb = h => { const n = parseInt(String(h).slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const ease = { grade: null, lift: null, vig: 0.5 };
+  function easeTo(cur, want, k) { if (!cur) return want.slice(); for (let i = 0; i < 3; i++) cur[i] += (want[i] - cur[i]) * k; return cur; }
   function grade() {
     const L = look();
     if (!L) return;
     ctx.save();
-    // The world's colour: a soft wash over everything (multiply), then the
-    // lightning's cold white for a beat.
-    if (L.grade && quality === 0) { ctx.globalCompositeOperation = "multiply"; ctx.fillStyle = L.grade; ctx.fillRect(0, 0, W, H); }
-    if (L.lift && quality === 0) { ctx.globalCompositeOperation = "screen"; ctx.fillStyle = L.lift; ctx.fillRect(0, 0, W, H); }
+    const k = 0.035;
+    ease.grade = easeTo(ease.grade, L.grade ? hexRgb(L.grade) : [255, 255, 255], k);
+    ease.lift = easeTo(ease.lift, L.lift ? hexRgb(L.lift) : [0, 0, 0], k);
+    ease.vig += ((L.vignette || 0.5) - ease.vig) * k;
+    // The world's colour: a soft wash over everything (multiply), then a lift of the darks.
+    const rgb = c => `rgb(${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])})`;
+    if (quality === 0) { ctx.globalCompositeOperation = "multiply"; ctx.fillStyle = rgb(ease.grade); ctx.fillRect(0, 0, W, H); }
+    if (quality === 0 && (ease.lift[0] + ease.lift[1] + ease.lift[2]) > 1) { ctx.globalCompositeOperation = "screen"; ctx.fillStyle = rgb(ease.lift); ctx.fillRect(0, 0, W, H); }
     // Vignette: the corners fall away into the dark.
     ctx.globalCompositeOperation = "source-over";
     const v = ctx.createRadialGradient(W / 2, H * 0.55, H * 0.35, W / 2, H * 0.55, W * 0.75);
-    v.addColorStop(0, "rgba(0, 0, 0, 0)"); v.addColorStop(1, `rgba(0, 0, 0, ${L.vignette || 0.5})`);
+    v.addColorStop(0, "rgba(0, 0, 0, 0)"); v.addColorStop(1, `rgba(0, 0, 0, ${ease.vig.toFixed(3)})`);
     ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
     ctx.restore();
   }

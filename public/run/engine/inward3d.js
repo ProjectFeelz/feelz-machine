@@ -119,14 +119,20 @@ const Inward3D = (() => {
     }, false);
   }
   function recordTex() {
-    return canvasTex("record", 128, 128, (g, w) => {
-      const c = w / 2;
-      g.fillStyle = "#0c0c0e"; g.beginPath(); g.arc(c, c, c - 1, 0, Math.PI * 2); g.fill();
-      g.strokeStyle = "rgba(255,255,255,0.08)"; g.lineWidth = 1;
-      for (let r = c * 0.45; r < c - 3; r += 3) { g.beginPath(); g.arc(c, c, r, 0, Math.PI * 2); g.stroke(); }
-      g.fillStyle = "#f1ca78"; g.beginPath(); g.arc(c, c, c * 0.36, 0, Math.PI * 2); g.fill();
-      g.fillStyle = "#0c0c0e"; g.beginPath(); g.arc(c, c, c * 0.06, 0, Math.PI * 2); g.fill();
-      g.strokeStyle = "rgba(255,255,255,0.45)"; g.lineWidth = 3; g.beginPath(); g.arc(c, c, c * 0.75, -0.7, 0.4); g.stroke();
+    // the same record as in the side-on run: gold rim, dark disc, gold centre
+    return canvasTex("record2", 128, 128, (g, w) => {
+      const c = w / 2, k = (c - 1) / 14;
+      const rim = g.createLinearGradient(0, c - 14 * k, 0, c + 14 * k);
+      rim.addColorStop(0, "#fff0bf"); rim.addColorStop(0.5, "#f2a62a"); rim.addColorStop(1, "#8a4e08");
+      g.fillStyle = rim; g.beginPath(); g.arc(c, c, 14 * k, 0, Math.PI * 2); g.fill();
+      const disc = g.createRadialGradient(c - 3 * k, c - 4 * k, k, c, c, 11 * k);
+      disc.addColorStop(0, "#3a3f46"); disc.addColorStop(1, "#0b0c10");
+      g.fillStyle = disc; g.beginPath(); g.arc(c, c, 11 * k, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = "rgba(255, 255, 255, 0.12)"; g.lineWidth = k;
+      g.beginPath(); g.arc(c, c, 8 * k, 0, Math.PI * 2); g.stroke();
+      g.fillStyle = "#f5b942"; g.beginPath(); g.arc(c, c, 3.2 * k, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = "rgba(255, 255, 255, 0.55)"; g.lineWidth = 2 * k;
+      g.beginPath(); g.arc(c, c, 9.5 * k, Math.PI * 1.08, Math.PI * 1.42); g.stroke();
     }, false);
   }
   function glowTex() {

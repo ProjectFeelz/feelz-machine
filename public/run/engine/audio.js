@@ -513,6 +513,9 @@ const sfx = (() => {
     // the light opening at a shrine: a rising shimmer of bells and a warm swell
     shrine()     { [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => tone({ type: "sine", from: f, to: f * 1.01, dur: 1.4, vol: 0.09, delay: i * 0.08 })); [262, 392].forEach(f => tone({ type: "triangle", from: f, dur: 1.8, vol: 0.07 })); burstNoise({ dur: 1.6, vol: 0.06, f0: 8000, f1: 3000, type: "highpass", attack: 0.3 }); },
     // breathing out at a window: a slow, soft exhale
+    // the count before a run: a low knock on 3 and 2, a higher one on 1, then a bright GO
+    count(n)     { const f = n === 1 ? 880 : 587; tone({ type: "triangle", from: f, dur: 0.16, vol: 0.5 }); tone({ type: "sine", from: f * 2, dur: 0.1, vol: 0.14 }); burstNoise({ dur: 0.05, vol: 0.25, f0: 2400, q: 1.5 }); },
+    go()         { [1175, 1480, 1760].forEach((f, i) => tone({ type: "triangle", from: f, dur: 0.32, vol: 0.38, delay: i * 0.03 })); burstNoise({ dur: 0.45, vol: 0.22, f0: 1500, f1: 5200, q: 0.7, attack: 0.02 }); },
     // praying: a slow breath in, a long breath out, over a low warm hum
     pray()       {
       burstNoise({ dur: 1.4, vol: 0.32, f0: 700, f1: 1500, q: 0.6, attack: 0.7 });
