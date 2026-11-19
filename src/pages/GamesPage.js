@@ -21,13 +21,20 @@ import { supabase } from '../supabaseClient';
 
 const RUN = '/run/';
 
+// The painting each mission opens on: the hero shows these on their own, with dancing Koda in front.
+const PAINTINGS = [
+  'm1-loc-01-thoroughfare', 'm2-loc-02-street-crossing', 'm3-loc-01-market-night', 'm4-loc-01-loading-docks', 'm8-loc-01-plaza-fountain-day',
+  'm6-loc-01-fountain-dusk', 'm7-loc-01-rain-alley', 'm8-loc-01-plaza-fountain-day', 'm9-loc-03-middle-city-rooftops', 'm1-loc-05-storm-shelter',
+  'm9-loc-03-middle-city-rooftops', 'm12-loc-01-outer-wall-tunnel', 'm13-loc-01-cracked-fountain', 'm14-loc-01-rose-terraces', 'm15-loc-03-mud-return',
+];
+
 const MISSIONS = [
   'Against The Storm', 'Get Out The Way', 'Ghetto Gospel', 'Blessings', 'Chemistry',
   'God Is My Woman', 'Close To My Heart', 'Patience', "Head's Up", 'I Pray',
   'Letting Off Steam', 'My Brothers', 'Roses & Butterflies', 'Shine Olive Gem', 'Thugs In Love',
 ].map((title, i) => {
   const id = 'm' + String(i + 1).padStart(2, '0');
-  return { id, n: String(i + 1).padStart(2, '0'), title, image: `${RUN}assets/missions/${id}.webp` };
+  return { id, n: String(i + 1).padStart(2, '0'), title, image: `${RUN}assets/missions/${id}.webp`, painting: `${RUN}assets/worlds/loc/${PAINTINGS[i]}.webp` };
 });
 
 const GAMES = [
@@ -206,7 +213,7 @@ function DesktopGames() {
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section className="relative h-[560px] overflow-hidden">
         {MISSIONS.map((m, i) => (
-          <img key={m.id} src={m.image} alt="" loading={i < 2 ? 'eager' : 'lazy'}
+          <img key={m.id} src={m.painting} alt="" loading={i < 2 ? 'eager' : 'lazy'}
             className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[1500ms] ${i === shown ? 'opacity-100 fg-kenburns' : 'opacity-0'}`} />
         ))}
         <div className="absolute inset-0 bg-gradient-to-r from-black via-black/75 to-black/10" />
