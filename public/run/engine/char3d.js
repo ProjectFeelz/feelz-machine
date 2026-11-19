@@ -272,7 +272,7 @@ function keepRest(root, bone) {
   if (!list.some(r => r.bone === bone)) list.push({ bone, q: bone.quaternion.clone() });
 }
 function restoreRest(root) { for (const r of root.userData.rest || []) r.bone.quaternion.copy(r.q); }
-const ARM_SWING = 0.6, ARM_OUT = 0.25, ARM_FORE = 0.7;
+const ARM_SWING = 0.3, ARM_OUT = 0, ARM_FORE = 0.4;
   // Running arms: the run clips hold his arms almost still at his chest, so swing
   // them from the shoulder, each arm opposite its own leg, the way a runner pumps.
   // (amount is the swing in radians either side; 0 leaves the clip as it is)
@@ -315,6 +315,58 @@ const ARM_SWING = 0.6, ARM_OUT = 0.25, ARM_FORE = 0.7;
       }
     }
   }
+
+// Arms clear of the body, in every move: the moves were made on a body with
+// narrower shoulders, so his elbows sink into his chest. Each frame, any upper
+// arm whose elbow sits inside the line of his shoulders is turned out until the
+// elbow is beside his body (no more than ARM_CLEAR_MAX). The collarbone takes a
+// share of the turn so the shoulder moves with the arm and stays joined to it.
+// Measured in his chest's own frame, so it works whichever way the move turns him.
+const ARM_CLEAR = 1.05, ARM_CLEAR_MAX = 0.7, ARM_CLAVICLE = 0.3;
+const _ac = {};
+function armClear(root) {
+  if (!_ac.c) for (const k of ["c", "l", "r", "e", "s", "lat", "up", "fwd", "n", "t"]) _ac[k] = new THREE.Vector3();
+  if (!_ac.q) { _ac.q = new THREE.Quaternion(); _ac.pq = new THREE.Quaternion(); }
+  if (!root.userData.clear) {
+    const find = re => { let f = null; root.traverse(o => { if (!f && o.isBone && re.test(o.name)) f = o; }); if (f) keepRest(root, f); return f; };
+    const chest = find(/Spine2$/) || find(/Spine1$/), neck = find(/Neck$/);
+    root.userData.clear = { chest, neck, sides: ["Left", "Right"].map(sd => ({ clav: find(new RegExp(sd + "Shoulder$")), arm: find(new RegExp(sd + "Arm$")), fore: find(new RegExp(sd + "ForeArm$")) })) };
+  }
+  const C = root.userData.clear;
+  if (!C.chest || !C.neck || C.sides.some(sd => !sd.arm || !sd.fore)) return;
+  root.updateMatrixWorld(true);
+  const W = (b, v) => b.getWorldPosition(v);
+  W(C.sides[0].arm, _ac.l); W(C.sides[1].arm, _ac.r);
+  const sw = _ac.l.distanceTo(_ac.r) / 2;
+  if (sw < 1e-5) return;
+  _ac.c.addVectors(_ac.l, _ac.r).multiplyScalar(0.5);
+  _ac.lat.subVectors(_ac.l, _ac.r).normalize();                       // towards his left
+  W(C.neck, _ac.up); W(C.chest, _ac.t); _ac.up.sub(_ac.t);
+  _ac.up.addScaledVector(_ac.lat, -_ac.up.dot(_ac.lat)).normalize();   // up his spine
+  _ac.fwd.crossVectors(_ac.lat, _ac.up).normalize();
+  const outOf = (sd, k) => { W(sd.fore, _ac.e); return k * _ac.e.sub(_ac.c).dot(_ac.lat) / sw; };
+  const turn = (bone, ang) => {
+    bone.parent.getWorldQuaternion(_ac.pq);
+    _ac.q.setFromAxisAngle(_ac.fwd, ang);
+    bone.quaternion.premultiply(_ac.pq.clone().invert().multiply(_ac.q).multiply(_ac.pq));
+    bone.updateMatrixWorld(true);
+  };
+  C.sides.forEach((sd, i) => {
+    const k = i === 0 ? 1 : -1;
+    W(sd.arm, _ac.s); W(sd.fore, _ac.e);
+    _ac.n.subVectors(_ac.e, _ac.s);
+    if (_ac.n.dot(_ac.up) > 0) return;                                 // arm raised: leave it
+    const ex = outOf(sd, k);
+    if (ex >= ARM_CLEAR) return;
+    const upper = Math.max(0.2, Math.hypot(_ac.n.dot(_ac.lat), _ac.n.dot(_ac.up)) / sw);
+    const ang = Math.min(ARM_CLEAR_MAX, (ARM_CLEAR - ex) / upper);
+    // which way is "out" for this arm: try it, and turn back the other way if it went in
+    const share = sd.clav ? ARM_CLAVICLE : 0;
+    if (sd.clav) turn(sd.clav, ang * share);
+    turn(sd.arm, ang * (1 - share));
+    if (outOf(sd, k) < ex) { if (sd.clav) turn(sd.clav, -2 * ang * share); turn(sd.arm, -2 * ang * (1 - share)); }
+  });
+}
 
 const FLY_POSE = { lean: 1.2, backLeg: 0.3, backKnee: 0.05, frontLeg: -1.2, frontKnee: 1.7, armOut: 1.0, armFwd: -2.1, armBack: 1.3, foreOut: 0, head: -1.0 };
   // Flying, superhero style: body leaning forward almost level, arms spread wide,
@@ -378,6 +430,7 @@ const FLY_POSE = { lean: 1.2, backLeg: 0.3, backKnee: 0.05, frontLeg: -1.2, fron
     m.mixer.update(0);
     if (a.clip.name === "run" || a.clip.name === "sprint") armSwing(m.root, ARM_SWING);
     if (opts && opts.fly) flyPose(m.root, FLY_POSE);
+    else armClear(m.root);
     m.holder.visible = true;
     m.holder.rotation.y = (facing < 0 ? -1 : 1) * Math.PI / 2 * (opts && opts.turn !== undefined ? opts.turn : 1);
     // Frame the shot: the same metres-per-pixel as the 2D world.
@@ -493,6 +546,7 @@ const FLY_POSE = { lean: 1.2, backLeg: 0.3, backKnee: 0.05, frontLeg: -1.2, fron
 
   const VIEW_METRES = 3.2;           // world metres across each runner's canvas
   const FOOT = 0.86;                 // how far down the canvas the feet sit
+
 
   return { preload, register, ready, settled, has, want, wantProp, render, renderProp, bake, mood, SIZE, VIEW_METRES, FOOT };
 })();
