@@ -264,6 +264,7 @@ function updatePickups(dt) {
     for (const j of level.journal) {
       if (j.taken || !near(j, 20)) continue;
       j.taken = true; p.journal.push(j.id); sfx.journal(); sfx.page();
+      if (freeRoam && p === players[0]) keepRoamPage(j.id);
       const entry = (mission.journalText || {})[j.id] || { kind: "Journal", title: j.id, text: "" };
       openReading(j.id, entry);
     }

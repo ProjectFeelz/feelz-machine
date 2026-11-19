@@ -74,6 +74,7 @@ const Backend = (() => {
     unlock: skillId => rpc("game_unlock", { skill: skillId }),
     setStyle: (outfit, dance) => rpc("game_set_style", { new_outfit: outfit, new_dance: dance }),
     convert: () => rpc("game_convert"),
+    addJournal: (missionId, ids) => rpc("game_add_journal", { mission: missionId, journals: ids }),
     buyVoucher: (trackId, percent) => rpc("game_buy_voucher", { track: trackId, pct: percent }),
     // Artist runs: every live one, or one by its id. Works signed in or not.
     artistLevels: id => rpc("game_artist_levels_list", { p_id: id || null }),

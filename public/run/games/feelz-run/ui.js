@@ -179,6 +179,18 @@ function startGame(fromJoin) {
   setTimeout(checkOrientation, 50);
 }
 
+// Free roam isn't scored, but a journal page found there goes in the journal the
+// moment it's picked up (no credits for it), so leaving early doesn't lose it.
+let roamPagesNew = [];
+function keepRoamPage(id) {
+  const d = Progress.data;
+  d.journal = d.journal || [];
+  if (d.journal.includes(id)) return;
+  d.journal.push(id); roamPagesNew.push(id);
+  Progress.save();
+  if (signedIn() && Backend.addJournal) Backend.addJournal(mission.id, [id]).then(p => { Progress.fromServer(p); updatePlayerCard(); }).catch(() => {});
+}
+
 function finishGame() {
   if (gameState === "finished") return;
   gameState = "finished";
@@ -249,10 +261,11 @@ function showResults(result) {
     const found = players[0].gems || 0, total = (level.gems || []).length;
     const d = Progress.data; d.gems = d.gems || {};
     d.gems[mission.id] = Math.max(d.gems[mission.id] || 0, found);
+    const pages = roamPagesNew;
     Progress.save();
     setText("finishTitle", "FREE ROAM");
     setText("finishEyebrow", "THE END OF THE ROAD");
-    setText("finishLine", "You found " + found + " of " + total + " hidden gems in " + mission.title + ". Best: " + d.gems[mission.id] + ".");
+    setText("finishLine", "You found " + found + " of " + total + " hidden gems in " + mission.title + ". Best: " + d.gems[mission.id] + "." + (pages.length ? " " + pages.length + (pages.length === 1 ? " new page" : " new pages") + " in your journal." : ""));
     setText("finalSaved", "Free roam is not scored. Play the mission to post a run.");
     document.getElementById("postScoreButton").classList.add("hidden");
     setupListenLink();

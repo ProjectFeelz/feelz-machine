@@ -89,7 +89,7 @@ function resetRun() {
   banner = { text: mission.parts[0].name, sub: missionLabel(mission), time: 3 };
   toast.time = 0;
   resetSystems();
-  runGate = { phase: "load", t: 0, total: 0 };
+  roamPagesNew = []; runGate = { phase: "load", t: 0, total: 0 };
   if (typeof tutorialStart === "function") tutorialStart();
   gameState = "playing";
 }

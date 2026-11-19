@@ -58,15 +58,28 @@ const FEATURES = [
 
 function go(href) { window.location.href = href; }
 
-/* Koda dancing, straight from the game's own finish-screen sheet (16 frames of 295 x 520). */
+/* Koda dancing, straight from the game's own finish-screen sheets (16 frames of 295 x 520 each).
+   He runs through every dance in the game: Two-Step, B-Boy, Swing and Robot, two loops each. */
+const KODA_DANCES = ['default', 'bboy', 'swing', 'robot'];
+const danceSrc = (name) => `${RUN}assets/sprites/dance3d-${name}.webp`;
+
 function DancingKoda({ height = 340 }) {
   const w = Math.round(height * 295 / 520);
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    KODA_DANCES.forEach((name) => { const im = new Image(); im.src = danceSrc(name); });
+    const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (still) return undefined;
+    const t = setInterval(() => setStep((v) => (v + 1) % KODA_DANCES.length), 3200);
+    return () => clearInterval(t);
+  }, []);
+  const name = KODA_DANCES[step];
   return (
     <div className="relative" style={{ width: w, height }}>
       <div className="absolute left-1/2 bottom-0 -translate-x-1/2 w-[140%] h-10 rounded-[50%] bg-amber-400/25 blur-2xl" />
-      <div className="absolute inset-0 fg-dance"
+      <div key={name} className="absolute inset-0 fg-dance"
         style={{
-          backgroundImage: `url(${RUN}assets/sprites/dance-default.webp)`,
+          backgroundImage: `url(${danceSrc(name)})`,
           backgroundSize: `${w * 16}px ${height}px`,
           '--fg-dance-end': `-${w * 16}px`,
         }} />
