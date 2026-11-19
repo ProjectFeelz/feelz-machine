@@ -241,14 +241,19 @@ function drawWorldProp(kind, s) {
 
 // Street dressing: lamps, bins, plants and the rest, set along the street every few metres behind the action,
 // so a stretch of road never looks empty. Never where something stands in the way or at a checkpoint.
+// Small things (cans, buckets, tyres, pots) come from assets/worlds/props-small.webp.
 function drawSetDressing() {
-  if (!art.props2d || !art.props2d.ready || !level.dressing) return;
+  if (!level.dressing) return;
+  const big = art.props2d && art.props2d.ready, small = art.propsSmall && art.propsSmall.ready;
+  if (!big && !small) return;
   for (const d of level.dressing) {
     if (!onScreen(d.x - m(2), m(4), 60)) continue;
-    const r = PROP2D[d.name];
+    const img = d.small ? art.propsSmall : art.props2d;
+    if (d.small ? !small : !big) continue;
+    const r = (d.small ? PROPS_SMALL : PROP2D)[d.name];
     if (!r) continue;
     const h = m(d.h), w = h * r[2] / r[3];
-    drawBaked(art.props2d, r[0], r[1], r[2], r[3], sx(d.x) - w / 2, sy(d.y) - h + 3, w, h, "brightness(0.82) saturate(0.92)");
+    drawBaked(img, r[0], r[1], r[2], r[3], sx(d.x) - w / 2, sy(d.y) - h + 3, w, h, "brightness(0.82) saturate(0.92)");
   }
 }
 
@@ -414,20 +419,26 @@ function drawTiled(img, parallax, y, height, alpha) {
   ctx.restore();
 }
 
-// Several pictures of the same kind of street, laid end to end in a seeded order
-// so the strip never repeats one picture.
+// Several pictures of the same kind of street, laid end to end in a seeded order,
+// each at its own width, so the strip never repeats one picture side by side.
 function drawTiledSet(imgs, parallax, y, height, alpha) {
   const ready = imgs.filter(i => i.ready);
   if (!ready.length || alpha <= 0) return;
-  const tw = ready.map(i => i.width * height / i.height), avg = tw.reduce((a, b) => a + b, 0) / tw.length;
-  const off = cameraX * parallax;
-  let k = Math.floor(off / avg) - 1, x = k * avg - off;
+  if (ready.length === 1) return drawTiled(ready[0], parallax, y, height, alpha);
+  const seq = [];
+  for (let k = 0; k < 8; k++) {
+    let i = Math.floor(seeded(k * 7.3 + 11) * ready.length) % ready.length;
+    if (k && ready[i] === seq[k - 1]) i = (i + 1) % ready.length;
+    seq.push(ready[i]);
+  }
+  const ws = seq.map(i => i.width * height / i.height), period = ws.reduce((a, b) => a + b, 0);
+  let x = -((((cameraX * parallax) % period) + period) % period), k = 0;
   ctx.save();
   ctx.globalAlpha = alpha;
   while (x < W) {
-    const i = Math.floor(seeded(k * 7.3 + 11) * ready.length) % ready.length;
-    ctx.drawImage(ready[i], x, y + height - ready[i].height * height / ready[i].height, avg + 1, height);
-    x += avg; k++;
+    const i = k % seq.length;
+    if (x + ws[i] > 0) ctx.drawImage(seq[i], x, y, ws[i] + 1, height);
+    x += ws[i]; k++;
   }
   ctx.restore();
 }

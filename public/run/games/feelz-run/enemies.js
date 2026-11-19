@@ -238,6 +238,8 @@ function updateWardens(dt) {
       }
       // A power slide takes his legs out.
       if (p.state === "slide" && hasSkill(p, "power_slide")) { knockOutWarden(wd, p); break; }
+      // A flying kick lands the moment it reaches him, before he can touch Koda.
+      if (p.state === "flykick") { if (!p.hitDone) { p.hitDone = true; landAttack(p, players.indexOf(p), "flykick", ATTACKS.flykick); } continue; }
       // Brushing past one who hasn't seen him wakes him up.
       if (!wd.aware && stealthOn()) { wd.aware = 1; wd.target = p; wd.facing = p.x > wd.x ? 1 : -1; spotted(wd, p); }
       // On foot you square up rather than run through him; in the air you bounce off him.

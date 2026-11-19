@@ -189,17 +189,17 @@ const SPRITES = {
 --------------------------------------------------------------------------- */
 
 const WORLDS = {
-  lc: { name: "LOWER CITY",  far: "assets/worlds/lc-far.webp", near: "assets/worlds/lc-near-1.webp", clouds: "assets/worlds/lc-clouds.webp",
+  lc: { name: "LOWER CITY",  far: "assets/worlds/lc-far.webp", near: ["assets/worlds/lc-near-1.webp", "assets/worlds/lc-near-2.webp"], clouds: "assets/worlds/lc-clouds.webp",
         sky: ["#3b2a52", "#c0613d", "#f4b35e"], storm: ["#140f22", "#3a2440", "#6a3a3a"] },
   mc: { name: "MIDDLE CITY", far: "assets/worlds/mc-far.webp", near: ["assets/worlds/mc-near-1.webp", "assets/worlds/mc-near-2.webp"], clouds: "assets/worlds/mc-clouds.webp",
         sky: ["#1f3a66", "#5d7fb0", "#f0a860"], storm: ["#0e1226", "#2a2f5a", "#5a3b62"] },
   uc: { name: "UPPER CITY",  far: "assets/worlds/uc-far.webp", near: ["assets/worlds/uc-near-1.webp", "assets/worlds/uc-near-2.webp"], clouds: "assets/worlds/uc-clouds.webp",
         sky: ["#2a5f9c", "#86b8e0", "#f5dfa8"], storm: ["#16224a", "#3d4f80", "#7a6a88"] },
-  de: { name: "THE DESERT",  far: "assets/worlds/de-far.webp", near: "assets/worlds/de-near.webp", clouds: "assets/worlds/de-clouds.webp",
+  de: { name: "THE DESERT",  far: "assets/worlds/de-far.webp", near: ["assets/worlds/de-near.webp", "assets/worlds/de-near-1.webp"], clouds: "assets/worlds/de-clouds.webp",
         sky: ["#2b2350", "#c27a48", "#f2c47e"], storm: ["#2a1c18", "#6b4630", "#a77a4c"] },
-  rc: { name: "THE RESTORED CITY", far: "assets/worlds/rc-far.webp", near: "assets/worlds/rc-near-1.webp", clouds: "assets/worlds/rc-clouds.webp",
+  rc: { name: "THE RESTORED CITY", far: "assets/worlds/rc-far.webp", near: ["assets/worlds/rc-near-1.webp", "assets/worlds/rc-near-2.webp"], clouds: "assets/worlds/rc-clouds.webp",
         sky: ["#3a6aa0", "#f0b878", "#ffe2a8"], storm: ["#2a3450", "#6a6a88", "#a89a98"] },
-  ve: { name: "THE VEIL",    far: "assets/worlds/ve-far.webp", near: "assets/worlds/ve-near-1.webp", clouds: "assets/worlds/ve-clouds.webp",
+  ve: { name: "THE VEIL",    far: "assets/worlds/ve-far.webp", near: ["assets/worlds/ve-near-1.webp", "assets/worlds/ve-near-2.webp"], clouds: "assets/worlds/ve-clouds.webp",
         sky: ["#0c1230", "#24307a", "#4a4aa8"], storm: ["#0c1230", "#24307a", "#4a4aa8"] }
 };
 
@@ -403,6 +403,37 @@ const WORLD_DRESSING = {
   de: [["de_decor1", 2.8], ["de_decor2", 2.6], ["de_barrel", 1.1]],
   ve: [["ve_decor1", 2.4], ["ve_decor2", 1.6], ["ve_barrel", 1.1]],
   rc: [["rc_decor1", 3.0], ["rc_barrel", 1.2], ["rc_cart", 1.3]]
+};
+
+// Small things along the street (cans, buckets, pots), packed into
+// assets/worlds/props-small.webp: [x, y, w, h] in pixels.
+const PROPS_SMALL = {
+  s_lc_1_1: [0, 0, 96, 150], s_lc_1_2: [100, 0, 133, 150], s_lc_1_3: [237, 0, 128, 150], s_lc_1_4: [369, 0, 163, 150],
+  s_lc_1_5: [536, 0, 98, 150], s_lc_2_1: [638, 0, 105, 150], s_lc_2_2: [747, 0, 93, 150], s_lc_2_3: [844, 0, 107, 150],
+  s_lc_2_4: [955, 0, 135, 150], s_lc_2_5: [1094, 0, 110, 150], s_mc_1_1: [1208, 0, 102, 150], s_mc_1_2: [1314, 0, 90, 150],
+  s_mc_1_3: [1408, 0, 246, 150], s_mc_1_4: [1658, 0, 281, 147], s_mc_1_5: [1943, 0, 84, 150], s_mc_2_1: [0, 154, 179, 150],
+  s_mc_2_2: [183, 154, 239, 150], s_mc_2_3: [426, 154, 97, 150], s_mc_2_4: [527, 154, 88, 150], s_mc_2_5: [619, 154, 184, 150],
+  s_uc_1_1: [807, 154, 91, 150], s_uc_1_2: [902, 154, 91, 150], s_uc_1_3: [997, 154, 129, 150], s_uc_1_4: [1130, 154, 194, 150],
+  s_uc_1_5: [1328, 154, 109, 150], s_uc_2_1: [1441, 154, 110, 150], s_uc_2_2: [1555, 154, 70, 150], s_uc_2_3: [1629, 154, 124, 150],
+  s_uc_2_4: [1757, 154, 103, 150], s_uc_2_5: [1864, 154, 132, 150], s_de_2_1: [0, 308, 92, 150], s_de_2_2: [96, 308, 89, 150],
+  s_de_2_3: [189, 308, 135, 150], s_de_2_4: [328, 308, 106, 150], s_de_2_5: [438, 308, 152, 150], s_lc_3_1: [594, 308, 91, 150],
+  s_lc_3_2: [689, 308, 49, 150], s_lc_3_3: [742, 308, 158, 150], s_lc_3_4: [904, 308, 106, 150], s_lc_3_5: [1014, 308, 109, 150],
+  s_mc_3_1: [1127, 308, 91, 150], s_mc_3_2: [1222, 308, 196, 150], s_mc_3_3: [1422, 308, 115, 150], s_mc_3_4: [1541, 308, 159, 150],
+  s_mc_3_5: [1704, 308, 191, 150], s_rc_1_1: [1899, 308, 102, 150], s_rc_1_2: [0, 462, 176, 150], s_rc_1_3: [180, 462, 210, 150],
+  s_rc_1_4: [394, 462, 133, 150], s_rc_1_5: [531, 462, 174, 150], s_rc_2_1: [709, 462, 113, 150], s_rc_2_2: [826, 462, 120, 150],
+  s_rc_2_3: [950, 462, 139, 150], s_rc_2_4: [1093, 462, 99, 150], s_rc_2_5: [1196, 462, 55, 150], s_ve_1_1: [1255, 462, 97, 150],
+  s_ve_1_2: [1356, 462, 108, 150], s_ve_1_3: [1468, 462, 149, 150], s_ve_1_4: [1621, 462, 113, 150], s_ve_1_5: [1738, 462, 83, 150],
+  s_ve_2_1: [1825, 462, 110, 150], s_ve_2_2: [1939, 462, 74, 150], s_ve_2_3: [0, 616, 99, 150], s_ve_2_4: [103, 616, 153, 150],
+  s_ve_2_5: [260, 616, 101, 150]
+};
+// Which small things each world has, and how tall they are (metres).
+const WORLD_SMALL = {
+  lc: [["s_lc_1_1", 0.3], ["s_lc_1_2", 0.5], ["s_lc_1_3", 0.8], ["s_lc_1_4", 0.4], ["s_lc_1_5", 0.45], ["s_lc_2_1", 0.9], ["s_lc_2_2", 0.95], ["s_lc_2_3", 0.6], ["s_lc_2_4", 0.35], ["s_lc_2_5", 0.5], ["s_lc_3_1", 0.15], ["s_lc_3_2", 0.3], ["s_lc_3_3", 0.4], ["s_lc_3_4", 0.85], ["s_lc_3_5", 0.3]],
+  mc: [["s_mc_1_1", 0.9], ["s_mc_1_2", 0.6], ["s_mc_1_3", 0.35], ["s_mc_1_4", 0.3], ["s_mc_1_5", 0.8], ["s_mc_2_1", 0.5], ["s_mc_2_2", 0.4], ["s_mc_2_3", 0.7], ["s_mc_2_4", 0.6], ["s_mc_2_5", 0.35], ["s_mc_3_1", 1.1], ["s_mc_3_2", 0.5], ["s_mc_3_3", 1.0], ["s_mc_3_4", 1.0], ["s_mc_3_5", 0.5]],
+  uc: [["s_uc_1_1", 1.1], ["s_uc_1_2", 1.0], ["s_uc_1_3", 0.8], ["s_uc_1_4", 0.6], ["s_uc_1_5", 0.45], ["s_uc_2_1", 1.2], ["s_uc_2_2", 0.9], ["s_uc_2_3", 0.95], ["s_uc_2_4", 0.45], ["s_uc_2_5", 0.4]],
+  de: [["s_de_2_1", 0.8], ["s_de_2_2", 0.6], ["s_de_2_3", 0.55], ["s_de_2_4", 0.45], ["s_de_2_5", 0.4]],
+  rc: [["s_rc_1_1", 0.55], ["s_rc_1_2", 0.4], ["s_rc_1_3", 0.4], ["s_rc_1_4", 0.75], ["s_rc_1_5", 0.45], ["s_rc_2_1", 0.8], ["s_rc_2_2", 0.9], ["s_rc_2_3", 0.4], ["s_rc_2_4", 0.6], ["s_rc_2_5", 1.1]],
+  ve: [["s_ve_1_1", 0.6], ["s_ve_1_2", 0.7], ["s_ve_1_3", 0.6], ["s_ve_1_4", 0.7], ["s_ve_1_5", 0.6], ["s_ve_2_1", 1.1], ["s_ve_2_2", 1.0], ["s_ve_2_3", 1.0], ["s_ve_2_4", 0.6], ["s_ve_2_5", 0.5]]
 };
 
 

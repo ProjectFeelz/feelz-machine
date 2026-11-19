@@ -27,6 +27,7 @@ for (const [k, d] of Object.entries(SPRITES.enemies)) lazyImage(art.enemies, k, 
 lazyImage(art.back, "koda", SPRITES.back.koda);
 lazyImage(art.back, "koda_mask", SPRITES.back.koda_mask);
 lazyImage(art.back, "zora", SPRITES.back.zora);
+lazyImage(art, "propsSmall", "assets/worlds/props-small.webp");
 
 // Location paintings: loaded when a mission that uses them is chosen.
 function locImage(name) {

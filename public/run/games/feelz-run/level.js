@@ -152,6 +152,20 @@ function dressStreets(L, data) {
       out.push({ x: jx, y: g.y, name: pick[0], h: pick[1] * (0.9 + seeded(x * 0.29) * 0.2) });
     }
   }
+  // Small things in between: a can, a bucket, a pot. Never right against a bigger piece.
+  const bigs = out.slice();
+  for (const g of L.solids) {
+    if (g.kind !== "ground") continue;
+    for (let x = g.x + m(1.5); x < g.x + g.w - m(1.5); x += m(1.7)) {
+      if (seeded(Math.floor(x / m(1.7)) * 3.17 + 9.1) > 0.42) continue;
+      const list = WORLD_SMALL[worldAt(x / PX)];
+      if (!list || !list.length) continue;
+      const jx = x + (seeded(x * 0.37) - 0.5) * m(0.8);
+      if (busy(jx, g.y) || bigs.some(d => Math.abs(d.x - jx) < m(1.3))) continue;
+      const pick = list[Math.floor(seeded(x * 0.53) * list.length) % list.length];
+      out.push({ x: jx, y: g.y, name: pick[0], h: pick[1] * (0.9 + seeded(x * 0.41) * 0.2), small: true });
+    }
+  }
   return out;
 }
 
