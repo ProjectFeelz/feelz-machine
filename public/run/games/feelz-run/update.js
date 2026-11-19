@@ -28,7 +28,7 @@ function updateRunGate(dt) {
   }
   sfx.go && sfx.go();
   runGate.phase = "go";
-  banner = { text: mission.parts[0].name, sub: missionLabel(mission), time: 2.5 };
+  banner = { text: mission.parts[0].name, sub: missionLabel(mission) + (seriesRound() > 1 ? " · ROUND " + seriesRound() : ""), time: 2.5 };
   startMusic();
   for (const p of players) p.autoRun = 1.4;
 }

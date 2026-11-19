@@ -438,22 +438,39 @@ const sfx = (() => {
   }
   function quiet() { holdPad(false); ambience({ wind: 0, rain: 0, roar: 0 }); fightMix(false); }
 
-  // Thunder: a crack close by, then a long roll that slides down in pitch.
+  // Thunder: the crack of the strike (a quick crackle of sharp snaps), then a
+  // deep roll that slides down in pitch. Kept under the music, never harsh.
   function thunder(close) {
     if (!ac) return;
     const t = ac.currentTime;
     if (samples.thunder.length) {
       const src = ac.createBufferSource(); src.buffer = samples.thunder[Math.floor(Math.random() * samples.thunder.length)];
-      const g = ac.createGain(); g.gain.value = close ? 1 : 0.6; src.connect(g); g.connect(master); src.start(t);
+      const g = ac.createGain(); g.gain.value = close ? 0.7 : 0.45; src.connect(g); g.connect(master); src.start(t);
       return;
     }
-    if (close) noise({ dur: 0.18, vol: 0.32, cutoff: 2600, type: "highpass" });
+    const k = close ? 1 : 0.55;
+    // the crack: a hard snap, then a spray of smaller snaps over a sizzle
+    burstNoise({ dur: 0.07, vol: 0.34 * k, f0: 5200, f1: 2400, q: 0.6, type: "highpass", attack: 0.001 });
+    burstNoise({ dur: 0.05, vol: 0.22 * k, f0: 1600, f1: 900, q: 1.2, attack: 0.001 });
+    let d = 0.03;
+    for (let i = 0; i < (close ? 7 : 4); i++) {
+      burstNoise({ dur: 0.025 + Math.random() * 0.03, vol: (0.2 - i * 0.022) * k, f0: 2500 + Math.random() * 3000, f1: 1500, q: 1.5, attack: 0.001, delay: d });
+      d += 0.018 + Math.random() * 0.035;
+    }
+    burstNoise({ dur: 0.45, vol: 0.07 * k, f0: 7000, f1: 3000, q: 0.5, type: "highpass", attack: 0.004 });
+    // the roll
     const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    const t0 = t + (close ? 0.12 : 0.25);
     s.buffer = noiseBuf; s.loop = true; f.type = "lowpass";
-    f.frequency.setValueAtTime(close ? 700 : 400, t); f.frequency.exponentialRampToValueAtTime(70, t + 3);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(close ? 0.95 : 0.55, t + 0.06);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 3.6);
-    s.connect(f); f.connect(g); g.connect(master); s.start(t); s.stop(t + 3.3);
+    f.frequency.setValueAtTime(close ? 650 : 380, t0); f.frequency.exponentialRampToValueAtTime(60, t0 + 3);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(close ? 0.6 : 0.35, t0 + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 3.4);
+    s.connect(f); f.connect(g); g.connect(master); s.start(t0); s.stop(t0 + 3.5);
+    // a low boom under the first moment, felt more than heard
+    const o = ac.createOscillator(), og = ac.createGain();
+    o.type = "sine"; o.frequency.setValueAtTime(58, t0); o.frequency.exponentialRampToValueAtTime(32, t0 + 0.9);
+    og.gain.setValueAtTime(0.0001, t0); og.gain.exponentialRampToValueAtTime(0.32 * k, t0 + 0.03); og.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.1);
+    o.connect(og); og.connect(master); o.start(t0); o.stop(t0 + 1.2);
   }
 
   // Rewind: the song itself, played backwards from where it is, through a tape-like filter.

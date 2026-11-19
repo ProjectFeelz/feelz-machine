@@ -179,7 +179,7 @@ function updateWardens(dt) {
       wd.facing = near.x > wd.x ? 1 : -1;
       wd.swingCd = Math.max(wd.swingCd, 0.3);
       fightsShown += 1;
-      const tierHint = ek.tier === 2 ? "ELITE · HE SWINGS TWICE · WAIT FOR THE SECOND ONE" : ek.tier === 1 ? "VETERAN · QUICKER SWINGS · ONE MORE HIT TO DROP HIM" : "";
+      const tierHint = ek.tier === 3 ? "HARDENED · TOUGH, FAST, SWINGS TWICE · PICK YOUR MOMENT" : ek.tier === 2 ? "ELITE · HE SWINGS TWICE · WAIT FOR THE SECOND ONE" : ek.tier === 1 ? "VETERAN · QUICKER SWINGS · ONE MORE HIT TO DROP HIM" : "";
       if (fightsShown === 1 && tierHint) showBanner("FIGHT", tierHint, 2.2);
       else showBanner("FIGHT", fightsShown <= 3 ? "HIT TO TAKE HIM DOWN · JUMP TO VAULT OVER HIM" : "", fightsShown <= 3 ? 1.8 : 0.8);
       sfx.fight();

@@ -331,7 +331,7 @@ function drawWardens() {
     if (tier > 0) {
       const cx = sx(wd.x), cy = sy(wd.y - m(2.25)) + Math.sin(frameTime * 3 + wd.x) * 2;
       ctx.save(); ctx.lineJoin = "round"; ctx.lineCap = "round";
-      ctx.shadowColor = tier === 2 ? "#ff5a3c" : "#ffcf6a"; ctx.shadowBlur = 8;
+      ctx.shadowColor = tier >= 2 ? "#ff5a3c" : "#ffcf6a"; ctx.shadowBlur = 8;
       for (let i = 0; i < tier; i++) {
         const y = cy + i * 7;
         ctx.strokeStyle = "#1a1208"; ctx.lineWidth = 5;

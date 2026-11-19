@@ -1411,7 +1411,7 @@ function dogsRespawn() {
   for (let i = 0; i < n; i++) dogPack.due.push(runTime + 3.5 + i * 1.1);
   dogPack.lastX = 0;
 }
-function dogSpeed() { return [6.0, 6.4, 6.8][enemyTierIndex()]; }
+function dogSpeed() { return [6.0, 6.4, 6.8, 7.2][Math.min(3, enemyTierIndex())]; }
 
 function updateDogs(dt) {
   const lead = leader();

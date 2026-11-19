@@ -56,9 +56,10 @@ function readPads() {
 function controlsFor(index) {
   const c = rawControls(index);
   const pl = players && players[index];
-  if (pl && pl.autoRun > 0 && !c.left) c.right = true;
-  // Right-to-left missions are mirrored on screen: pushing right on the screen moves forward.
+  // Right-to-left missions are mirrored on screen: pushing left on the screen moves forward.
   if (mission && mission.mirror && mirrorInput && !(aiRival && index === 1)) { const l = c.left; c.left = c.right; c.right = l; }
+  // the auto-run (the start of a run, out of a run into the picture) always goes forward
+  if (pl && pl.autoRun > 0 && !c.left) c.right = true;
   return c;
 }
 

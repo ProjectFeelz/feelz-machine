@@ -23,10 +23,47 @@ const ENEMY_KINDS = {
 const ENEMY_TIERS = [
   { name: "",        hp: 0, windUp: 1,    cd: 1,    guard: 0,    counter: 1,    speed: 1,    sight: 1,    combo: 0 },
   { name: "VETERAN", hp: 1, windUp: 0.9,  cd: 0.86, guard: 0.1,  counter: 0.88, speed: 1.15, sight: 1.15, combo: 0 },
-  { name: "ELITE",   hp: 1, windUp: 0.82, cd: 0.8,  guard: 0.18, counter: 0.85, speed: 1.25, sight: 1.25, combo: 0.35 }
+  { name: "ELITE",   hp: 1, windUp: 0.82, cd: 0.8,  guard: 0.18, counter: 0.85, speed: 1.25, sight: 1.25, combo: 0.35 },
+  // the late missions on a second time through the series
+  { name: "HARDENED", hp: 2, windUp: 0.74, cd: 0.72, guard: 0.26, counter: 0.8, speed: 1.33, sight: 1.35, combo: 0.5 }
 ];
 
-function enemyTierIndex(n) { n = n || (mission && mission.number) || 1; return n >= 11 ? 2 : n >= 6 ? 1 : 0; }
+/* ---------------------------------------------------------------------------
+   THE SERIES, AGAIN
+   Finish all fifteen missions and the next time through is Round 2, harder:
+   the wardens are a rank tougher, the storm throws more, and there are fewer
+   rewinds lying about. Round 3 and on push it a little further. Free roam and
+   the two-player modes stay as they are. Kept on this device.
+--------------------------------------------------------------------------- */
+const SERIES_KEY = "feelzrun.series";
+function seriesState() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(SERIES_KEY) || "null"); } catch (e) { s = null; }
+  if (!s) {
+    // someone who already finished the lot before rounds existed starts on Round 2
+    const best = (typeof Progress !== "undefined" && Progress.data && Progress.data.best) || {};
+    const ids = MISSIONS.filter(mi => mi.ready).map(mi => mi.id);
+    s = { round: ids.length && ids.every(id => best[id]) ? 2 : 1, done: [] };
+    try { localStorage.setItem(SERIES_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ }
+  }
+  return s;
+}
+function seriesRound() { return (typeof freeRoam !== "undefined" && freeRoam) || twoPlayer ? 1 : seriesState().round; }
+// A mission finished: when the whole series is done, the next round begins.
+function seriesFinish(id) {
+  const s = seriesState(), ids = MISSIONS.filter(mi => mi.ready).map(mi => mi.id);
+  if (!s.done.includes(id)) s.done.push(id);
+  let up = false;
+  if (ids.every(x => s.done.includes(x))) { s.round += 1; s.done = []; up = true; }
+  try { localStorage.setItem(SERIES_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ }
+  return up ? s.round : 0;
+}
+
+function enemyTierIndex(n) {
+  n = n || (mission && mission.number) || 1;
+  const base = n >= 11 ? 2 : n >= 6 ? 1 : 0;
+  return Math.min(ENEMY_TIERS.length - 1, base + seriesRound() - 1);
+}
 
 const _enemyKindCache = {};
 

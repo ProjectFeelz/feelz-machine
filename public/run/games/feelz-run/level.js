@@ -78,7 +78,8 @@ function buildLevel(data) {
     L.drones.push({ x: m(dr.x), y: -m(dr.y), baseY: -m(dr.y), minX: m(dr.minX), maxX: m(dr.maxX), facing: 1, alive: true, t: Math.random() * 6 });
   }
   for (const b of data.boosts || []) L.boosts.push({ x: m(b.x), y: -m(b.y), taken: false });
-  for (const r of data.rewinds || []) L.rewinds.push({ x: m(r.x), y: -m(r.y), taken: false });
+  // fewer rewinds lying about on a second time through the series
+  (data.rewinds || []).forEach((r, i) => { if (seriesRound() > 1 && i % 2 === 1) return; L.rewinds.push({ x: m(r.x), y: -m(r.y), taken: false }); });
   if (data.coin && coinTurnsUp(data)) L.coin = { x: m(data.coin.x), y: -m(data.coin.y), taken: false };
   for (const j of data.journal || []) L.journal.push({ id: j.id, x: m(j.x), y: -m(j.y), taken: false });
   for (const d of data.decor || []) L.decor.push(d);

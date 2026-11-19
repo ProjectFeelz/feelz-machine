@@ -182,6 +182,10 @@ function startGame(fromJoin) {
 function finishGame() {
   if (gameState === "finished") return;
   gameState = "finished";
+  if (!twoPlayer && !freeRoam && !(typeof coopOn === "function" && coopOn()) && players[0] && players[0].finished) {
+    const up = seriesFinish(mission.id);
+    if (up) setTimeout(() => showToast("ROUND " + up + " UNLOCKED", "The whole series again, and it hits harder.", "ko", 4), 1200);
+  }
   finishedAt = performance.now();
   for (const k in keys) keys[k] = false;
   fadeOutMusic(3);

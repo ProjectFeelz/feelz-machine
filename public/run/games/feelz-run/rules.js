@@ -38,7 +38,8 @@ function updateStorm(dt, realDt) {
       x: Math.max(storm.front, cameraX - m(2)), y: floor - (low ? m(0.36) : m(1.56)), half: low ? m(0.32) : m(0.17),
       size: low ? m(0.72) : m(1.5), rot: Math.random() * 6, hit: [], trail: []
     });
-    const every = mission.debrisEvery || 1.6;   // seconds between throws (plus up to 1.4 more at random)
+    // seconds between throws (plus up to 1.4 more at random); the storm throws more each round
+    const every = (mission.debrisEvery || 1.6) * Math.max(0.55, 1 - (seriesRound() - 1) * 0.22);
     storm.nextThrow = runTime + every + Math.random() * 1.4;
     sfx.debris();
   }
@@ -87,8 +88,10 @@ function triggerLightning(big) {
   let bx = from[0], by = from[1];
   for (let i = 0; i < 5; i++) { bx += 20 + Math.random() * 30; by += 20 + Math.random() * 20; branch.push([bx, by]); }
   lightningBolt = { pts, branch, t: 0.3 };
-  setTimeout(() => sfx.thunder(big), big ? 120 : 500 + Math.random() * 600);
-  if (big) shake = Math.max(shake, 0.15);
+  // the crack lands with the flash, the roll follows; a slight shake with it
+  sfx.thunder(big);
+  shake = Math.max(shake, big ? 0.16 : 0.08);
+  for (const p of players) rumble(p.id - 1, big ? 0.35 : 0.15, big ? 220 : 120);
 }
 
 /* ---------------------------------------------------------------------------
