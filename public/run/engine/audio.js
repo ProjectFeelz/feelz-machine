@@ -513,30 +513,40 @@ const sfx = (() => {
     // the light opening at a shrine: a rising shimmer of bells and a warm swell
     shrine()     { [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => tone({ type: "sine", from: f, to: f * 1.01, dur: 1.4, vol: 0.09, delay: i * 0.08 })); [262, 392].forEach(f => tone({ type: "triangle", from: f, dur: 1.8, vol: 0.07 })); burstNoise({ dur: 1.6, vol: 0.06, f0: 8000, f1: 3000, type: "highpass", attack: 0.3 }); },
     // breathing out at a window: a slow, soft exhale
+    // praying: a slow breath in, a long breath out, over a low warm hum
+    pray()       {
+      burstNoise({ dur: 1.4, vol: 0.32, f0: 700, f1: 1500, q: 0.6, attack: 0.7 });
+      burstNoise({ dur: 1.9, vol: 0.28, f0: 1400, f1: 450, q: 0.6, attack: 0.25, delay: 1.45 });
+      tone({ type: "sine", from: 110, to: 108, dur: 3.4, vol: 0.07 });
+      tone({ type: "sine", from: 165, to: 163, dur: 3.2, vol: 0.04, delay: 0.2 });
+    },
     breathe()    { burstNoise({ dur: 1.6, vol: 0.1, f0: 1200, f1: 400, q: 0.5, attack: 0.4 }); },
     // the camera swinging round into the picture and back out
     swing()      { burstNoise({ dur: 0.45, vol: 0.16, f0: 400, f1: 2600, q: 0.7, attack: 0.1 }); },
     flip()       { tone({ type: "triangle", from: 900, to: 520, dur: 0.09, vol: 0.08 }); tone({ type: "triangle", from: 660, to: 1200, dur: 0.07, vol: 0.06, delay: 0.06 }); },
+    // Movement sounds are pitched up into the range laptop and phone speakers can play
+    // (a deep thump alone is lost on them) and sit clearly over the music.
     // push-off: a scuff of the sole and a little rush of air
-    jump()       { burstNoise({ dur: 0.06, vol: 0.16, f0: 220, type: "lowpass" }); burstNoise({ dur: 0.18, vol: 0.07, f0: 900, f1: 2600, q: 0.6, attack: 0.03 }); },
+    jump()       { burstNoise({ dur: 0.07, vol: 0.4, f0: 460, type: "lowpass" }); burstNoise({ dur: 0.04, vol: 0.12, f0: 1200, q: 1 }); burstNoise({ dur: 0.2, vol: 0.18, f0: 900, f1: 2600, q: 0.6, attack: 0.03 }); },
     // the flip: two quick passes of air as he turns over
-    doubleJump() { burstNoise({ dur: 0.16, vol: 0.12, f0: 700, f1: 2200, q: 0.9, attack: 0.04 }); burstNoise({ dur: 0.2, vol: 0.1, f0: 1800, f1: 600, q: 0.9, attack: 0.05, delay: 0.13 }); },
+    doubleJump() { burstNoise({ dur: 0.16, vol: 0.24, f0: 700, f1: 2200, q: 0.9, attack: 0.04 }); burstNoise({ dur: 0.2, vol: 0.2, f0: 1800, f1: 600, q: 0.9, attack: 0.05, delay: 0.13 }); },
     step(surface) {
       const v = vary(1, 0.2);
       if (surface === "metal") {
-        burstNoise({ dur: 0.05, vol: 0.12 * v, f0: 260, type: "lowpass" });
-        tone({ type: "sine", from: vary(1300, 0.1), to: 900, dur: 0.12, vol: 0.025 * v });
-        burstNoise({ dur: 0.04, vol: 0.04 * v, f0: 3200, q: 1.2 });
+        burstNoise({ dur: 0.05, vol: 0.32 * v, f0: 520, type: "lowpass" });
+        tone({ type: "sine", from: vary(1300, 0.1), to: 900, dur: 0.12, vol: 0.07 * v });
+        burstNoise({ dur: 0.04, vol: 0.1 * v, f0: 3200, q: 1.2 });
       } else if (surface === "soft") {
-        burstNoise({ dur: 0.07, vol: 0.1 * v, f0: 180, type: "lowpass" });
-        burstNoise({ dur: 0.09, vol: 0.03 * v, f0: 1400, q: 0.5 });
+        burstNoise({ dur: 0.07, vol: 0.3 * v, f0: 380, type: "lowpass" });
+        burstNoise({ dur: 0.09, vol: 0.08 * v, f0: 1400, q: 0.5 });
       } else if (surface === "wet") {
-        burstNoise({ dur: 0.06, vol: 0.12 * v, f0: 200, type: "lowpass" });
-        burstNoise({ dur: 0.14, vol: 0.06 * v, f0: 2600, f1: 900, q: 1.5, delay: 0.01 });
+        burstNoise({ dur: 0.06, vol: 0.32 * v, f0: 440, type: "lowpass" });
+        burstNoise({ dur: 0.14, vol: 0.16 * v, f0: 2600, f1: 900, q: 1.5, delay: 0.01 });
       } else {
-        // concrete and stone: a heel thump and grit under the sole
-        burstNoise({ dur: 0.055, vol: 0.14 * v, f0: vary(170, 0.15), type: "lowpass" });
-        burstNoise({ dur: 0.035, vol: 0.035 * v, f0: vary(3800, 0.2), type: "highpass", delay: 0.01 });
+        // concrete and stone: a heel tap and grit under the sole
+        burstNoise({ dur: 0.055, vol: 0.36 * v, f0: vary(420, 0.15), type: "lowpass" });
+        burstNoise({ dur: 0.03, vol: 0.13 * v, f0: vary(1100, 0.15), q: 1.2 });
+        burstNoise({ dur: 0.035, vol: 0.08 * v, f0: vary(3800, 0.2), type: "highpass", delay: 0.01 });
       }
     },
     record()     { tone({ type: "triangle", from: 988, dur: 0.06, vol: 0.3 }); tone({ type: "triangle", from: 1319, dur: 0.12, vol: 0.3, delay: 0.05 }); },
@@ -549,12 +559,14 @@ const sfx = (() => {
     coin()       { [1319, 1760, 2093].forEach((f, i) => tone({ type: "triangle", from: f, dur: 0.16, vol: 0.35, delay: i * 0.07 })); },
     journal()    { [523, 784, 1047].forEach((f, i) => tone({ type: "sine", from: f, dur: 0.3, vol: 0.3, delay: i * 0.1 })); },
     // landing: both feet, a heavy thump with a crouch of cloth
-    land()       { burstNoise({ dur: 0.12, vol: 0.3, f0: 140, type: "lowpass" }); burstNoise({ dur: 0.06, vol: 0.05, f0: 3000, type: "highpass", delay: 0.01 }); },
+    land()       { burstNoise({ dur: 0.14, vol: 0.7, f0: 280, type: "lowpass" }); burstNoise({ dur: 0.07, vol: 0.24, f0: 700, q: 0.9 }); burstNoise({ dur: 0.06, vol: 0.12, f0: 3000, type: "highpass", delay: 0.01 }); },
     // the slide: fabric and shoe soles scraping along, falling away
-    slide()      { burstNoise({ dur: 0.42, vol: 0.2, f0: 1600, f1: 500, q: 0.7, attack: 0.02 }); burstNoise({ dur: 0.3, vol: 0.08, f0: 4200, f1: 2500, type: "highpass", attack: 0.02 }); },
-    vault()      { burstNoise({ dur: 0.05, vol: 0.18, f0: 600, q: 1 }); burstNoise({ dur: 0.18, vol: 0.08, f0: 800, f1: 2400, q: 0.7, attack: 0.03, delay: 0.03 }); },
+    // the slide: cloth and grit scraping along the ground
+    slide()      { burstNoise({ dur: 0.45, vol: 0.5, f0: 1300, f1: 450, q: 0.7, attack: 0.02 }); burstNoise({ dur: 0.4, vol: 0.2, f0: 650, f1: 320, q: 0.8, attack: 0.02 }); burstNoise({ dur: 0.3, vol: 0.18, f0: 4200, f1: 2500, type: "highpass", attack: 0.02 }); },
+    vault()      { burstNoise({ dur: 0.06, vol: 0.45, f0: 600, q: 1 }); burstNoise({ dur: 0.2, vol: 0.2, f0: 800, f1: 2400, q: 0.7, attack: 0.03, delay: 0.03 }); },
     // climbing: a hand slapping onto the pipe, a ring of hollow metal, cloth
-    climb()      { burstNoise({ dur: 0.05, vol: 0.14, f0: vary(900, 0.15), q: 1.2 }); tone({ type: "sine", from: vary(640, 0.1), to: 560, dur: 0.14, vol: 0.02 }); burstNoise({ dur: 0.1, vol: 0.025, f0: 3500, type: "highpass", delay: 0.02 }); },
+    // a hand on a steel rung: a clank and a ring
+    climb()      { burstNoise({ dur: 0.05, vol: 0.4, f0: vary(900, 0.15), q: 1.2 }); tone({ type: "sine", from: vary(640, 0.1), to: 560, dur: 0.16, vol: 0.08 }); tone({ type: "triangle", from: vary(1450, 0.08), to: 1300, dur: 0.12, vol: 0.04 }); burstNoise({ dur: 0.1, vol: 0.08, f0: 3500, type: "highpass", delay: 0.02 }); },
     // a hit landing: the snap of the strike and the body taking it
     punch(kind)  {
       const heavy = kind === "finisher" || kind === "kick" || kind === "smash" || kind === "flykick" || kind === "spinkick";
@@ -566,7 +578,10 @@ const sfx = (() => {
     block()      { burstNoise({ dur: 0.07, vol: 0.22, f0: 260, type: "lowpass" }); burstNoise({ dur: 0.04, vol: 0.12, f0: 2400, q: 2 }); },
     page()       { [392, 523, 659].forEach((f, i) => tone({ type: "sine", from: f, dur: 0.5, vol: 0.18, delay: i * 0.12 })); },
     // grabbing the bar and the trolley wheels starting down the cable
-    zip()        { burstNoise({ dur: 0.08, vol: 0.2, f0: 700, q: 1.2 }); burstNoise({ dur: 1.2, vol: 0.09, f0: 2200, f1: 4200, q: 3, attack: 0.2, delay: 0.05 }); tone({ type: "sawtooth", from: 180, to: 320, dur: 1.1, vol: 0.02, delay: 0.05 }); },
+    // grabbing the zip line: the clack of the bar, then the line starting to sing
+    zip()        { burstNoise({ dur: 0.08, vol: 0.5, f0: 700, q: 1.2 }); tone({ type: "triangle", from: 900, to: 760, dur: 0.18, vol: 0.08 }); burstNoise({ dur: 1.2, vol: 0.25, f0: 2200, f1: 4200, q: 3, attack: 0.2, delay: 0.05 }); tone({ type: "sawtooth", from: 180, to: 320, dur: 1.1, vol: 0.05, delay: 0.05 }); },
+    // riding it: the trolley wheels whirring along the cable, higher as he speeds up
+    zipRun(k)    { burstNoise({ dur: 0.34, vol: 0.2, f0: 1400 + k * 1600, q: 2.2, attack: 0.06 }); tone({ type: "sawtooth", from: 150 + k * 170, dur: 0.32, vol: 0.035 }); },
     // Zora slipping away: a soft shimmer falling away; coming back: it rising again
     zoraOut()    { [1568, 1319, 1175, 988, 784].forEach((f, i) => tone({ type: "sine", from: f, to: f * 0.98, dur: 0.5, vol: 0.08, delay: i * 0.09 })); burstNoise({ dur: 1.0, vol: 0.06, f0: 6000, f1: 2000, type: "highpass", attack: 0.1 }); },
     zoraIn()     { [784, 988, 1175, 1568].forEach((f, i) => tone({ type: "sine", from: f, dur: 0.4, vol: 0.07, delay: i * 0.07 })); },

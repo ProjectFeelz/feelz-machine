@@ -34,7 +34,10 @@ function buildSystems(L, data) {
   L.tails = (data.tails || []).map(c => ({ x0: m(c.x0), x1: m(c.x1), y: -m(c.y || 0), state: "wait", x: 0, pause: 0, hurry: 0, walk: 0, good: 0, total: 0, warnT: 0 }));
 }
 
+// Praying at a shrine: time slows round him, the song eases, he breathes slowly.
+let prayer = null;
 function resetSystems() {
+  prayer = null;
   stealth.alert = 0; stealth.calmT = 0; stealth.seen = 0; stealth.silent = 0; stealth.flash = 0;
   drive.stopT = 0; drive.rewinding = false; drive.rate = 1; drive.trail = []; drive.active = false; drive.hint = 0; drive.stillShown = false;
   for (const wd of level.wardens) { wd.aware = 0; wd.lostT = 0; wd.mark = 0; wd.markKind = ""; wd.target = null; }
@@ -362,6 +365,8 @@ function zipUpdate(p, ctl, dt) {
     p.vx = RUN_SPEED; p.vy = 0; p.ground = null; p.facing = 1;
     p.animClock += dt;
     if (Math.random() < dt * 30) burst(z.trolley, zipY(z, z.trolley), "#ffd28a", 1, 120);
+    p.zipSnd = (p.zipSnd || 0) - dt;
+    if (p.zipSnd <= 0) { p.zipSnd = 0.3; sfx.zipRun && sfx.zipRun(Math.min(1, z.speed / m(11))); }
     const jumpNow = ctl.jump && !p.jumpPressed;
     if (ctl.jump) p.jumpPressed = true; else p.jumpPressed = false;
     if (p.x >= z.x2 - m(0.6) || jumpNow || ctl.down) {
@@ -974,10 +979,11 @@ function updateVeil(dt) {
   for (const s of level.shrines) {
     if (s.lit) continue;
     if (Math.abs(s.x - p.x) < m(1.4) && Math.abs(s.y - p.y) < m(1.2) && veil.still > 0) {
+      if (!prayer) { prayer = { s, t: 0 }; slowSong(3.5); sfx.pray && sfx.pray(); }
       s.hold += dt;
       if (s.hold > 1.0) { s.lit = true; p.shrine = { x: s.x, y: s.y }; giveFlare(p); burst(s.x, s.y - m(1), "#7fb6ff", 24, 220);
-        sfx.shrine(); shake = Math.max(shake, 0.35); flash = Math.max(flash || 0, 0.35); rumble(p.id - 1, 0.5, 300); showToast("SHRINE LIT", "The way is lit. You'll come back here.", "ko", 1.6); }
-    } else s.hold = 0;
+        sfx.shrine(); shake = Math.max(shake, 0.35); flash = Math.max(flash || 0, 0.35); rumble(p.id - 1, 0.5, 300); showToast("SHRINE LIT", "The way is lit. You'll come back here.", "ko", 1.6); prayer = null; }
+    } else { s.hold = 0; if (prayer && prayer.s === s) prayer = null; }
   }
   // the Shadow
   const pace = partFlag("shadow");
@@ -1200,6 +1206,23 @@ function drawValves() {
   }
 }
 
+// The prayer: the edges of the world dim and cool, a soft light gathers round him.
+function drawPrayer() {
+  if (!prayer) return;
+  prayer.t += 1 / 60;
+  const k = Math.min(1, prayer.t / 0.6), p = players[0];
+  const X = sx(p.x), Y = sy(p.y) - m(1);
+  ctx.save();
+  const v = ctx.createRadialGradient(X, Y, m(1.5), X, Y, Math.max(W, H) * 0.75);
+  v.addColorStop(0, "rgba(10, 14, 30, 0)"); v.addColorStop(1, `rgba(6, 8, 20, ${0.62 * k})`);
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = "lighter";
+  const g = ctx.createRadialGradient(X, Y, 4, X, Y, m(2.4));
+  g.addColorStop(0, `rgba(150, 190, 255, ${0.28 * k * (0.8 + Math.sin(prayer.t * 2.2) * 0.2)})`); g.addColorStop(1, "rgba(150, 190, 255, 0)");
+  ctx.fillStyle = g; ctx.fillRect(X - m(2.4), Y - m(2.4), m(4.8), m(4.8));
+  ctx.restore();
+}
+
 function drawZoraCompanion() {
   if (!veil.zc || !art.zora || !art.zora.ready) return;
   const def = SPRITES.koda, p = players[0];
@@ -1215,9 +1238,14 @@ function drawZoraCompanion() {
     ctx.beginPath(); ctx.arc(tx, ty, 9 * (1 - u) + 2, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
+  // She floats upright beside him, leaning into the way he's going, toes pointed down:
+  // a calm, hovering pose (the 3D Zora when she's loaded, her drawn sheet until then).
   ctx.save();
-  ctx.translate(X, Y - m(0.5)); ctx.rotate(f * (moving ? -0.08 : 0.05) + Math.sin(frameTime * 1.7) * 0.04); ctx.translate(-X, -(Y - m(0.5)));
-  drawSheetFrame(art.zora, def, "dash", 2, veil.zc.x, veil.zc.y - m(0.9) + bob, f, { glow: "rgba(255, 170, 200, 0.75)", blur: 16, alpha: 0.95 });
+  ctx.translate(X, Y - m(0.5)); ctx.rotate(f * (moving ? 0.12 : 0.04) + Math.sin(frameTime * 1.7) * 0.03); ctx.translate(-X, -(Y - m(0.5)));
+  const z3 = typeof Char3D !== "undefined" && Char3D.want && Char3D.want("zora") && Char3D.has("zora", "idle")
+    ? Char3D.render("zora", "companion", "idle", frameTime * 0.25, f, {}) : null;
+  if (z3) drawModelFrame(z3, veil.zc.x, veil.zc.y - m(0.9) + bob, { glow: "rgba(255, 170, 200, 0.75)", blur: 16, alpha: 0.95 });
+  else drawSheetFrame(art.zora, def, "idle", Math.floor(frameTime * 5) % 8, veil.zc.x, veil.zc.y - m(0.9) + bob, f, { glow: "rgba(255, 170, 200, 0.75)", blur: 16, alpha: 0.95 });
   ctx.restore();
 }
 

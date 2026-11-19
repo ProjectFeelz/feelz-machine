@@ -65,6 +65,7 @@ function update(realDt) {
   // Hit-stop: a blink of near-freeze when a hit lands.
   let dt = realDt;
   if (hitStop > 0) { hitStop = Math.max(0, hitStop - realDt); dt = realDt * 0.12; }
+  else if (prayer) dt = realDt * 0.4;   // time slows while he prays
   runTime += dt;
   realTime += realDt;
   if (!driveHoldsClock(realDt)) updateSongClock(realDt);

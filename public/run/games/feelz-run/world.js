@@ -297,8 +297,11 @@ function drawSetDressing() {
     if (d.small ? !small : !big) continue;
     const r = (d.small ? PROPS_SMALL : PROP2D)[d.name];
     if (!r) continue;
-    const h = m(d.h), w = h * r[2] / r[3];
-    drawBaked(img, r[0], r[1], r[2], r[3], sx(d.x) - w / 2, sy(d.y) - h + 3, w, h, "brightness(0.82) saturate(0.92)");
+    const h = m(d.h), w = h * r[2] / r[3], X = sx(d.x), Y = sy(d.y);
+    // a soft contact shadow, so it stands on the street rather than hovering over it
+    ctx.fillStyle = "rgba(0, 0, 0, 0.38)";
+    ctx.beginPath(); ctx.ellipse(X, Y + 1, w * 0.55, Math.max(2.5, w * 0.08), 0, 0, Math.PI * 2); ctx.fill();
+    drawBaked(img, r[0], r[1], r[2], r[3], X - w / 2, Y - h + 4, w, h, "brightness(0.82) saturate(0.92)");
   }
 }
 

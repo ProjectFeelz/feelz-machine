@@ -265,14 +265,14 @@ const Char3D = (() => {
    * model's feet at (SIZE/2, SIZE * FOOT) and `metresTall` of world shown, or
    * null when it cannot.
    */
-const ARM_SWING = 0.6;
+const ARM_SWING = 0.6, ARM_OUT = 0.25, ARM_FORE = 0.7;
   // Running arms: the run clips hold his arms almost still at his chest, so swing
   // them from the shoulder, each arm opposite its own leg, the way a runner pumps.
   // (amount is the swing in radians either side; 0 leaves the clip as it is)
   const _sw = { v: null, a: null, b: null, q: null, pq: null, axis: null };
   function armSwing(root, amount) {
     if (!amount) return;
-    if (!_sw.v) { _sw.v = new THREE.Vector3(); _sw.a = new THREE.Vector3(); _sw.b = new THREE.Vector3(); _sw.q = new THREE.Quaternion(); _sw.pq = new THREE.Quaternion(); _sw.axis = new THREE.Vector3(); _sw.rq = new THREE.Quaternion(); }
+    if (!_sw.v) { _sw.v = new THREE.Vector3(); _sw.a = new THREE.Vector3(); _sw.b = new THREE.Vector3(); _sw.q = new THREE.Quaternion(); _sw.pq = new THREE.Quaternion(); _sw.axis = new THREE.Vector3(); _sw.rq = new THREE.Quaternion(); _sw.fwd = new THREE.Vector3(); _sw.q2 = new THREE.Quaternion(); }
     if (!root.userData.swing) {
       const find = re => { let f = null; root.traverse(o => { if (!f && o.isBone && re.test(o.name)) f = o; }); return f; };
       root.userData.swing = ["Left", "Right"].map(s => ({ arm: find(new RegExp(s + "Arm$")), fore: find(new RegExp(s + "ForeArm$")), hip: find(new RegExp(s + "UpLeg$")), knee: find(new RegExp(s + "Leg$")) }));
@@ -287,12 +287,25 @@ const ARM_SWING = 0.6;
       const len = Math.max(1e-4, _sw.a.distanceTo(_sw.b));
       const legFwd = Math.max(-1, Math.min(1, (_sw.b.z - _sw.a.z) / len / 0.6));   // + when this leg is out in front
       const ang = legFwd * amount;                                                  // the arm goes the other way
+      // and out from his side a little, so it swings past his body, not through it
+      side.arm.getWorldPosition(_sw.b); root.worldToLocal(_sw.b);
+      const out = (_sw.b.x >= 0 ? 1 : -1) * ARM_OUT;
       side.arm.parent.getWorldQuaternion(_sw.pq);
       _sw.q.setFromAxisAngle(_sw.axis, ang);
+      _sw.fwd.set(0, 0, 1).applyQuaternion(_sw.rq).normalize();
+      _sw.q2.setFromAxisAngle(_sw.fwd, out);
+      _sw.q.multiply(_sw.q2);
       // turn about a world axis, expressed in the bone's own frame
       const local = _sw.pq.clone().invert().multiply(_sw.q).multiply(_sw.pq);
       side.arm.quaternion.premultiply(local);
       side.arm.updateMatrixWorld(true);
+      // the clip folds the forearms across his chest; open them out so the hands pass his sides
+      if (side.fore && ARM_FORE) {
+        side.fore.parent.getWorldQuaternion(_sw.pq);
+        _sw.q2.setFromAxisAngle(_sw.fwd, (_sw.b.x >= 0 ? 1 : -1) * ARM_FORE);
+        side.fore.quaternion.premultiply(_sw.pq.clone().invert().multiply(_sw.q2).multiply(_sw.pq));
+        side.fore.updateMatrixWorld(true);
+      }
     }
   }
 

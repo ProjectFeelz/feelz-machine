@@ -29,11 +29,14 @@ function render() {
   safeFx(() => World3D.draw());
   safeFx(() => Atmos.back());
   drawDecor();
-  drawSetDressing();
   drawTunnels();
   drawMud();
+  // The street first, then what stands on it, then everything else: so the street
+  // dressing sits on the road surface instead of behind its edge.
+  for (const s of level.solids) if (s.kind === "ground" && onScreen(s.x, s.w, 200)) drawSolid(s);
+  drawSetDressing();
   for (const s of level.solids) {
-    if (!onScreen(s.x, s.w, 200)) continue;
+    if (s.kind === "ground" || !onScreen(s.x, s.w, 200)) continue;
     if (s.kind === "awning" && level.stalls.length) continue;   // drawn with the stalls
     drawSolid(s);
   }
@@ -71,6 +74,7 @@ function render() {
   drawRain(indoors ? 0 : baseRain + storm.strength * 0.9);
   if (mirror) { ctx.restore(); ctx.save(); ctx.fillText = rawFillText; }
   safeFx(() => Atmos.grade());
+  drawPrayer();
   drawScreenFx();
   ctx.restore();
   ctx.fillText = rawFillText;
