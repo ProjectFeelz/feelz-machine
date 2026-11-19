@@ -141,6 +141,14 @@ function coinTurnsUp(data) {
 }
 
 // Street dressing: every few metres of open street gets something that belongs in that world.
+// Pick from a list without repeating anything picked lately, so a stretch of
+// street never lines up the same chair or box over and over.
+function freshPick(list, r, recent, keep) {
+  let i = Math.floor(r * list.length) % list.length;
+  for (let n = 0; n < list.length && recent.includes(list[i][0]); n++) i = (i + 1) % list.length;
+  recent.push(list[i][0]); if (recent.length > Math.min(keep, list.length - 1)) recent.shift();
+  return list[i];
+}
 function dressStreets(L, data) {
   const out = [];
   const secs = data.sections || [];
@@ -151,6 +159,7 @@ function dressStreets(L, data) {
     (L.cages || []).some(c => Math.abs(c.x - x) < m(2)) || (L.windows || []).some(w => Math.abs(w.x - x) < m(3)) ||
     (L.shrines || []).some(w => Math.abs(w.x - x) < m(2)) || (L.valves || []).some(w => Math.abs(w.x - x) < m(1.5)) ||
     (L.stalls || []).some(w => x > w.x - m(1.5) && x < w.x + w.w + m(1.5)) || (L.filters || []).some(w => Math.abs(w.x - x) < m(2));
+  const recentBig = [], recentSmall = [];
   for (const g of L.solids) {
     if (g.kind !== "ground") continue;
     for (let x = g.x + m(2); x < g.x + g.w - m(2); x += m(3.2)) {
@@ -160,7 +169,7 @@ function dressStreets(L, data) {
       if (!list || !list.length) continue;
       const jx = x + (seeded(x * 0.13) - 0.5) * m(1.2);
       if (busy(jx, g.y)) continue;
-      const pick = list[Math.floor(seeded(x * 0.71) * list.length) % list.length];
+      const pick = freshPick(list, seeded(x * 0.71), recentBig, 4);
       out.push({ x: jx, y: g.y, name: pick[0], h: pick[1] * (0.9 + seeded(x * 0.29) * 0.2) });
     }
   }
@@ -174,7 +183,7 @@ function dressStreets(L, data) {
       if (!list || !list.length) continue;
       const jx = x + (seeded(x * 0.37) - 0.5) * m(0.8);
       if (busy(jx, g.y) || bigs.some(d => Math.abs(d.x - jx) < m(1.3))) continue;
-      const pick = list[Math.floor(seeded(x * 0.53) * list.length) % list.length];
+      const pick = freshPick(list, seeded(x * 0.53 + 1.7), recentSmall, 6);
       out.push({ x: jx, y: g.y, name: pick[0], h: pick[1] * (0.9 + seeded(x * 0.41) * 0.2), small: true });
     }
   }

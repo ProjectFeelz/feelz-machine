@@ -14,10 +14,17 @@ const DEBRIS_HIGH = ["pipe", "grate", "pipe", "grate", "pipe"];
 // What the wind picks up: the small things lying about in this part of the city
 // (cans, buckets, chairs, tyres, crates of bottles...), so no two storms throw the same.
 function debrisThing(world) {
-  const list = (WORLD_SMALL[world] || []).concat(world === "ve" ? [] : WORLD_SMALL.lc || []);
+  // this part of the city's own things; the street junk of the lower city only tops up a short list
+  const own = WORLD_SMALL[world] || [];
+  const list = own.length >= 8 || world === "ve" ? own : own.concat(WORLD_SMALL.lc || []);
   if (!list.length) return DEBRIS_LOW[Math.floor(Math.random() * DEBRIS_LOW.length)];
-  return list[Math.floor(Math.random() * list.length)][0];
+  // never the same thing twice in a row, nor anything from the last few gusts
+  let i = Math.floor(Math.random() * list.length);
+  for (let n = 0; n < list.length && recentDebris.includes(list[i][0]); n++) i = (i + 1 + Math.floor(Math.random() * 3)) % list.length;
+  recentDebris.push(list[i][0]); if (recentDebris.length > Math.min(6, list.length - 1)) recentDebris.shift();
+  return list[i][0];
 }
+const recentDebris = [];
 
 function updateStorm(dt, realDt) {
   const partIndex = playingPartIndex();
