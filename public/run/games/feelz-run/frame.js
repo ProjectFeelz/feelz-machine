@@ -79,6 +79,7 @@ function render() {
   ctx.restore();
   ctx.fillText = rawFillText;
   drawSystemsHud();
+  if (typeof drawTutorial === "function") drawTutorial();
   drawCheckpointMiss();
   postBloom();
   drawSongBar();

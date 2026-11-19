@@ -1230,8 +1230,8 @@ function drawAttract(now) {
   const pose = "sprint", frame = Math.floor(t * 14) % 8;
   // Koda: the 3D model when it's in, the drawn sheet until then (and for outfit colours)
   let kodaDone = false;
-  if (typeof Char3D !== "undefined" && Char3D.has("koda", pose)) {
-    const c = Char3D.render("koda", "attract", pose, pose === "vault" ? frame / 8 : t * 1.4, 1, { outfit: OUTFITS[playerOutfit] ? OUTFITS[playerOutfit].jacket : null });
+  if (typeof Char3D !== "undefined") {
+    const c = Char3D.render("koda", "attract", pose, pose === "vault" ? frame / 8 : t * 1.4, 1, { outfit: OUTFITS[playerOutfit] ? OUTFITS[playerOutfit].jacket : null, menu: true });
     if (c) {
       const size = Char3D.VIEW_METRES * PX * 1.2, lift = pose === "vault" ? Math.sin(frame / 7 * Math.PI) * 60 : 0;
       ctx.drawImage(c, kx - size / 2, roofY - lift - size * Char3D.FOOT, size, size);

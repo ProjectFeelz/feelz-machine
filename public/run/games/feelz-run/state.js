@@ -90,5 +90,6 @@ function resetRun() {
   toast.time = 0;
   resetSystems();
   runGate = { phase: "load", t: 0, total: 0 };
+  if (typeof tutorialStart === "function") tutorialStart();
   gameState = "playing";
 }

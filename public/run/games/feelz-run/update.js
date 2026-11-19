@@ -76,6 +76,7 @@ function update(realDt) {
 
   updateGates(dt);
   updateSystems(dt);
+  if (typeof tutorialUpdate === "function") tutorialUpdate(realDt);
   if (inward.active) updateInward(dt);
   else {
     inward.fade = Math.max(0, inward.fade - dt);   // the dip to black after a run into the picture lifts again

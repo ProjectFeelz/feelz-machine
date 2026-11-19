@@ -359,7 +359,8 @@ const FLY_POSE = { lean: 1.2, backLeg: 0.3, backKnee: 0.05, frontLeg: -1.2, fron
   }
 
   function render(id, key, anim, t, facing, opts) {
-    if (!ready(id)) return null;
+    // the menu draws at a calm pace, so it always gets the 3D model once it's in
+    if (!(opts && opts.menu ? loaded(id) : ready(id))) return null;
     pace();
     const m = models[id], a = m.actions[anim];
     if (!a) return null;
