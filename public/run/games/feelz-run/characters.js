@@ -214,17 +214,17 @@ function drawPlayers() {
     if (p.invuln > 0 && !p.finished && Math.floor(frameTime * 14) % 2 === 0) continue;
     const [anim, frame] = kodaPose(p);
     const img = kodaSheetFor(p);
-    // The 3D Koda when his model has this move (engine/char3d.js); otherwise the
-    // sprite sheet. Outfit colours and co-op tints are still sprite-only, so
-    // those runners keep the sprite for now.
-    const modelId = img === art.koda ? "koda" : img === art.zora ? "zora" : null;
+    // The 3D Koda when his model has this move (engine/char3d.js), in your outfit
+    // colour; otherwise the sprite sheet. Co-op tints are still sprite-only.
+    const outfit3 = p.id === 1 && !p.coopTint && img !== art.zora && img !== tintedZora && OUTFITS[playerOutfit] ? OUTFITS[playerOutfit].jacket : null;
+    const modelId = img === art.koda || outfit3 ? "koda" : img === art.zora ? "zora" : null;
     const [anim3, t3] = typeof Char3D !== "undefined" && modelId ? kodaPose3D(p) : [null, 0];
     const facing3 = p.climb ? -p.climb.side : p.facing;
     const model = anim3 && Char3D.has(modelId, anim3)
       ? Char3D.render(modelId, "p" + p.id + (p.coopName || ""), anim3, t3, facing3,
           // On a ladder he faces into the picture, back to us. (The climb clip itself turns him
           // round, so no extra turn here.)
-          p.climb && anim3 === "climb" ? { turn: 0 } : undefined) : null;
+          Object.assign(p.climb && anim3 === "climb" ? { turn: 0 } : {}, { outfit: outfit3 })) : null;
     if (!art.koda.ready && !model) continue;
     const floor = p.ground ? p.ground.y : (floorBelow(p.x, p.y, true) || { y: p.y }).y;
     const lift = Math.max(0, floor - p.y);

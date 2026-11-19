@@ -226,7 +226,15 @@ const Char3D = (() => {
     if (!tooSlow && flag !== "1" && watch()) { tooSlow = true; console.warn("[char3d] too slow on this device, using sprites"); }
   }
 
-  const loaded = id => !!(models[id] && models[id].state === "ready" && libState === "ready");
+  // A browser can drop the 3D drawing (most often a phone short of memory)
+  // and only say so later: check before every draw, so the game goes back
+  // to the drawn sheets at once instead of showing an empty picture.
+  function alive() {
+    if (libState !== "ready") return false;
+    try { if (renderer.getContext().isContextLost()) { libState = "failed"; console.warn("[char3d] 3D drawing lost, using sprites"); return false; } } catch (e) { libState = "failed"; return false; }
+    return true;
+  }
+  const loaded = id => !!(models[id] && models[id].state === "ready") && alive();
   const ready = id => !tooSlow && loaded(id);
   // Models the game knows about but has not needed yet: each loads the
   // first time something asks for it (the sprite stands in until it is in).
@@ -260,6 +268,7 @@ const Char3D = (() => {
     pace();
     const m = models[id], a = m.actions[anim];
     if (!a) return null;
+    outfitMap(m, opts && opts.outfit);
     for (const other of Object.values(m.actions)) other.act.enabled = other === a;
     // A move can use just part of its clip (from/to, in seconds): the leap
     // and roll of the vault without the run-up before it.
@@ -285,6 +294,41 @@ const Char3D = (() => {
     // Handed back as is (no copy, which would stall the GPU on phones): draw
     // it straight away, before rendering the next runner.
     return glCanvas;
+  }
+
+  // Outfit colours on the 3D model: the cloth (the dark, plain parts of its
+  // texture) recoloured once per outfit; skin, gold trim and shine stay as
+  // they are. outfit is [[r, g, b] dark, [r, g, b] light] (0 to 1), or none.
+  function outfitMap(m, outfit) {
+    if (m.mat === undefined) {
+      m.mat = null;
+      m.root.traverse(o => { if (!m.mat && o.isMesh && o.material && o.material.map) m.mat = o.material; });
+      m.baseMap = m.mat ? m.mat.map : null; m.maps = {};
+    }
+    if (!m.mat || !m.baseMap) return;
+    if (!outfit) { if (m.mat.map !== m.baseMap) m.mat.map = m.baseMap; return; }
+    const key = JSON.stringify(outfit);
+    let t = m.maps[key];
+    if (!t) {
+      const src = m.baseMap.image, w = src && (src.width || src.naturalWidth), h = src && (src.height || src.naturalHeight);
+      if (!w || !h) return;
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      g.drawImage(src, 0, 0);
+      const d = g.getImageData(0, 0, w, h), px = d.data, [dk, lt] = outfit;
+      for (let i = 0; i < px.length; i += 4) {
+        const r = px[i], gg = px[i + 1], b = px[i + 2], mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
+        if ((mx ? (mx - mn) / mx : 0) > 0.28 || mx > 200) continue;
+        const k = Math.min(1, ((0.3 * r + 0.59 * gg + 0.11 * b) / 255) / 0.42);
+        for (let ch = 0; ch < 3; ch++) px[i + ch] = Math.round((dk[ch] + (lt[ch] - dk[ch]) * k) * 255);
+      }
+      g.putImageData(d, 0, 0);
+      t = new THREE.CanvasTexture(c);
+      t.flipY = m.baseMap.flipY; t.colorSpace = m.baseMap.colorSpace;
+      t.wrapS = m.baseMap.wrapS; t.wrapT = m.baseMap.wrapT; t.channel = m.baseMap.channel;
+      m.maps[key] = t;
+    }
+    if (m.mat.map !== t) m.mat.map = t;
   }
 
   /**
@@ -313,22 +357,34 @@ const Char3D = (() => {
    * Answers { canvas, frames, cell } (cell px square, the prop centred and
    * shown at the same scale as render()) or null until the model is in.
    */
-  const baked = {};
+  // Made a few frames at a time (never all at once, which can be too much
+  // for a phone in one go); answers null, and the drawn sprite stands in,
+  // until the strip is finished.
+  const baked = {}, baking = {};
   function bake(id, yaw0, yaw1, frames, extraYaw) {
     const key = id + ":" + yaw0 + ":" + yaw1 + ":" + frames;
     if (baked[key]) return baked[key];
     if (!loaded(id)) return null;
     const cell = Math.round(SIZE * 0.56), off = Math.round((SIZE - cell) / 2);
-    const strip = document.createElement("canvas");
-    strip.width = cell * frames; strip.height = cell;
-    const g = strip.getContext("2d");
-    for (let i = 0; i < frames; i++) {
-      const yaw = yaw0 + (yaw1 - yaw0) * (i / Math.max(1, frames - 1));
-      const c = renderProp(id, yaw + (extraYaw || 0), 0, 0);
-      if (c) g.drawImage(c, off, off, cell, cell, i * cell, 0, cell, cell);
+    let b = baking[key];
+    if (!b) {
+      const strip = document.createElement("canvas");
+      strip.width = cell * frames; strip.height = cell;
+      b = baking[key] = { strip, g: strip.getContext("2d"), next: 0, at: -1 };
     }
-    return (baked[key] = { canvas: freeze(strip), frames, cell, yaw0, yaw1 });
+    if (b.at === frameStamp()) return null;        // one batch per frame, however many drones ask
+    b.at = frameStamp();
+    for (let n = 0; n < 4 && b.next < frames; n++, b.next++) {
+      const i = b.next, yaw = yaw0 + (yaw1 - yaw0) * (i / Math.max(1, frames - 1));
+      const c = renderProp(id, yaw + (extraYaw || 0), 0, 0);
+      if (!c) return null;
+      b.g.drawImage(c, off, off, cell, cell, i * cell, 0, cell, cell);
+    }
+    if (b.next < frames) return null;
+    delete baking[key];
+    return (baked[key] = { canvas: freeze(b.strip), frames, cell, yaw0, yaw1 });
   }
+  const frameStamp = () => Math.round(performance.now() / 8);
 
   // Load a model the game knows about, without drawing it yet.
   function want(id) { if (!models[id] && known[id]) preload(known[id]); return ready(id); }

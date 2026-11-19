@@ -22,7 +22,7 @@ function drawReadingFront(e, x, y, cw, ch) {
     const jf = level.journal.find(j => j.id === (reading && reading.id));
     const sec = jf ? sectionAt(jf.x) : null;
     const place = sec && sec.backdrop ? locImage(sec.backdrop) : journalImage("assets/missions/" + mission.id + ".webp");
-    if (place && place.ready) { ctx.filter = "sepia(0.85) contrast(0.9) brightness(0.8)"; drawCover(place, px, py, pw, ph); ctx.filter = "none"; }
+    if (place && place.ready) drawCover(baked(place, 0, 0, place.width, place.height, "sepia(0.85) contrast(0.9) brightness(0.8)") || place, px, py, pw, ph);
   }
   const v = ctx.createRadialGradient(px + pw / 2, py + ph / 2, ph * 0.3, px + pw / 2, py + ph / 2, pw * 0.75);
   v.addColorStop(0, "rgba(40, 25, 10, 0)"); v.addColorStop(1, "rgba(40, 25, 10, 0.55)");

@@ -1236,8 +1236,8 @@ function drawAttract(now) {
   attract.vents = attract.vents.filter(v => v.x > -100);
   // Koda: the 3D model when it's in, the drawn sheet until then (and for outfit colours)
   let kodaDone = false;
-  if (typeof Char3D !== "undefined" && kodaSheet(playerOutfit) === art.koda && Char3D.has("koda", pose)) {
-    const c = Char3D.render("koda", "attract", pose, pose === "vault" ? frame / 8 : t * 1.4, 1);
+  if (typeof Char3D !== "undefined" && Char3D.has("koda", pose)) {
+    const c = Char3D.render("koda", "attract", pose, pose === "vault" ? frame / 8 : t * 1.4, 1, { outfit: OUTFITS[playerOutfit] ? OUTFITS[playerOutfit].jacket : null });
     if (c) {
       const size = Char3D.VIEW_METRES * PX * 1.2, lift = pose === "vault" ? Math.sin(frame / 7 * Math.PI) * 60 : 0;
       ctx.drawImage(c, kx - size / 2, roofY - lift - size * Char3D.FOOT, size, size);
@@ -1278,8 +1278,8 @@ function drawAttract(now) {
     const glow = ctx.createRadialGradient(d.x, d.y, 4, d.x, d.y, 60);
     glow.addColorStop(0, "rgba(255, 140, 40, 0.6)"); glow.addColorStop(1, "rgba(255, 120, 30, 0)");
     ctx.fillStyle = glow; ctx.fillRect(d.x - 60, d.y - 60, 120, 120);
-    ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(d.rot); ctx.shadowColor = "#ff7a1a"; ctx.shadowBlur = 16;
-    const r = KIT[d.art]; if (r && art.kit.ready) ctx.drawImage(art.kit, r[0], r[1], r[2], r[3], -24, -22, 48, 44);
+    ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(d.rot);
+    drawDebrisPiece(d.art, 52, 46);
     ctx.restore();
   }
   attract.debris = attract.debris.filter(d => d.x < W + 80);

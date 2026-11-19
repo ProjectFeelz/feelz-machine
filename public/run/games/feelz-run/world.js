@@ -1264,15 +1264,26 @@ function drawDebris() {
     glow.addColorStop(0, "rgba(255, 140, 40, 0.65)"); glow.addColorStop(1, "rgba(255, 120, 30, 0)");
     ctx.fillStyle = glow;
     ctx.fillRect(sx(d.x) - d.size, sy(d.y) - d.size, d.size * 2, d.size * 2);
-    const r = KIT[d.art];
     ctx.save();
     ctx.translate(sx(d.x), sy(d.y));
     ctx.rotate(d.rot);
-    ctx.shadowColor = "#ff7a1a"; ctx.shadowBlur = 16;
-    const w = d.size, h = d.low ? d.size : d.half * 2.2;
-    if (r && art.kit.ready) ctx.drawImage(art.kit, r[0], r[1], r[2], r[3], -w / 2, -h / 2, w, h);
+    drawDebrisPiece(d.art, d.size, d.low ? d.size : d.half * 2.2);
     ctx.restore();
   }
+}
+
+// One piece of storm debris, centred on (0, 0): the painted props where there
+// is one (crates, barrels), the kit's pipes and grates otherwise.
+const DEBRIS_PROP = { crate: "mc_crate_half", barrel: "mc_barrel", crate_half: "mc_crate_half", vent: "rc_barrel" };
+function drawDebrisPiece(name, w, h) {
+  const pr = PROP2D[DEBRIS_PROP[name]];
+  if (pr && art.props2d && art.props2d.ready) {
+    const k = Math.min(w / pr[2], h / pr[3]) * 1.15, pw = pr[2] * k, ph = pr[3] * k;
+    ctx.drawImage(art.props2d, pr[0], pr[1], pr[2], pr[3], -pw / 2, -ph / 2, pw, ph);
+    return;
+  }
+  const r = KIT[name];
+  if (r && art.kit.ready) ctx.drawImage(art.kit, r[0], r[1], r[2], r[3], -w / 2, -h / 2, w, h);
 }
 
 function drawBolt(bolt, alpha, behind) {
