@@ -1066,10 +1066,27 @@ function drawMud() {
   }
 }
 
+// Townsfolk who aren't waiting in a cage or playing music go about their day: a few
+// steps one way, a pause, a few steps back. Worked out from the clock, so it costs nothing.
+const NPC_STILL = /^(MUSICIAN_|THE_SNAKE|KODA|ZORA)/;
+function npcWander(n, caged) {
+  const seed = (n.x * 7.31) % 13, P = caged ? 9 : 15, ph = ((frameTime + seed) % P + P) % P, v = caged ? 0.35 : 0.8;
+  // out on the street, a stroll; locked in a cage, pacing the few steps it allows
+  const reach = caged ? 0.4 : 2.4 + (seed % 3) * 0.6;   // metres each way
+  const walkT = reach / v;
+  // out (walk), pause, back (walk), pause
+  if (ph < walkT) return { dx: ph * v, walking: true, facing: 1, walked: ph * v };
+  if (ph < P / 2) return { dx: reach, walking: false, facing: 1 };
+  if (ph < P / 2 + walkT) { const d = (ph - P / 2) * v; return { dx: reach - d, walking: true, facing: -1, walked: d }; }
+  return { dx: 0, walking: false, facing: -1 };
+}
+
 function drawNpcs() {
   const N = SPRITES.npcs;
   for (const n of level.npcs || []) {
-    const x = m(n.x), footY = -m(n.y);
+    const cage0 = (level.cages || []).find(c => level.npcs[c.npc] === n);
+    const wander = !(cage0 && cage0.open) && !n.running && !n.ghost && !n.still && !NPC_STILL.test(n.who || "") ? npcWander(n, !!cage0) : null;
+    const x = m(n.x + (wander ? wander.dx - (cage0 ? 0.2 : 0) : 0)), footY = -m(n.y);
     if (n.gone || !onScreen(x, 0, 120)) continue;
     if (n.who === "ZORA" || n.who === "KODA") {
       const sheet = n.who === "ZORA" ? art.zora : art.koda;
@@ -1086,10 +1103,12 @@ function drawNpcs() {
     const tf = !n.ghost && typeof Char3D !== "undefined" && CHAR3D.townsfolk && CHAR3D.townsfolk[n.who];
     if (tf && Char3D.want(tf.id)) {
       const cheering = cage && cage.open && cage.t < 0.7;
-      const anim = cheering ? "cheer" : n.running ? "walk" : "idle";
-      const t = cheering ? 0.25 + cage.t / 2.2 : n.running ? (n.walked || 0) / 2.2 : (frameTime + n.x * 0.37) / 9.9;
-      // facing the street while they wait, turned a little toward us
-      const c3 = Char3D.render(tf.id, "npc", anim, t, n.running ? (n.facing || 1) : (n.facing || 1), n.running ? undefined : { turn: 0.55 });
+      const strolling = wander && wander.walking;
+      const anim = cheering ? "cheer" : n.running || strolling ? "walk" : "idle";
+      const t = cheering ? 0.25 + cage.t / 2.2 : n.running ? (n.walked || 0) / 2.2 : strolling ? wander.walked / 2.2 : (frameTime + n.x * 0.37) / 9.9;
+      // facing the street while they wait, turned a little toward us; walking, side on
+      const face = wander ? wander.facing : (n.facing || 1);
+      const c3 = Char3D.render(tf.id, "npc", anim, t, face, n.running || strolling ? undefined : { turn: 0.55 });
       if (c3) {
         ctx.save();
         if (n.running) ctx.globalAlpha = Math.max(0, Math.min(1, 1.6 - (n.walked || 0) / 8));

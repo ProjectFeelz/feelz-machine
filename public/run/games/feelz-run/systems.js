@@ -287,6 +287,8 @@ function driveHoldsClock(realDt) {
   const on = drivePartActive();
   if (on && !drive.active) { drive.active = true; drive.trail = []; drive.stopT = 0; showBanner("MUSIC DRIVE", "THE SONG ONLY PLAYS WHILE YOU MOVE", 2.2); }
   if (!on) {
+    // inward runs play the song straight through; coming back out, give him a moment to get going
+    if (inward.active) drive.grace = 1.5;
     // Leaving a drive part (or a stillness part): if the song was being held, start it again from where the clock is.
     const wasHolding = drive.active || songHeld;
     if (drive.active) { drive.active = false; drive.rewinding = false; }
@@ -300,7 +302,11 @@ function driveHoldsClock(realDt) {
   const ctl = controlsFor(0);
   // Only going forward counts. Walking back holds the song, and a hop or a step on the way back doesn't restart it.
   const back = ctl.left && !ctl.right;
-  const moving = !p.finished && !back && (ctl.right || (p.climb && ctl.up) || p.zip || (p.move && p.vx >= 0) || p.vx > m(1.5) || (!p.ground && p.vx > -m(0.5)));
+  // Fighting counts as keeping the song going (you can't run while you throw a punch), and so does the
+  // moment just after an inward run hands back to the street.
+  drive.grace = Math.max(0, (drive.grace || 0) - realDt);
+  const fighting = !!p.fightWith || ATTACK_STATES.has(p.state) || p.state === "hurt" || p.state === "stun" || p.state === "takedown";
+  const moving = !p.finished && !back && (fighting || drive.grace > 0 || ctl.right || (p.climb && ctl.up) || p.zip || (p.move && p.vx >= 0) || p.vx > m(1.5) || (!p.ground && p.vx > -m(0.5)));
   drive.moveT = moving ? (drive.moveT || 0) + realDt : 0;
   // Hidden, or waiting on something that moves with the beat (a shutter, a turning slab, a flicker): the song just holds.
   const pg = level.solids.find(s => s.gate && s.gate.pulse && s.x - p.x > 0 && s.x - p.x < m(2.6) && Math.abs(s.gate.floor - p.y) < m(0.6) && !pulseOpen(s));

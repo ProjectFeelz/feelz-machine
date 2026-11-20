@@ -23,9 +23,9 @@ const RUN = '/run/';
 
 // The painting each mission opens on: the hero shows these on their own, with dancing Koda in front.
 const PAINTINGS = [
-  'm1-loc-01-thoroughfare', 'm2-loc-02-street-crossing', 'm3-loc-01-market-night', 'm4-loc-01-loading-docks', 'm8-loc-01-plaza-fountain-day',
-  'm6-loc-01-fountain-dusk', 'm7-loc-01-rain-alley', 'm8-loc-01-plaza-fountain-day', 'm9-loc-03-middle-city-rooftops', 'm1-loc-05-storm-shelter',
-  'm9-loc-03-middle-city-rooftops', 'm12-loc-01-outer-wall-tunnel', 'm13-loc-01-cracked-fountain', 'm14-loc-01-rose-terraces', 'm15-loc-03-mud-return',
+  'm1-loc-01-thoroughfare', 'm2-loc-02-street-crossing', 'm3-loc-01-market-night', 'm4-loc-01-loading-docks', 'm5-loc-02-crowded-promenade',
+  'm6-loc-01-fountain-dusk', 'm7-loc-01-rain-alley', 'm8-loc-01-plaza-fountain-day', 'm9-loc-03-middle-city-rooftops', 'm10-loc-03-street-shrines',
+  'm2-loc-04-checkpoint-vent', 'm12-loc-01-outer-wall-tunnel', 'm13-loc-01-cracked-fountain', 'm14-loc-01-rose-terraces', 'm15-loc-03-mud-return',
 ];
 
 const MISSIONS = [
