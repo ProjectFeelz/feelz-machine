@@ -277,6 +277,10 @@ exports.handler = async (event) => {
         message:   `Your new upload and payout limits are active. Renews ${renews}.`,
         email_requested: true,
         metadata: {
+          // 'started' is in EMAILABLE_KINDS in send-billing-emails.js. Without
+          // a kind this receipt is stamped kind_not_emailable and the one
+          // email a paying customer should always get is never sent.
+          kind:          'started',
           audience:      'artist',
           tier:          tierSlug,
           billing_cycle: cycle,

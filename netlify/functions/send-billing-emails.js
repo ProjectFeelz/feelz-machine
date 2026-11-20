@@ -80,7 +80,28 @@ const PAGE_SIZE = 100;
 // point of the watchdog is that nobody was looking at the app when the job
 // died. An alert that only lands in a bell icon repeats the failure it is
 // supposed to catch.
-const EMAILABLE_KINDS = new Set(['payment_failed', 'expired', 'ended', 'job_health']);
+// ── WHAT IS ALLOWED TO BECOME AN EMAIL ──────────────────────────────────────
+//
+// A kind that is not in here is stamped kind_not_emailable and never sent.
+// That is the right default: it stops every streak and follow notice turning
+// into mail. It also means a new kind is silent until it is added here, and
+// nothing anywhere says so at the time it is written.
+//
+// Two were missing and both mattered.
+//
+// 'started' is the receipt somebody gets when they pay for a plan. It had no
+// kind at all, so the one email a paying customer should always receive was
+// the one that could never be sent. On 20 November a Pro subscriber's receipt
+// sat in the queue heading for kind_not_emailable.
+//
+// 'subscription_unmatched' is the alert raised when PayPal activates a
+// subscription with no row to match. That is money taken with nothing
+// recorded, which is the most serious thing that happens on this platform,
+// and it was about to be in-app only.
+const EMAILABLE_KINDS = new Set([
+  'payment_failed', 'expired', 'ended', 'job_health',
+  'started', 'subscription_unmatched',
+]);
 
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
