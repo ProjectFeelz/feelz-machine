@@ -1454,7 +1454,7 @@ function updateDogs(dt) {
     if (!p) { d.state = "quit"; }
     // giving up: tired out, too far behind, or lost the scent in the water
     if (d.state !== "quit" && p) {
-      if (d.t > 14 || p.x - d.x > m(24) || d.hits >= 2) d.state = "quit";
+      if (d.t > 26 || p.x - d.x > m(40) || d.hits >= 2) d.state = "quit";
       else if ((p.mudT > 0 || inWater(p.x)) && Math.abs(p.x - d.x) > m(1.5)) { d.state = "quit"; showToast("THEY LOST YOUR SCENT", "", "ko", 1.1); }
     }
     if (d.state === "quit") {
@@ -1494,7 +1494,7 @@ function updateDogs(dt) {
     // just bitten: it holds off a step and snarls
     if (d.biteCd > 0 && Math.abs(dx) < m(1.3) && Math.abs(above) < m(0.9)) { d.state = "snarl"; continue; }
     // tired dogs slow down
-    const tired = d.t > 8 ? 0.62 : 1;
+    const tired = d.t > 16 ? 0.75 : 1;
     const speed = m(sp * tired * (inWater(d.x) ? 0.45 : 1) * (Math.abs(dx) < m(1) ? 0.6 : 1));
     const nx = d.x + dir * speed * dt;
     const f = dogFloor(nx, d.y - m(1.3));

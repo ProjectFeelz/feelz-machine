@@ -25,7 +25,8 @@ const Coop = (() => {
   const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const MAX_PLAYERS = 6;
   const SONG_EVERY = 1;
-  const DRIFT = 0.35;            // seconds of song drift before a guest is nudged back in line
+  const DRIFT = 0.9;             // seconds of song drift before a guest is nudged back in line
+  const SEEK_GAP = 4;            // and at most one nudge every few seconds
   // Everyone's colour, in the order they joined (the host first).
   const COLOURS = [
     { tint: "rgba(255, 150, 30, 0.4)", text: "#ffc46a" },
@@ -176,7 +177,9 @@ const Coop = (() => {
         if (typeof drive !== "undefined" && drive.active) return;
         {
           const expected = d.c + Math.max(0, (hostNow() - d.t)) / 1000 * (d.r || 1);
-          if (Math.abs(expected - songClock) > DRIFT && expected >= 0) seekSong(expected);
+          // Jumping in the song is what you hear as a glitch, so only when it has drifted well
+          // out, and not more than once every few seconds (a busy phone drifts and comes back).
+          if (Math.abs(expected - songClock) > DRIFT && expected >= 0 && realTime - (st.lastSeek || -99) > SEEK_GAP) { st.lastSeek = realTime; seekSong(expected); }
         }
         break;
       case "rewind":
