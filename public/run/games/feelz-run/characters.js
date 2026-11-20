@@ -323,7 +323,7 @@ function drawWardens() {
     const wOpts = { glow, blur: wd.windUp > 0 ? 16 : 5, alpha: wd.alive ? 1 : Math.max(0, 1 - (wd.animT - 2) ) };
     // The 3D warden when his model is in (engine/char3d.js), at full frame rate.
     const w3 = typeof CHAR3D !== "undefined" && CHAR3D.enemies ? (CHAR3D.enemies[wd.kind] || CHAR3D.enemies.warden) : null;
-    const wModel = w3 && Char3D.has(w3.id, anim) ? Char3D.render(w3.id, "w", anim, wardenPose3D(wd, anim), wd.facing, { cache: 16 }) : null;
+    const wModel = w3 && !liteCast && Char3D.has(w3.id, anim) ? Char3D.render(w3.id, "w", anim, wardenPose3D(wd, anim), wd.facing, { cache: 16 }) : null;
     if (wModel) drawModelFrame(wModel, wd.x, wd.y, wOpts);
     else drawSheetFrame(sheet, sdef, anim, frame, wd.x, wd.y + drop, wd.facing, wOpts);
     // Rank: one gold chevron for a veteran, two for an elite.

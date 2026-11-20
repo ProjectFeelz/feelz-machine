@@ -30,7 +30,7 @@
 const Char3D = (() => {
   const THREE_URL = "vendor/three-0.160.0/three.module.min.js";
   const LIB_URL = "vendor/three-0.160.0/gltf-lib.js";
-  const SIZE = 384;                  // pixels square of each runner's canvas
+  const SIZE = window.matchMedia && matchMedia("(pointer: coarse)").matches ? 288 : 384;   // pixels square of each runner's canvas (smaller on phones)
   let THREE = null, LIB = null, libState = "idle";
   let renderer = null, glCanvas = null, camera = null, scene = null, lights = null;
   const models = {};                 // id -> { state, def, root, mixer, actions, clips, height }
@@ -55,7 +55,9 @@ const Char3D = (() => {
       // Phones skip the edge smoothing: it is the costliest part and the
       // screens are dense enough not to need it (keeps the phone cooler).
       const phone = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
-      renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: !phone, alpha: true, premultipliedAlpha: false, powerPreference: "high-performance" });
+      // Phones keep the drawing between reads (some Android graphics chips hand back a blank
+      // picture otherwise, which shows as black flashes), at a smaller size that is quicker to draw.
+      renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: !phone, alpha: true, premultipliedAlpha: false, powerPreference: "high-performance", preserveDrawingBuffer: phone });
       renderer.setPixelRatio(1);
       renderer.setSize(SIZE, SIZE, false);
       renderer.setClearColor(0x000000, 0);

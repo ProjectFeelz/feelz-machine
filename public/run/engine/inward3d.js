@@ -45,7 +45,8 @@ const Inward3D = (() => {
   function init() {
     glCanvas = document.createElement("canvas");
     glCanvas.width = W; glCanvas.height = H;
-    renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, alpha: false, powerPreference: "low-power", preserveDrawingBuffer: false });
+    const phoneIn = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
+    renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: !phoneIn, alpha: false, powerPreference: "low-power", preserveDrawingBuffer: phoneIn });
     renderer.setPixelRatio(1);
     renderer.setSize(W, H, false);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
