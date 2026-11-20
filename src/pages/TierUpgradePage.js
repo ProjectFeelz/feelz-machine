@@ -39,7 +39,7 @@ const CURRENCY_MAP = {
 const DEFAULT_CURRENCY = { currency: 'USD', symbol: '$', locale: 'en-US' };
 
 // ── PayPal Button ─────────────────────────────────────────────
-function PayPalButton({ planId, tierSlug, billingCycle, onSuccess, onError }) {
+function PayPalButton({ planId, tierSlug, billingCycle, customId, onSuccess, onError }) {
   const buttonRef = useRef(null);
   const [ready, setReady] = useState(false);
 
@@ -60,12 +60,31 @@ function PayPalButton({ planId, tierSlug, billingCycle, onSuccess, onError }) {
     buttonRef.current.innerHTML = '';
     window.paypal.Buttons({
       style: { shape: 'pill', color: 'white', layout: 'vertical', label: 'subscribe' },
-      createSubscription: (data, actions) => actions.subscription.create({ plan_id: planId }),
+      // custom_id IS THE ONLY THING THAT TIES A PAYMENT TO A PERSON.
+      //
+      // Without it, PayPal holds a subscription that belongs to nobody. The
+      // artist was identified only from the signed-in session inside
+      // verify-artist-subscription, which runs in onApprove below, which runs
+      // in the browser. If the buyer closes the tab after paying, PayPal has
+      // taken the money and nothing on this platform knows who they are. The
+      // webhook cannot rescue it either, because
+      // BILLING.SUBSCRIPTION.ACTIVATED arrives with a subscription id and no
+      // way to map it to an artist.
+      //
+      // That is not a theory. On 19 November PayPal reported a Pro sale and
+      // artist_tier_subscriptions had no row for it, from any provider.
+      //
+      // PayPal carries custom_id through the subscription and returns it on
+      // lookup, so the webhook can now find the artist on its own.
+      createSubscription: (data, actions) => actions.subscription.create({
+        plan_id: planId,
+        ...(customId ? { custom_id: String(customId) } : {}),
+      }),
       onApprove: (data) => onSuccess({ subscriptionId: data.subscriptionID, tierSlug, billingCycle }),
       onError: (err) => { console.error('PayPal error:', err); onError('Payment failed. Please try again.'); },
       onCancel: () => {},
     }).render(buttonRef.current);
-  }, [ready, planId]);
+  }, [ready, planId, customId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!planId) {
     return (
@@ -533,6 +552,7 @@ export default function TierUpgradePage() {
                         planId={planId}
                         tierSlug={slug}
                         billingCycle={billingCycle}
+                        customId={artist?.id}
                         onSuccess={handleSubscriptionSuccess}
                         onError={(msg) => setError(msg)}
                       />

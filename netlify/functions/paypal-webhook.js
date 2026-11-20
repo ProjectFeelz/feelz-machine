@@ -66,6 +66,27 @@ async function getPayPalToken() {
   });
 }
 
+// A plain GET against the PayPal API, same host and token as everything else
+// here. Added for the unmatched-subscription alert below, which needs to read
+// custom_id back off a subscription to say whose payment it was.
+function paypalGet(path, token) {
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: paypalEnv.hostApi, path, method: 'GET',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    }, (res) => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => {
+        try { resolve(JSON.parse(d)); }
+        catch { reject(new Error(`PayPal GET ${path} returned unparseable body`)); }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 // WHEN THIS RETURNS FALSE, SAY WHY
 //
 // Every delivery PayPal made on 27 October came back 401 from this function,
@@ -188,17 +209,97 @@ async function cancelArtistSubscription(subscriptionId, reason) {
 }
 
 // Reactivate or confirm a subscription
+//
+// ── MONEY TAKEN, NOTHING RECORDED ──────────────────────────────────────────
+//
+// This used to UPDATE and nothing else. An update that matches no rows is not
+// an error in PostgREST: it returns no error, changes nothing, and logs
+// nothing. So when a row did not exist, this function ran, found nothing,
+// said nothing, and the webhook reported success to PayPal.
+//
+// That is what happened on 19 November. PayPal reported a Pro sale and
+// artist_tier_subscriptions had no row for it from any provider. The buyer
+// paid and stayed on Free.
+//
+// The row is created by verify-artist-subscription, which runs when the
+// browser calls it in onApprove. If the buyer closes the tab after paying,
+// that call never happens, and before custom_id was added to the subscription
+// there was no way back: the webhook knew a subscription id and nothing else.
+//
+// So this now counts what it changed and shouts when the answer is zero. It
+// cannot yet create the missing row by itself, and deliberately does not
+// guess: creating a paid plan for the wrong artist is worse than an alert.
+// What it does guarantee is that money arriving with nowhere to land is
+// never silent again.
 async function activateArtistSubscription(subscriptionId) {
   if (!subscriptionId) return;
-  const { error } = await supabase
+
+  // select() so the result carries the rows that changed. Without it there is
+  // no way to tell "activated" from "matched nothing".
+  const { data: updated, error } = await supabase
     .from('artist_tier_subscriptions')
     .update({
       status: 'active', cancelled_at: null, cancel_reason: null,
       // Money arrived, so whatever retry window was open is closed.
       payment_retry_until: null,
     })
-    .eq('paypal_subscription_id', subscriptionId);
-  if (error) console.error('Activate subscription error:', error);
+    .eq('paypal_subscription_id', subscriptionId)
+    .select('id, artist_id');
+
+  if (error) {
+    console.error('Activate subscription error:', error);
+    return;
+  }
+
+  if (updated && updated.length) return;   // normal path
+
+  // ── Nothing matched. Somebody has paid for a plan that does not exist ────
+  console.error(
+    '[paypal-webhook] ACTIVATED matched no artist subscription row.',
+    'subscription=', subscriptionId,
+    'MONEY MAY HAVE BEEN TAKEN WITH NOTHING RECORDED.'
+  );
+
+  // custom_id is the artist id, set when the subscription is created in
+  // TierUpgradePage. Read here so the alert names who it was rather than
+  // leaving an id to chase through the PayPal dashboard.
+  let artistId = null;
+  let artistName = null;
+  try {
+    const token = await getPayPalToken();
+    const sub = await paypalGet(`/v1/billing/subscriptions/${encodeURIComponent(subscriptionId)}`, token);
+    artistId = sub?.custom_id || null;
+    if (artistId) {
+      const { data: a } = await supabase
+        .from('artists').select('artist_name').eq('id', artistId).maybeSingle();
+      artistName = a?.artist_name || null;
+    }
+  } catch (err) {
+    console.error('[paypal-webhook] could not read the subscription back from PayPal:', err.message);
+  }
+
+  // An admin notification, because a line in a function log is a line nobody
+  // reads. This is the one failure on this platform that costs a real person
+  // real money.
+  const { data: admins } = await supabase.from('admins').select('user_id');
+  for (const admin of admins || []) {
+    await reportNotify('unmatched paypal subscription', supabase.from('notifications').insert({
+      user_id: admin.user_id,
+      type:    'admin_alert',
+      title:   'A PayPal subscription has no record',
+      message: `PayPal activated subscription ${subscriptionId}`
+             + (artistName ? ` for ${artistName}` : '')
+             + '. There is no row in artist_tier_subscriptions, so somebody has paid and has not been given their plan. '
+             + 'Grant the tier by hand and check verify-artist-subscription in the function logs.',
+      email_requested: true,
+      metadata: {
+        kind: 'subscription_unmatched',
+        paypal_subscription_id: subscriptionId,
+        artist_id: artistId,
+        audience: 'admin',
+      },
+    }));
+  }
 }
 
 // ── A failed payment, for the two audiences that had no handler ──────────
