@@ -278,7 +278,7 @@ const OUTFITS = {
 --------------------------------------------------------------------------- */
 
 const CREDITS = { perRecord: 1, perNote: 2, perPage: 25, perCoin: 50 };
-const VOUCHERS = [{ percent: 10, cost: 250 }, { percent: 25, cost: 600 }, { percent: 50, cost: 1200 }];
+const VOUCHERS = [{ percent: 10, cost: 750 }, { percent: 25, cost: 1800 }, { percent: 50, cost: 3600 }];
 
 // The album songs on Feelz Machine, in album order.
 const ALBUM_TRACKS = [

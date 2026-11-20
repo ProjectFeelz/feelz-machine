@@ -134,7 +134,10 @@ async function openArtistRuns() {
   box.innerHTML = "<p class='skills-note'>Loading...</p>";
   const rows = await ArtistLevels.fetchList();
   box.innerHTML = "";
-  if (!rows.length) { box.append(el("p", "skills-note", "No artist runs yet.")); return; }
+  if (!rows.length) {
+    box.append(el("p", "skills-note", "The first artist levels are on their way. Artists on Feelz Machine: put one of your songs on a level from Upload, Manage, then the Feelz Run section of the song."));
+    return;
+  }
   for (const lv of rows) {
     const tpl = MISSIONS.find(mi => mi.id === lv.template);
     const card = el("button", "artist-run");
@@ -158,11 +161,12 @@ document.getElementById("artistRunsButton").addEventListener("click", openArtist
   if (want && /^m\d\d$/.test(want) && MISSION_DATA[want] && MISSIONS.some(mi => mi.id === want && mi.ready)) chooseMission(want);
 }
 
-// Show the button only when there's something to play, and open a shared link (/run/?level=<id>) straight away.
+// On Feelz Machine the button is always there, so players can find the artist levels; a shared link
+// (/run/?level=<id>) opens straight away.
 (async () => {
   if (!Backend.online) return;
+  document.getElementById("artistRunsButton").classList.remove("hidden");
   const rows = await ArtistLevels.fetchList();
-  document.getElementById("artistRunsButton").classList.toggle("hidden", !rows.length);
   const want = new URLSearchParams(location.search).get("level");
   if (want && /^[0-9a-f-]{36}$/i.test(want)) {
     try { const mid = await ArtistLevels.ensure(want); chooseMission(mid); }
