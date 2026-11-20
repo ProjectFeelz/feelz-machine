@@ -86,6 +86,24 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// Where the caller is, read from the header Netlify injects at its edge.
+// Exactly what geo.js and school-sessions-gate.js already do, so there is no
+// third party, no key and no extra request. Absent means unknown, and unknown
+// is treated as "not local" everywhere it is used, which only ever changes
+// which button is emphasised. Nothing is hidden on the strength of it, because
+// a geo lookup that fails must never cost a South African their local way to
+// pay.
+function callerCountry(event) {
+  try {
+    const raw = event.headers['x-nf-geo'] || event.headers['X-Nf-Geo'];
+    if (!raw) return null;
+    const geo = JSON.parse(Buffer.from(raw, 'base64').toString('utf8'));
+    return (geo && geo.country && geo.country.code) || null;
+  } catch {
+    return null;
+  }
+}
+
 const json = (statusCode, body) => ({
   statusCode,
   headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
@@ -263,8 +281,12 @@ exports.handler = async (event) => {
           }
         }
       }
+      const country = callerCountry(event);
       return json(200, {
         subject:      subject.label,
+        country,
+        // The only thing this changes is which way to pay is put first.
+        local:        country === 'ZA',
         paystackLive: PAYSTACK_IS_LIVE,
         subscribed:   Boolean(current && current.paystack_subscription_code),
         provider:     current ? current.payment_provider : null,

@@ -549,7 +549,7 @@ export default function TierUpgradePage() {
                         <span className="ml-2 text-sm text-white/40">Activating...</span>
                       </div>
                     ) : isConfigured ? (
-                      <>
+                      <div className="flex flex-col">
                         <PayPalButton
                           planId={planId}
                           tierSlug={slug}
@@ -569,7 +569,7 @@ export default function TierUpgradePage() {
                           accent={tier.color}
                           onError={(msg) => setError(msg)}
                         />
-                      </>
+                      </div>
                     ) : (
                       <div className="space-y-2">
                         <p className="text-xs text-white/30 text-center">PayPal not configured — test mode:</p>

@@ -311,7 +311,7 @@ export default function ListenerUpgradePage() {
 
               {/* CTA */}
               {tier.slug === 'fan_pro' && !isCurrent && (
-                <>
+                <div className="flex flex-col">
                   <PayPalSubscribeButton
                     planId={LISTENER_PLAN_IDS[`pro_${cycle}`]}
                     tierSlug="fan_pro"
@@ -327,7 +327,7 @@ export default function ListenerUpgradePage() {
                     cycle={cycle}
                     onError={(msg) => setError(msg)}
                   />
-                </>
+                </div>
               )}
               {tier.slug === 'fan_pro' && isCurrent && (
                 <button onClick={handleCancel}
