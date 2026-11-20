@@ -1108,7 +1108,7 @@ function drawNpcs() {
       const t = cheering ? 0.25 + cage.t / 2.2 : n.running ? (n.walked || 0) / 2.2 : strolling ? wander.walked / 2.2 : (frameTime + n.x * 0.37) / 9.9;
       // facing the street while they wait, turned a little toward us; walking, side on
       const face = wander ? wander.facing : (n.facing || 1);
-      const c3 = Char3D.render(tf.id, "npc", anim, t, face, n.running || strolling ? undefined : { turn: 0.55 });
+      const c3 = Char3D.render(tf.id, "npc", anim, t, face, n.running || strolling ? { cache: 16 } : { turn: 0.55, cache: 16 });
       if (c3) {
         ctx.save();
         if (n.running) ctx.globalAlpha = Math.max(0, Math.min(1, 1.6 - (n.walked || 0) / 8));

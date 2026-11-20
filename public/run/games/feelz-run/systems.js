@@ -484,9 +484,9 @@ function drawCrowds(layer) {
       if (isFront !== front) continue;
       const k = seeded(c.seed + i * 3.7), who = rows[Math.floor(k * rows.length)];
       const span = c.w - m(0.8);
-      // some of them are passing through: walking up and down the street, arms swinging
+      // most of them are passing through: walking up and down the street, arms swinging
       const WK = SPRITES.walkers;
-      if (!c.queue && art.walkers && art.walkers.ready && span > m(3) && seeded(c.seed + i * 7.1) < 0.4) {
+      if (!c.queue && art.walkers && art.walkers.ready && span > m(2) && seeded(c.seed + i * 7.1) < 0.65) {
         const speed = m(0.9 + seeded(c.seed + i * 2.9) * 0.5);
         const run = (frameTime * speed + seeded(c.seed + i * 4.3) * span * 2) % (span * 2);
         const wdir = run < span ? 1 : -1, wx = c.x + m(0.4) + (run < span ? run : span * 2 - run);
@@ -1249,7 +1249,7 @@ function drawZoraCompanion() {
   ctx.save();
   ctx.translate(X, Y - m(0.5)); ctx.rotate(Math.sin(frameTime * 1.7) * 0.03); ctx.translate(-X, -(Y - m(0.5)));
   const z3 = typeof Char3D !== "undefined" && Char3D.want && Char3D.want("zora") && Char3D.has("zora", "idle")
-    ? Char3D.render("zora", "companion", "idle", 0.3, f, { fly: true }) : null;
+    ? Char3D.render("zora", "companion", "idle", 0.3, f, { fly: true, cache: 1 }) : null;
   if (z3) drawModelFrame(z3, veil.zc.x, veil.zc.y - m(0.9) + bob, { glow: "rgba(255, 170, 200, 0.75)", blur: 16, alpha: 0.95 });
   else drawSheetFrame(art.zora, def, "idle", Math.floor(frameTime * 5) % 8, veil.zc.x, veil.zc.y - m(0.9) + bob, f, { glow: "rgba(255, 170, 200, 0.75)", blur: 16, alpha: 0.95 });
   ctx.restore();

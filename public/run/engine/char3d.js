@@ -502,12 +502,25 @@ const FLY_POSE = { lean: 1.2, backLeg: 0.3, backKnee: 0.05, frontLeg: -1.2, fron
     turn(b.hips, "x", P.lean);
   }
 
+  const frameCache = new Map(), FRAME_CACHE_MAX = 48;
   function render(id, key, anim, t, facing, opts) {
     // the menu draws at a calm pace, so it always gets the 3D model once it's in
     if (!(opts && opts.menu ? loaded(id) : ready(id))) return null;
     pace();
     const m = models[id], a = m.actions[anim];
     if (!a) return null;
+    // Reused frames (opts.cache = frames per move): the people in the background (enforcers,
+    // townsfolk, Zora flying) are drawn once per pose and the same picture is used again next
+    // time they reach it, so a phone isn't drawing every one of them in 3D every frame.
+    let cacheKey = null;
+    if (opts && opts.cache) {
+      const n = opts.cache, kk = a.loop ? (((t % 1) + 1) % 1) : Math.max(0, Math.min(0.999, t));
+      const fi = a.loop ? Math.floor(kk * n) % n : Math.min(n - 1, Math.floor(kk * n));
+      t = (fi + 0.5) / n;
+      cacheKey = id + "|" + anim + "|" + fi + "|" + (facing < 0 ? -1 : 1) + "|" + (opts.turn !== undefined ? opts.turn : "") + "|" + (opts.outfit ? JSON.stringify(opts.outfit) : "") + "|" + (opts.fly ? 1 : 0);
+      const hit = frameCache.get(cacheKey);
+      if (hit) { frameCache.delete(cacheKey); frameCache.set(cacheKey, hit); return hit; }
+    }
     outfitMap(m, opts && opts.outfit);
     for (const other of Object.values(m.actions)) other.act.enabled = other === a;
     // A move can use just part of its clip (from/to, in seconds): the leap
@@ -539,6 +552,15 @@ const FLY_POSE = { lean: 1.2, backLeg: 0.3, backKnee: 0.05, frontLeg: -1.2, fron
     m.holder.visible = false;
     // Handed back as is (no copy, which would stall the GPU on phones): draw
     // it straight away, before rendering the next runner.
+    if (cacheKey) {
+      // keep a copy of this pose; the oldest are dropped once there are FRAME_CACHE_MAX
+      let c = frameCache.size >= FRAME_CACHE_MAX ? frameCache.get(frameCache.keys().next().value) : null;
+      if (c) frameCache.delete(frameCache.keys().next().value);
+      else { c = document.createElement("canvas"); c.width = glCanvas.width; c.height = glCanvas.height; }
+      const g = c.getContext("2d"); g.clearRect(0, 0, c.width, c.height); g.drawImage(glCanvas, 0, 0);
+      frameCache.set(cacheKey, c);
+      return c;
+    }
     return glCanvas;
   }
 

@@ -186,11 +186,15 @@ function navMove(dx, dy) {
   const items = navItems(layer);
   if (!items.length) return;
   if (!navCurrent || !items.includes(navCurrent)) { navFocus(items.find(e => e.classList.contains("selected")) || items.find(e => e.id === "playButton") || items[0]); return; }
-  const r0 = navCurrent.getBoundingClientRect(), c0 = { x: r0.left + r0.width / 2, y: r0.top + r0.height / 2 };
+  // A phone held upright draws the game turned a quarter round, so the screen's down is the
+  // game's right: read the buttons' places the way the player sees them.
+  const turned = document.documentElement.classList.contains("rotated");
+  const at = r => turned ? { x: r.top + r.height / 2, y: -(r.left + r.width / 2) } : { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  const r0 = navCurrent.getBoundingClientRect(), c0 = at(r0);
   let best = null, bestScore = Infinity;
   for (const e of items) {
     if (e === navCurrent) continue;
-    const r = e.getBoundingClientRect(), c = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    const r = e.getBoundingClientRect(), c = at(r);
     const ddx = c.x - c0.x, ddy = c.y - c0.y;
     const along = dx ? ddx * dx : ddy * dy, across = dx ? Math.abs(ddy) : Math.abs(ddx);
     if (along <= 4) continue;
