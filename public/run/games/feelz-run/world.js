@@ -1101,7 +1101,7 @@ function drawNpcs() {
     const cage = (level.cages || []).find(c => level.npcs[c.npc] === n), caged = !!cage;
     // In 3D when their model is in: waiting, a cheer as the cage lifts, then away up the street.
     const tf = !n.ghost && typeof Char3D !== "undefined" && CHAR3D.townsfolk && CHAR3D.townsfolk[n.who];
-    if (tf && !liteCast && Char3D.want(tf.id)) {
+    if (tf && Char3D.want(tf.id)) {
       const cheering = cage && cage.open && cage.t < 0.7;
       const strolling = wander && wander.walking;
       const anim = cheering ? "cheer" : n.running || strolling ? "walk" : "idle";

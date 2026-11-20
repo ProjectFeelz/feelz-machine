@@ -233,32 +233,16 @@ function frameDue(now, which, minMs) {
    THE GAME LOOP
 --------------------------------------------------------------------------- */
 
-let liteCast = false;
-const lite = { t: 0, n: 0 };
-
 function gameLoop(now) {
   if (gameState !== "playing") {
     if (gameState === "finished") { render(); }
     return;
   }
   if (!frameDue(now, "run", 10)) { requestAnimationFrame(gameLoop); return; }
-  // The game keeps real time even on a slow phone: when a frame takes long, the game catches up
-  // in small steps before drawing, so Koda covers the same ground in the same time as the song
-  // (otherwise a phone drawing 15 frames a second plays in slow motion and misses checkpoints).
-  let left = Math.max(0, Math.min(0.25, (now - lastTime) / 1000));
+  const dt = Math.max(0, Math.min(0.05, (now - lastTime) / 1000));
   lastTime = now;
-  // A device that can't keep up (under ~26 frames a second for a few seconds) draws the people in
-  // the background as drawn sheets instead of 3D, keeping 3D for Koda only. It stays that way.
-  if (!liteCast && runGate && runGate.phase === "go") {
-    lite.t += left; lite.n += 1;
-    if (lite.t >= 3) { if (lite.n / lite.t < 26) { liteCast = true; console.warn("[game] lighter background characters on this device"); } lite.t = 0; lite.n = 0; }
-  }
-  do {
-    const dt = Math.min(0.05, left);
-    left -= dt;
-    frameTime += dt;
-    update(dt);
-  } while (left > 0.0005 && gameState === "playing");
+  frameTime += dt;
+  update(dt);
   // A drawing error never stops the run: the next frame still comes.
   try { render(); } catch (e) { if (!gameLoop.warned) { gameLoop.warned = true; console.warn("[render]", e); } }
   updateHud();
