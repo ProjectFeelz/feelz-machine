@@ -6,6 +6,7 @@ import { supabase } from '../supabaseClient';
 import { showReceipt } from '../components/PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import BillingTrouble from '../components/BillingTrouble';
+import PaystackSubscribeButton from '../components/PaystackSubscribeButton';
 import { ChevronLeft, Check, Zap, Crown, Loader, Palette, BarChart3, Star } from 'lucide-react';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID || '';
@@ -310,13 +311,23 @@ export default function ListenerUpgradePage() {
 
               {/* CTA */}
               {tier.slug === 'fan_pro' && !isCurrent && (
-                <PayPalSubscribeButton
-                  planId={LISTENER_PLAN_IDS[`pro_${cycle}`]}
-                  tierSlug="fan_pro"
-                  billingCycle={cycle}
-                  onSuccess={handleSuccess}
-                  onError={() => setError('Payment failed — please try again')}
-                />
+                <>
+                  <PayPalSubscribeButton
+                    planId={LISTENER_PLAN_IDS[`pro_${cycle}`]}
+                    tierSlug="fan_pro"
+                    billingCycle={cycle}
+                    onSuccess={handleSuccess}
+                    onError={() => setError('Payment failed, please try again')}
+                  />
+                  {/* Rand, for South African cards. Renders nothing unless the
+                      server confirms a price for this exact cycle. */}
+                  <PaystackSubscribeButton
+                    subject="fan"
+                    tier="fan_pro"
+                    cycle={cycle}
+                    onError={(msg) => setError(msg)}
+                  />
+                </>
               )}
               {tier.slug === 'fan_pro' && isCurrent && (
                 <button onClick={handleCancel}

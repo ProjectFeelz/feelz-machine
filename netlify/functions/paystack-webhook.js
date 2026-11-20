@@ -64,6 +64,7 @@ const merchFulfil = require('../lib/merch-fulfil');
 // and two places deciding separately what a Paystack status means is how a
 // venue's player ends up disagreeing with its billing.
 const retailSub = require('../lib/retailPaystackSub');
+const tierSub = require('../lib/tierPaystackSub');
 // The split arithmetic. Imported rather than repeated so this end cannot
 // disagree with the end that grossed the charge up.
 const pricing = require('../lib/pricing');
@@ -167,6 +168,39 @@ exports.handler = async (event) => {
   if (retailSub.SUBSCRIPTION_EVENTS.has(eventType)) {
     const subAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const out = await retailSub.handleSubscriptionEvent({ admin: subAdmin, evt, eventType });
+
+    // ── Not a venue's? Then it may be an artist's ─────────────────────────
+    //
+    // Paystack sends the same event names for both, and nothing in the event
+    // says which. 'no_venue' is the retail handler's own word for "I asked
+    // Paystack, and no venue row claims this subscription", so it is the only
+    // safe point to hand over: everything before it has already been ruled
+    // out against live data rather than against a guess.
+    //
+    // Retail keeps first refusal deliberately. It was here first, its rows are
+    // the ones in production today, and nothing about its behaviour changes
+    // except that a subscription it does not own now gets a second question
+    // asked about it instead of being dropped.
+    if (!out.ok && out.note === 'no_venue') {
+      // Asked in turn, and only the last one asked may raise the "nobody owns
+      // this" alert. Otherwise every fan's renewal would also send an alert
+      // saying no artist owns it, which is true, useless, and the fastest way
+      // to teach somebody to ignore the one alert that matters.
+      const chain = tierSub.SUBJECTS;
+      for (let i = 0; i < chain.length; i += 1) {
+        const subject = chain[i];
+        const last = i === chain.length - 1;
+        const hit = await subject.handleSubscriptionEvent({
+          admin: subAdmin, evt, eventType, alertIfUnowned: last,
+        });
+        if (hit.retry) return retry(hit.note || subject.label + '_sub_failed');
+        // Unowned by this one is the only reason to keep asking. Anything
+        // else, success or a refusal on the merits, is the answer.
+        const unowned = !hit.ok && String(hit.note || '').startsWith('no_');
+        if (!unowned || last) return ok(subject.label + ':' + (hit.note || eventType));
+      }
+    }
+
     // retry only when it is worth retrying. A refusal on the merits, such as a
     // subscription no venue claims, would otherwise be redelivered hourly for
     // three days and never get further.
@@ -216,6 +250,36 @@ exports.handler = async (event) => {
     return out.retry ? retry(out.note || 'retail_charge_failed') : ok('retail:' + (out.note || 'charge'));
   }
 
+  // A first tier payment, on a reference this site issued: art_ for an artist
+  // plan, fan_ for Fan Pro. Routed here for the same reasons as the retail one
+  // above: it has a paystack_intents row but no purchase, so the sale
+  // machinery below would record it as a track nobody bought.
+  //
+  // The prefix only chooses the route. What decides whether anything is
+  // recorded is the intent row carrying that exact reference, so a made-up
+  // reference buys nothing.
+  const tierSubject = tierSub.SUBJECTS.find(x => String(reference).startsWith(x.REF_PREFIX));
+  if (tierSubject) {
+    let tierTx;
+    try {
+      tierTx = await verifyTransaction(reference);
+    } catch (err) {
+      console.error('[paystack-webhook] verify failed for', tierSubject.label, 'reference', reference, ':', err.message);
+      return retry('verify_failed');
+    }
+    // The same domain check the sale path makes, and for the same reason:
+    // Paystack's test card is public, so a test charge costs an attacker
+    // nothing and would hand out a paid tier for free.
+    if (!ALLOW_TEST && tierTx.domain !== 'live') {
+      console.error('[paystack-webhook] REFUSED', tierSubject.label, 'charge on domain', tierTx.domain, reference);
+      return ok(tierSubject.label + '_not_live');
+    }
+    const out = await tierSubject.handleCharge({ admin, reference, tx: tierTx });
+    return out.retry
+      ? retry(out.note || tierSubject.label + '_charge_failed')
+      : ok(tierSubject.label + ':' + (out.note || 'charge'));
+  }
+
   // ── Already done? ─────────────────────────────────────────────────────────
   //
   // Checked first, before the verify call, because Paystack redelivers and a
@@ -242,6 +306,18 @@ exports.handler = async (event) => {
     return retry('intent_lookup_failed');
   }
   if (!intent) {
+    // A renewal charge on a subscription. Paystack generates its own reference
+    // for these, so there is no intent and there never will be, and the
+    // subscription and invoice events are what keep the period moving. Said
+    // calmly rather than as a suspected forgery, because an alarming log line
+    // every month for something working correctly teaches people to ignore
+    // the log. The event body is only used to pick the wording here, never to
+    // decide anything.
+    if (evt.data && (evt.data.plan || evt.data.subscription_code)) {
+      console.log('[paystack-webhook] renewal charge on a subscription,', reference,
+        '- the subscription events carry this one.');
+      return ok('subscription_renewal');
+    }
     // A reference this site never issued. Retrying for three days will not
     // make one appear, so it is acknowledged, but it is also exactly what a
     // forged event would look like, so it is logged as one.

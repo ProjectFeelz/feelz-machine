@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import PaystackSubscribeButton from '../components/PaystackSubscribeButton';
 import { useNavigate } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
@@ -548,14 +549,27 @@ export default function TierUpgradePage() {
                         <span className="ml-2 text-sm text-white/40">Activating...</span>
                       </div>
                     ) : isConfigured ? (
-                      <PayPalButton
-                        planId={planId}
-                        tierSlug={slug}
-                        billingCycle={billingCycle}
-                        customId={artist?.id}
-                        onSuccess={handleSubscriptionSuccess}
-                        onError={(msg) => setError(msg)}
-                      />
+                      <>
+                        <PayPalButton
+                          planId={planId}
+                          tierSlug={slug}
+                          billingCycle={billingCycle}
+                          customId={artist?.id}
+                          onSuccess={handleSubscriptionSuccess}
+                          onError={(msg) => setError(msg)}
+                        />
+                        {/* Rand, for South African cards. Renders nothing
+                            unless the server confirms a price for this exact
+                            plan and cycle, so PayPal is never left sitting
+                            next to a button that would fail. */}
+                        <PaystackSubscribeButton
+                          subject="artist"
+                          tier={slug}
+                          cycle={billingCycle}
+                          accent={tier.color}
+                          onError={(msg) => setError(msg)}
+                        />
+                      </>
                     ) : (
                       <div className="space-y-2">
                         <p className="text-xs text-white/30 text-center">PayPal not configured — test mode:</p>
@@ -588,8 +602,10 @@ export default function TierUpgradePage() {
 
       <div className="px-6 mt-6">
         <p className="text-[11px] text-white/20 text-center leading-relaxed">
-          Subscriptions via PayPal. Monthly plans renew each month, annual plans renew yearly.
-          Cancel anytime. Prices shown in {geoInfo?.currency || 'USD'} for display — charged in USD equivalent.
+          Pay with PayPal in dollars, or by card in rand if you are in South Africa.
+          Monthly plans renew each month, annual plans renew yearly. Cancel anytime.
+          Prices shown in {geoInfo?.currency || 'USD'} are for display. PayPal charges the USD
+          amount; a card payment charges the rand amount shown on the button.
           By subscribing you agree to our Terms of Use.
         </p>
       </div>

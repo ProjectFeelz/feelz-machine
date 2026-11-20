@@ -16,6 +16,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const { recordRun } = require('../lib/jobRun');
+const tierPaystack = require('../lib/tierPaystackSub');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -52,6 +53,38 @@ exports.handler = async (event) => {
   if (event?.headers?.['x-manual-run']
       && event.headers['x-internal-secret'] !== process.env.INTERNAL_FUNCTION_SECRET) {
     return { statusCode: 401, body: 'Unauthorized' };
+  }
+
+  // ── ASK PAYSTACK FIRST, THEN EXPIRE ──────────────────────────────────────
+  //
+  // Order matters here and it is the whole reason this sits at the top of this
+  // function rather than in a job of its own.
+  //
+  // A Paystack renewal moves the period end. If that renewal's webhook was
+  // missed, dropped or malformed, the row still says the old date, and the
+  // sweep below would end a subscription somebody has just paid for. So every
+  // Paystack subscription is re-read from Paystack and its period written
+  // forward BEFORE anything is expired.
+  //
+  // This is also the backstop that makes a missed webhook survivable at all: a
+  // cancellation made in Paystack's own dashboard reaches the row here, and a
+  // subscription that was never linked gets picked up here.
+  //
+  // A failure does NOT stop the expiry sweep. Reaching Paystack is the part
+  // most likely to fail, and letting that block the job would mean one bad
+  // night at Paystack stops lapsed plans being enforced at all.
+  //
+  // Both kinds of subscriber, artist plans and Fan Pro, because both are
+  // billed the same way and a Fan Pro renewal that went unrecorded would be
+  // expired by the sweep below exactly as an artist's would.
+  const paystackSync = {};
+  for (const subject of tierPaystack.SUBJECTS) {
+    try {
+      paystackSync[subject.label] = await subject.reconcileAll({ admin: supabase });
+    } catch (e) {
+      console.error('[expire-subscriptions]', subject.label, 'Paystack reconcile threw:', e.message);
+      paystackSync[subject.label] = { checked: 0, note: 'threw' };
+    }
   }
 
   try {
@@ -104,7 +137,10 @@ exports.handler = async (event) => {
     await recordRun(JOB, {
       ok: true,
       items: total,
-      detail: (total || tiers?.albums_hidden) ? { ...summary, tiers } : null,
+      detail: (total || tiers?.albums_hidden
+               || Object.values(paystackSync).some(r => r && r.checked))
+        ? { ...summary, tiers, paystack: paystackSync }
+        : null,
       startedAt: started,
     });
 
