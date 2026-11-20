@@ -101,6 +101,20 @@ const PAGE_SIZE = 100;
 const EMAILABLE_KINDS = new Set([
   'payment_failed', 'expired', 'ended', 'job_health',
   'started', 'subscription_unmatched',
+  // THE ONE THAT ACTUALLY FIRED.
+  //
+  // On 18 November at 23:09 the webhook did everything right. PayPal sent
+  // PAYMENT.SALE.COMPLETED, the handler could not match sale 2PH686641K5306623
+  // to any subscription row, and it raised "A subscription payment could not
+  // be matched" naming the sale, the $2 and subscription I-A2D1U25BVL7C.
+  //
+  // Then this set threw the email away: kind_not_emailable:unattributed_payment.
+  // The alert sat in-app and the gap went unnoticed for two days.
+  //
+  // It was nearly missed twice. The first pass at this file added
+  // 'subscription_unmatched', the kind of the new alert, and not this one,
+  // which is the kind the live system has been raising all along.
+  'unattributed_payment',
 ]);
 
 const esc = (s) => String(s == null ? '' : s)
