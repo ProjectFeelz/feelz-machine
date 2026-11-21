@@ -22,6 +22,11 @@ function tryLandscape() {
   if (!window.matchMedia("(pointer: coarse)").matches) { if (el.requestFullscreen) el.requestFullscreen({ navigationUI: "hide" }).catch(() => {}); return; }
   const go = el.requestFullscreen ? el.requestFullscreen({ navigationUI: "hide" }) : null;
   Promise.resolve(go).then(() => {
+    // Already drawn sideways by the CSS, which is what the start screen shows.
+    // Asking the phone to turn as well lands on the same picture, but turns it
+    // a second time on the way, and that second turn is the jarring one. A
+    // phone whose rotation is free never has this class, so it still locks.
+    if (document.documentElement.classList.contains("rotated")) return;
     if (screen.orientation && screen.orientation.lock) return screen.orientation.lock("landscape");
   }).catch(() => { /* not allowed here: the turn-sideways card does the job */ }).then(() => setTimeout(checkOrientation, 300));
 }
