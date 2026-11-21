@@ -45,15 +45,30 @@ const DIAG_LEVEL = (() => { const m = /[?&]diag=([12])\b/.exec(location.search);
 const DIAG = DIAG_LEVEL > 0;
 const diag = { hist: {}, calls: {}, med: {}, medCalls: {}, n: 0, line2: "" };
 
-// ?diag=1 times the game's own work. ?diag=2 also makes the GPU finish after
-// each part, which is slower overall but says WHICH part the waiting belongs
-// to. On the first Samsung reading every part of the game measured under a
-// tenth of a millisecond and the wait at the end was 110ms, so the question
-// stopped being "what is the game doing" and became "what is it asking the
-// GPU to do". Level 2 answers that.
-function sync() { if (DIAG_LEVEL >= 2) { try { ctx.getImageData(0, 0, 1, 1); } catch (e) {} } }
+// THE MEASUREMENT USED TO CHANGE WHAT IT MEASURED.
+//
+// Level 2 called getImageData after every phase to make the GPU finish, so the
+// waiting could be charged to the phase that caused it. But Chrome watches for
+// a canvas being read back, and past a few reads it stops drawing that canvas
+// on the GPU and rasterises it on the processor instead. Sixteen reads a frame
+// guarantees that. So the panel was timing a canvas it had itself demoted, and
+// every figure it gave for a slow phase was the cost of software drawing
+// rather than the cost of the game. A phase showing twenty milliseconds for a
+// single drawImage was the tool, not the game.
+//
+// Nothing reads the canvas back any more. The per-phase numbers are now only
+// the work the game hands over, which is honest but cannot see what the GPU
+// does afterwards. "real" is the number that matters and cannot be faked: the
+// true gap between frames. ?skip= leaves phases out, so the one that owns the
+// time is found by its absence rather than by a readback.
+function sync() {}
 
+// ?skip=solids,decor leaves those phases undrawn, so what a part costs shows
+// up as its absence in "real". A measuring tool, not a graphics setting:
+// without the switch in the address nothing is ever skipped.
+const SKIP = new Set((/[?&]skip=([^&]*)/.exec(location.search) || ["", ""])[1].split(",").filter(Boolean));
 function T(name, fn) {
+  if (SKIP.has(name)) return;
   if (!DIAG) { fn(); return; }
   if (window.readDrawCount) window.readDrawCount();     // zero it for this phase
   if (window.readOpCount) window.readOpCount();
@@ -84,11 +99,12 @@ if (DIAG) window.diagNote = (name, ms) => { if (!DIAG) return; const h = diag.hi
 
 function diagPanel() {
   diag.n++;
-  // The GPU is allowed to run behind. Asking for one pixel back makes it
-  // finish, so "gpuWait" is the work the timings above could not see.
-  const g0 = performance.now();
-  try { ctx.getImageData(0, 0, 1, 1); } catch (e) {}
-  window.diagNote("gpuWait", performance.now() - g0);
+  // The true gap from one frame to the next. shell.js reports "frame", but
+  // that is dt, and the loop clamps dt at 50ms: it stops counting at 20fps, so
+  // a 200ms frame and a 51ms frame both read 50.0. This one does not clamp.
+  const nowMs = performance.now();
+  if (diag.lastFrame) window.diagNote("real", nowMs - diag.lastFrame);
+  diag.lastFrame = nowMs;
 
   if (diag.n % 20 === 0) {
     diag.med = {};
@@ -112,7 +128,7 @@ function diagPanel() {
       diag.line2 = gpu;
     }
   }
-  const order = ["frame", "update", "bg", "decor", "solids", "props", "runners", "atmos", "weather", "dark", "rain", "screenfx", "hud", "bloom", "overlays", "gpuWait"];
+  const order = ["real", "frame", "update", "bg", "decor", "solids", "props", "runners", "atmos", "weather", "dark", "rain", "screenfx", "hud", "bloom", "overlays"];
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "rgba(6, 6, 12, 0.82)";
@@ -131,7 +147,8 @@ function diagPanel() {
   for (const k of order) {
     const v = diag.med[k];
     if (v === undefined) continue;
-    ctx.fillStyle = v > 8 ? "#ff9a9a" : v > 3 ? "#ffc46a" : "#9fb4c7";
+    const hi = k === "real" || k === "frame" ? [33, 20] : [8, 3];
+    ctx.fillStyle = v > hi[0] ? "#ff9a9a" : v > hi[1] ? "#ffc46a" : "#9fb4c7";
     const c = diag.medCalls[k];
     ctx.fillText(k.padEnd(9) + v.toFixed(1).padStart(5) + (c ? "   " + c : ""), 12, y);
     y += 14;
