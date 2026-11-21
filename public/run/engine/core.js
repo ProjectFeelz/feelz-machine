@@ -158,13 +158,21 @@ function freeze(c) {
 // shrink by half or more, only pieces big enough to be worth keeping and small
 // enough to be cheap, and the oldest tiles are dropped once there are
 // TILE_MAX.
+// On, because every tile now proves itself identical on the device before it
+// is used, and a piece that cannot prove it is drawn the old way for ever.
+// The worst this can do is nothing. ?prescale=0 switches it off entirely.
 const PRESCALE = (() => { try { return new URLSearchParams(location.search).get("prescale") !== "0"; } catch (e) { return true; } })();
 // Lowered from 2e6 after the first Samsung reading came back "tiles 0 / 0MP".
 // Nothing in the lower city is over two megapixels: lower-city-kit is 1.0,
 // city-kit 1.26, lc-far 0.80. The sheet I built the threshold around,
 // meshy-kit at 12.8, is not used in that mission at all.
 const BIG_SHEET = 2.4e5;        // source pixels before a sheet counts as big
-const SHRINK_MIN = 1.2;         // how much smaller a draw must be to be worth a tile
+// Two, not the 1.75 a first sweep suggested. Measured on a real device, the
+// browser picks different resampling paths at different ratios and 1.75 came
+// back identical in one sweep and off by 37 in another. Two was the only
+// figure that held every time. The check below is what actually guarantees it;
+// this is just a cheap first filter.
+const SHRINK_MIN = 2.0;
 const TILE_MIN = 24 * 24;       // below this a tile costs more than it saves
 const TILE_MAX_AREA = 360 * 360;
 const TILE_BUDGET = 6e6;        // about 24MB of tiles, oldest dropped first
@@ -189,6 +197,7 @@ function tileFor(img, sx, sy, sw, sh, dw, dh) {
   const w = Math.round(dw), h = Math.round(dh);
   const key = (img.src || img.id || "") + "|" + Math.round(sx) + "," + Math.round(sy) + ","
             + Math.round(sw) + "," + Math.round(sh) + "|" + w + "x" + h;
+  if (noTile.has(key)) return null;
   const hit = tiles.get(key);
   if (hit) { tiles.delete(key); tiles.set(key, hit); return hit; }   // keep the fresh ones
 
@@ -198,6 +207,21 @@ function tileFor(img, sx, sy, sw, sh, dw, dh) {
   g.imageSmoothingEnabled = true;
   try { g.imageSmoothingQuality = "high"; } catch (e) {}
   rawDrawImage.call(g, img, sx, sy, sw, sh, 0, 0, w, h);
+
+  // ── DOES THE TILE LOOK THE SAME? ─────────────────────────────────────────
+  //
+  // Asked once per piece, on the device that is actually drawing it, instead
+  // of trusted from a rule. Three other routes to the same speed-up all
+  // changed the picture and only measuring caught them: an ImageBitmap
+  // resamples differently (worst channel 101 over a background), so does a
+  // full-size canvas copy (worst 153), and a shallow shrink through a tile
+  // does too (worst 76).
+  //
+  // So the tile is drawn both ways and compared. If a single channel differs
+  // the piece is never tiled again and the original draw is used for ever.
+  // That makes "it looks the same" true by construction rather than by my
+  // sampling a few sizes and hoping.
+  if (!verify(img, sx, sy, sw, sh, w, h)) { noTile.add(key); return null; }
 
   tiles.set(key, c);
   tilePixels += w * h;
@@ -215,6 +239,39 @@ function tileFor(img, sx, sy, sw, sh, dw, dh) {
   return freeze(c);
 }
 
+// Pieces that failed the check, and the scratch canvases it uses.
+const noTile = new Set();
+let checks = 0;
+const CHECK_MAX = 240;          // after this many, nothing new is tiled
+let scratchA = null, scratchB = null;
+
+function verify(img, sx, sy, sw, sh, w, h) {
+  if (checks >= CHECK_MAX) return false;
+  checks++;
+  try {
+    if (!scratchA) { scratchA = document.createElement("canvas"); scratchB = document.createElement("canvas"); }
+    scratchA.width = scratchB.width = w; scratchA.height = scratchB.height = h;
+    const ga = scratchA.getContext("2d", { willReadFrequently: true });
+    const gb = scratchB.getContext("2d", { willReadFrequently: true });
+    // Over a mid tone, so anything bleeding at a soft edge shows up rather
+    // than hiding in a transparent corner nobody can see.
+    ga.fillStyle = gb.fillStyle = "#4a6b8a";
+    ga.fillRect(0, 0, w, h); gb.fillRect(0, 0, w, h);
+    rawDrawImage.call(ga, img, sx, sy, sw, sh, 0, 0, w, h);            // as it is drawn today
+    const tmp = document.createElement("canvas"); tmp.width = w; tmp.height = h;
+    const tg = tmp.getContext("2d");
+    tg.imageSmoothingEnabled = true;
+    try { tg.imageSmoothingQuality = "high"; } catch (e) {}
+    rawDrawImage.call(tg, img, sx, sy, sw, sh, 0, 0, w, h);
+    rawDrawImage.call(gb, tmp, 0, 0, w, h, 0, 0, w, h);                 // through a tile
+    const pa = ga.getImageData(0, 0, w, h).data, pb = gb.getImageData(0, 0, w, h).data;
+    for (let i = 0; i < pa.length; i++) if (pa[i] !== pb[i]) return false;
+    return true;
+  } catch (e) {
+    return false;        // could not check it, so do not change it
+  }
+}
+
 function worthTiling(img, sw, sh, dw, dh) {
   if (!PRESCALE || !rawDrawImage) return false;
   const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
@@ -226,7 +283,7 @@ function worthTiling(img, sw, sh, dw, dh) {
 }
 
 // How much of the artwork is being sampled, for the ?diag panel.
-window.tileStats = () => ({ tiles: tiles.size, mp: +(tilePixels / 1e6).toFixed(2), on: PRESCALE });
+window.tileStats = () => ({ tiles: tiles.size, mp: +(tilePixels / 1e6).toFixed(2), on: PRESCALE, refused: noTile.size });
 
 // THE SAME SWAP, WITHOUT BUILDING AN ARRAY ON EVERY SINGLE DRAW.
 //
@@ -254,8 +311,10 @@ window.tileStats = () => ({ tiles: tiles.size, mp: +(tilePixels / 1e6).toFixed(2
         // A small piece of a big sheet, shrunk: draw the tile instead.
         if (s && s.src !== undefined && worthTiling(s, c, d, g, h)) {
           const t = tileFor(s, a, b, c, d, g, h);
-          const ti = frozenArt.get(t) || t;
-          return raw.call(this, ti, 0, 0, t.width, t.height, e, f, g, h);
+          if (t) {
+            const ti = frozenArt.get(t) || t;
+            return raw.call(this, ti, 0, 0, t.width, t.height, e, f, g, h);
+          }
         }
         return raw.call(this, s, a, b, c, d, e, f, g, h);
       }

@@ -119,7 +119,7 @@ function diagPanel() {
   if (window.setDrawCounting) window.setDrawCounting(true);
   const ts = window.tileStats ? window.tileStats() : null;
   ctx.fillText("canvas " + W + "x" + H + "  L" + DIAG_LEVEL
-             + (ts ? "  tiles " + (ts.on ? ts.tiles + " / " + ts.mp + "MP" : "OFF") : ""), 12, PY0 + 10);
+             + (ts ? "  tiles " + (ts.on ? ts.tiles + "/" + ts.mp + "MP  refused " + ts.refused : "OFF") : ""), 12, PY0 + 10);
   let y = PY0 + 28;
   for (const k of order) {
     const v = diag.med[k];
