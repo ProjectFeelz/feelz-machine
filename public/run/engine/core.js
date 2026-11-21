@@ -334,6 +334,31 @@ window.tileStats = () => ({ tiles: tiles.size, mp: +(tilePixels / 1e6).toFixed(2
   };
 })();
 
+// ?diag only: the other ways a frame spends time.
+//
+// drawImage is counted above. But a phase that draws one picture and still
+// costs twenty milliseconds is spending it somewhere that count cannot see.
+// A clip that is not a rectangle, a gradient or a pattern made fresh, a few
+// hundred small fills: none of them are a drawImage and all of them can be
+// the whole bill.
+//
+// Wrapped only when the switch is on. Without ?diag these methods are never
+// touched, so there is nothing to pay for in a normal run.
+const opCount = {};
+window.readOpCount = () => { const r = {}; for (const k in opCount) { if (opCount[k]) r[k] = opCount[k]; opCount[k] = 0; } return r; };
+if (/[?&]diag=[12]\b/.test(location.search)) (() => {
+  const P = CanvasRenderingContext2D.prototype;
+  const tally = (name, label) => {
+    const f = P[name];
+    if (typeof f !== "function") return;
+    P[name] = function (...a) { if (COUNTING) opCount[label] = (opCount[label] || 0) + 1; return f.apply(this, a); };
+  };
+  tally("fillRect", "fillR"); tally("fill", "fill"); tally("stroke", "strk");
+  tally("clip", "clip"); tally("fillText", "text"); tally("strokeText", "text");
+  tally("createLinearGradient", "grad"); tally("createRadialGradient", "grad");
+  tally("createPattern", "patt"); tally("getImageData", "read");
+})();
+
 // Is this device keeping up? Each effect asks once a frame. It answers yes
 // (too slow) only when the average frame has stayed over `limit` ms for `hold`
 // ms of play, never in the first few seconds of a run or after a pause, when

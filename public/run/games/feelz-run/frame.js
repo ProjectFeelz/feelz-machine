@@ -56,6 +56,7 @@ function sync() { if (DIAG_LEVEL >= 2) { try { ctx.getImageData(0, 0, 1, 1); } c
 function T(name, fn) {
   if (!DIAG) { fn(); return; }
   if (window.readDrawCount) window.readDrawCount();     // zero it for this phase
+  if (window.readOpCount) window.readOpCount();
   const t0 = performance.now();
   fn();
   sync();
@@ -70,6 +71,11 @@ function T(name, fn) {
     const q = diag.calls[name] || (diag.calls[name] = { n: [], u: [], names: [] });
     q.n.push(c.n); q.u.push(c.u);
     if (c.names && c.names.length) q.names = c.names;
+    if (window.readOpCount) {
+      const o = window.readOpCount();
+      const s = Object.keys(o).map(k => o[k] + k).join(" ");
+      if (s) q.ops = s;
+    }
     if (q.n.length > 90) { q.n.shift(); q.u.shift(); }
   }
 }
@@ -111,7 +117,7 @@ function diagPanel() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "rgba(6, 6, 12, 0.82)";
   const PY0 = 74;                       // clear of the records pill at the top
-  ctx.fillRect(6, PY0 - 16, 420, 32 + (order.length + 5) * 14);
+  ctx.fillRect(6, PY0 - 16, 560, 32 + (order.length + 5) * 14);
   ctx.font = "600 11px ui-monospace, Menlo, Consolas, monospace";
   ctx.textAlign = "left"; ctx.textBaseline = "middle";
   ctx.fillStyle = "#8ff0a8";
@@ -134,9 +140,11 @@ function diagPanel() {
   // says which pieces it turned down. Both are questions a timing cannot answer.
   ctx.font = "600 9px ui-monospace, Menlo, Consolas, monospace";
   ctx.fillStyle = "#c8b48f";
-  const slow = order.filter(k => diag.med[k] > 3 && diag.calls[k] && diag.calls[k].names.length).slice(0, 3);
+  const slow = order.filter(k => diag.med[k] > 3 && diag.calls[k]
+                              && (diag.calls[k].names.length || diag.calls[k].ops)).slice(0, 4);
   for (const k of slow) {
-    ctx.fillText(k + ": " + diag.calls[k].names.join(" ").slice(0, 86), 12, y);
+    const q = diag.calls[k];
+    ctx.fillText((k + ": " + (q.ops || "") + "  " + q.names.join(" ")).slice(0, 104), 12, y);
     y += 12;
   }
   if (ts && ts.why && ts.why.length) {
