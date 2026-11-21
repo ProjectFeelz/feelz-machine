@@ -128,7 +128,7 @@ function diagPanel() {
       diag.line2 = gpu;
     }
   }
-  const order = ["real", "frame", "update", "bg", "decor", "solids", "props", "runners", "atmos", "weather", "dark", "rain", "screenfx", "hud", "bloom", "overlays"];
+  const order = ["real", "render", "hudDom", "frame", "update", "bg", "decor", "solids", "props", "runners", "atmos", "weather", "dark", "rain", "screenfx", "hud", "cards", "bloom", "song", "overlays"];
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "rgba(6, 6, 12, 0.82)";
@@ -226,16 +226,12 @@ function render() {
   ctx.restore();
   ctx.fillText = rawFillText;
   T("hud", drawSystemsHud);
-  if (typeof drawTutorial === "function") drawTutorial();
-  drawCheckpointMiss();
+  // These were drawn outside every phase, so they have never appeared in a
+  // reading. The tutorial card and the missed-checkpoint banner are both on
+  // screen in the run that takes 142ms a frame.
+  T("cards", () => { if (typeof drawTutorial === "function") drawTutorial(); drawCheckpointMiss(); });
   T("bloom", postBloom);
-  drawSongBar();
-  drawLyrics();
-  drawBanner();
-  drawToast();
-  drawTaunt();
-  drawTransition();
-  drawReading();
+  T("song", () => { drawSongBar(); drawLyrics(); drawBanner(); drawToast(); drawTaunt(); drawTransition(); drawReading(); });
   T("overlays", postFinish);
   if (DIAG) diagPanel();
 }

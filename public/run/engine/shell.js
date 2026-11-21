@@ -249,8 +249,19 @@ function gameLoop(now) {
   update(dt);
   if (window.diagNote) { window.diagNote("update", performance.now() - _t0); window.diagNote("frame", dt * 1000); }
   // A drawing error never stops the run: the next frame still comes.
+  //
+  // Timed whole as well as in parts. If every part of the drawing adds up to
+  // half a millisecond and the whole frame takes a hundred and forty, the time
+  // is going somewhere the parts cannot see, and knowing THAT is worth more
+  // than any amount of detail about the drawing.
+  const _r0 = window.diagNote ? performance.now() : 0;
   try { render(); } catch (e) { if (!gameLoop.warned) { gameLoop.warned = true; console.warn("[render]", e); } }
+  if (window.diagNote) window.diagNote("render", performance.now() - _r0);
+  // The HUD is HTML, not canvas. Writing to it can make the browser lay the
+  // whole page out again, and no amount of canvas timing would ever show it.
+  const _h0 = window.diagNote ? performance.now() : 0;
   updateHud();
+  if (window.diagNote) window.diagNote("hudDom", performance.now() - _h0);
   if (gameState === "playing") requestAnimationFrame(gameLoop);
   else if (gameState === "finished") requestAnimationFrame(finishedLoop);
 }
