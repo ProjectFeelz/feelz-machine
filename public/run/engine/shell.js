@@ -242,7 +242,12 @@ function gameLoop(now) {
   const dt = Math.max(0, Math.min(0.05, (now - lastTime) / 1000));
   lastTime = now;
   frameTime += dt;
+  // ?diag=1 only: how long the whole frame took, and how much of it was the
+  // game's thinking rather than its drawing. window.diagNote is a no-op
+  // without the switch. See the panel in games/feelz-run/frame.js.
+  const _t0 = window.diagNote ? performance.now() : 0;
   update(dt);
+  if (window.diagNote) { window.diagNote("update", performance.now() - _t0); window.diagNote("frame", dt * 1000); }
   // A drawing error never stops the run: the next frame still comes.
   try { render(); } catch (e) { if (!gameLoop.warned) { gameLoop.warned = true; console.warn("[render]", e); } }
   updateHud();

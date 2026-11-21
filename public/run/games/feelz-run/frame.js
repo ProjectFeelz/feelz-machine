@@ -25,6 +25,81 @@ function safeFx(name, fn) {
   ctx.restore();
 }
 
+/* ---------------------------------------------------------------------------
+   A STOPWATCH ON EACH PART OF A FRAME.  Open the game with ?diag=1
+   ---------------------------------------------------------------------------
+   Off unless the address ends in ?diag=1, and when it is off it costs one
+   boolean test per frame and nothing else. It draws a small panel of numbers
+   over the game: this is a measuring tool, not a graphics setting, and it
+   changes nothing about how the game looks or plays without that switch.
+
+   Why it exists: the same build runs smoothly on an iPhone and badly on a
+   Samsung, and guessing which part of a frame is to blame from another
+   continent is how people end up turning the graphics down for no reason. The
+   phone can simply say which part is slow.
+
+   The numbers are milliseconds, the middle value of the last 90 frames. A
+   frame has 16.7ms to play with at 60fps.
+--------------------------------------------------------------------------- */
+const DIAG = /[?&]diag=1\b/.test(location.search);
+const diag = { hist: {}, med: {}, n: 0, line2: "" };
+
+function T(name, fn) {
+  if (!DIAG) { fn(); return; }
+  const t0 = performance.now();
+  fn();
+  const d = performance.now() - t0;
+  const h = diag.hist[name] || (diag.hist[name] = []);
+  h.push(d);
+  if (h.length > 90) h.shift();
+}
+// shell.js hands in the parts that happen outside render().
+if (DIAG) window.diagNote = (name, ms) => { if (!DIAG) return; const h = diag.hist[name] || (diag.hist[name] = []); h.push(ms); if (h.length > 90) h.shift(); };
+
+function diagPanel() {
+  diag.n++;
+  // The GPU is allowed to run behind. Asking for one pixel back makes it
+  // finish, so "gpuWait" is the work the timings above could not see.
+  const g0 = performance.now();
+  try { ctx.getImageData(0, 0, 1, 1); } catch (e) {}
+  window.diagNote("gpuWait", performance.now() - g0);
+
+  if (diag.n % 20 === 0) {
+    diag.med = {};
+    for (const k in diag.hist) {
+      const a = diag.hist[k].slice().sort((x, y) => x - y);
+      diag.med[k] = a[Math.floor(a.length / 2)] || 0;
+    }
+    if (!diag.line2) {
+      let gpu = "?";
+      try {
+        const c = document.createElement("canvas"), gl = c.getContext("webgl");
+        const e = gl.getExtension("WEBGL_debug_renderer_info");
+        gpu = String(gl.getParameter(e.UNMASKED_RENDERER_WEBGL)).slice(0, 46);
+      } catch (e) {}
+      diag.line2 = gpu;
+    }
+  }
+  const order = ["frame", "update", "world3d", "atmos", "scenery", "runners", "weather", "overlays", "gpuWait"];
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = "rgba(6, 6, 12, 0.82)";
+  ctx.fillRect(6, 6, 212, 20 + order.length * 15);
+  ctx.font = "600 12px ui-monospace, Menlo, Consolas, monospace";
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  ctx.fillStyle = "#8ff0a8";
+  ctx.fillText(diag.line2 || "", 14, 18);
+  let y = 36;
+  for (const k of order) {
+    const v = diag.med[k];
+    if (v === undefined) continue;
+    ctx.fillStyle = v > 8 ? "#ff9a9a" : v > 3 ? "#ffc46a" : "#9fb4c7";
+    ctx.fillText(k.padEnd(9) + v.toFixed(1) + " ms", 14, y);
+    y += 15;
+  }
+  ctx.restore();
+}
+
 // Written once, here, instead of five new functions on every frame.
 //
 // Still wrappers rather than the methods themselves: World3D and Atmos are
@@ -44,9 +119,9 @@ function render() {
   if (shake > 0) ctx.translate((Math.random() - 0.5) * shake * 30, (Math.random() - 0.5) * shake * 30);
   const mirror = mission && mission.mirror;
   if (mirror) { ctx.translate(W, 0); ctx.scale(-1, 1); ctx.fillText = mirroredText; }
-  drawBackground();
-  safeFx("world3d", FX.world3d);
-  safeFx("atmos.back", FX.back);
+  T("scenery", drawBackground);
+  T("world3d", () => safeFx("world3d", FX.world3d));
+  T("atmos", () => safeFx("atmos.back", FX.back));
   drawDecor();
   drawTunnels();
   drawMud();
@@ -59,7 +134,7 @@ function render() {
     if (s.kind === "awning" && level.stalls.length) continue;   // drawn with the stalls
     drawSolid(s);
   }
-  safeFx("atmos.reflect", FX.reflect);
+  T("atmos", () => safeFx("atmos.reflect", FX.reflect));
   drawBeatSolids();
   drawValves();
   drawClimbs();
@@ -68,7 +143,7 @@ function render() {
   drawCheckpoints();
   drawGoal();
   drawPickups();
-  drawWardens();
+  T("runners", drawWardens);
   drawStalls();      // enforcers walk the back of the market, behind the stalls
   drawDrones();
   drawCages();
@@ -77,22 +152,20 @@ function render() {
   drawZoraCompanion();
   drawHound();
   drawDogs();
-  drawPlayers();
-  drawCoopPartner();
+  T("runners", drawPlayers);
+  T("runners", drawCoopPartner);
   drawStallFronts();
   drawHedges();
   drawCrowds("front");
-  safeFx("atmos.front", FX.front);
-  drawDebris();
-  drawStormFront();
-  drawParticles();
+  T("atmos", () => safeFx("atmos.front", FX.front));
+  T("weather", () => { drawDebris(); drawStormFront(); drawParticles(); });
   drawDarkness();
   drawShadowFront();
   const indoors = sectionAt(cameraX + W / 2).world === "ve";
   const baseRain = mission.weather && mission.weather.rain !== undefined ? mission.weather.rain : 0.15;
   drawRain(indoors ? 0 : baseRain + storm.strength * 0.9);
   if (mirror) { ctx.restore(); ctx.save(); ctx.fillText = rawFillText; }
-  safeFx("atmos.grade", FX.grade);
+  T("atmos", () => safeFx("atmos.grade", FX.grade));
   drawPrayer();
   drawScreenFx();
   ctx.restore();
@@ -108,7 +181,8 @@ function render() {
   drawTaunt();
   drawTransition();
   drawReading();
-  postFinish();
+  T("overlays", postFinish);
+  if (DIAG) diagPanel();
 }
 
 function drawTransition() {
