@@ -128,7 +128,7 @@ function diagPanel() {
       diag.line2 = gpu;
     }
   }
-  const order = ["real", "render", "hudDom", "frame", "update", "bg", "world3d", "decor", "solids", "props", "runners", "atmos", "weather", "dark", "rain", "screenfx", "hud", "cards", "bloom", "song", "overlays", "panel"];
+  const order = ["real", "render", "hudDom", "frame", "update", "inward", "bg", "world3d", "decor", "solids", "props", "runners", "atmos", "weather", "dark", "rain", "screenfx", "hud", "cards", "bloom", "song", "overlays", "panel"];
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "rgba(6, 6, 12, 0.82)";
@@ -185,7 +185,16 @@ const FX = {
 };
 
 function render() {
-  if (inward.active) { renderInward(); return; }
+  if (inward.active) {
+    // Timed at last. When this runs, render returns before a single phase, so
+    // every phase row below keeps its last value: the panel shows a frame that
+    // looks free while render reads a hundred and twenty.
+    if (!DIAG) { renderInward(); return; }
+    const i0 = performance.now();
+    renderInward();
+    window.diagNote("inward", performance.now() - i0);
+    return;
+  }
   ctx.save();
   if (shake > 0) ctx.translate((Math.random() - 0.5) * shake * 30, (Math.random() - 0.5) * shake * 30);
   const mirror = mission && mission.mirror;
