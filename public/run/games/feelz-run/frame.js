@@ -128,7 +128,7 @@ function diagPanel() {
       diag.line2 = gpu;
     }
   }
-  const order = ["real", "render", "hudDom", "frame", "update", "bg", "decor", "solids", "props", "runners", "atmos", "weather", "dark", "rain", "screenfx", "hud", "cards", "bloom", "song", "overlays"];
+  const order = ["real", "render", "hudDom", "frame", "update", "bg", "world3d", "decor", "solids", "props", "runners", "atmos", "weather", "dark", "rain", "screenfx", "hud", "cards", "bloom", "song", "overlays", "panel"];
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "rgba(6, 6, 12, 0.82)";
@@ -233,7 +233,10 @@ function render() {
   T("bloom", postBloom);
   T("song", () => { drawSongBar(); drawLyrics(); drawBanner(); drawToast(); drawTaunt(); drawTransition(); drawReading(); });
   T("overlays", postFinish);
-  if (DIAG) diagPanel();
+  // The panel is drawn inside render and so far has timed everything except
+  // itself. Twenty lines of text a frame is not free, and a measuring tool
+  // that hides its own cost is the reason this hunt took as long as it did.
+  if (DIAG) { const p0 = performance.now(); diagPanel(); window.diagNote("panel", performance.now() - p0); }
 }
 
 function drawTransition() {
