@@ -35,26 +35,11 @@ const Coop = (() => {
   //
   // So it is a flat 15 a second now, however many are playing.
   const SEND_HZ = 15;
-  // Everyone else is drawn this far behind the latest news of them, so there
-  // are always two known positions to glide between instead of one to rush at.
-  // A little over one update apart, which is what buys the smoothness; much
-  // more only adds lag.
-  //
-  // This is the floor, not the figure. A line that delivers packets unevenly
-  // needs a deeper cushion than its unevenness, or the queue runs dry between
-  // updates and the runner holds still until the next one lands. So each peer
-  // gets their own, grown from how late their packets actually run: a good
-  // line stays at the floor, a bad phone on a bad tower gets more, and it
-  // comes back down as the line settles. Measured in the harness: at 120ms of
-  // jitter a fixed 110ms cushion was worse than a rough line, and this is not
-  // worse than one.
-  const INTERP_MS = 110;
-  // 180, not a bigger number, and that is measured rather than guessed. Past
-  // about 180 the cushion stops buying any steadiness at all and only costs
-  // lag: over eight runs on a bad line, 320 sat 374ms behind at a wobble of
-  // 0.045, and 180 sat 323ms behind at 0.023. Steadier AND closer. Under 180
-  // it falls apart quickly (160 is 0.060, 140 is 0.142).
-  const INTERP_MAX = 180;
+  // How far we are willing to carry somebody's speed forward when their next
+  // packet has not landed yet. One update is 66ms, a slow line adds another
+  // 100ms or so, and past about a quarter of a second a guess is doing more
+  // harm than the gap it fills.
+  const EXTRAPOLATE_MAX = 260;
   const BUF_MAX = 8;
   const DRIFT = 0.9;             // seconds of song drift before a guest is nudged back in line
   const SEEK_GAP = 4;            // and at most one nudge every few seconds
@@ -212,13 +197,6 @@ const Coop = (() => {
         // one. It is allowed to creep upwards slowly in case a clock drifts.
         const seen = arrived - (typeof d.ts === "number" ? d.ts : arrived);
         p.base = p.base === undefined ? seen : Math.min(seen, p.base + 0.02 * realDtMs());
-        // How late this one ran against the best we have seen. Up quickly, so
-        // a line that turns bad is covered within a packet or two; down slowly,
-        // so one good packet does not throw the cushion away.
-        const late = Math.max(0, seen - p.base);
-        p.jit = p.jit === undefined ? late
-              : p.jit + (late - p.jit) * (late > p.jit ? 0.4 : 0.01);
-        p.delay = Math.min(INTERP_MAX, Math.max(INTERP_MS, p.jit * 1.5 + 60));
         p.buf.push({ st: (typeof d.ts === "number" ? d.ts : arrived - p.base), x: d.x, y: d.y });
         if (p.buf.length > BUF_MAX) p.buf.shift();
         // Just after a missed checkpoint, a snapshot sent before they rewound can't move the deadline on.
@@ -332,7 +310,7 @@ const Coop = (() => {
       clearInterval(st.countTimer);
       if (!st.lobby) return;
       st.lobby = false; st.on = true;
-      for (const p of st.peers.values()) { p.ghost = freshGhost(p.colour); p.ghost.coopId = p.id; p.target = null; p.cp = 0; p.buf = []; p.base = undefined; p.jit = undefined; p.delay = INTERP_MS; }
+      for (const p of st.peers.values()) { p.ghost = freshGhost(p.colour); p.ghost.coopId = p.id; p.target = null; p.cp = 0; p.buf = []; p.base = undefined; }
       st.sendT = 0; st.songT = 0; st.tripT = 0;
       if (typeof coopBegin === "function") coopBegin();
     }, Math.max(0, localAt - now()));
@@ -342,7 +320,7 @@ const Coop = (() => {
   function toLobby(missionId) {
     clearTimeout(st.startTimer); clearInterval(st.countTimer);
     st.on = false; st.lobby = true;
-    for (const p of st.peers.values()) { p.ghost = null; p.target = null; p.cp = 0; p.buf = []; p.base = undefined; p.jit = undefined; p.delay = INTERP_MS; }
+    for (const p of st.peers.values()) { p.ghost = null; p.target = null; p.cp = 0; p.buf = []; p.base = undefined; }
     if (missionId) chooseMission(missionId);
     if (typeof coopToLobby === "function") coopToLobby();
     lobbyChanged();
@@ -359,11 +337,24 @@ const Coop = (() => {
 
   // One runner's drawn position, from their queue of real ones.
   //
-  // Played back on THEIR clock, not on arrival times. Arrival times carry the
-  // network's jitter straight into the picture: a packet 25ms late makes the
-  // runner appear to speed up and then slow down. Their own stamps are evenly
-  // spaced because they were sent evenly spaced, and p.base lines their clock
-  // up with ours.
+  // DRAWN WHERE THEY ARE NOW, NOT WHERE THEY WERE.
+  //
+  // This is the part that decided races. Easing towards the newest position
+  // leaves a standing gap: with the old smoothing that gap was about 24px of
+  // catching up, on top of a packet already 60 to 90ms old, so everybody else
+  // sat roughly a metre behind their true position on your screen. On their
+  // screens you sat a metre behind yours. Every player watched the others
+  // trail them, and every player thought they were winning.
+  //
+  // So the playback point is their clock NOW, and the stretch between the last
+  // packet and now is covered by carrying their speed forward. In a runner
+  // that is very accurate: everybody is going one way at a known pace, so the
+  // guess is nearly always right, and when it is wrong it is wrong by a few
+  // pixels for a few frames.
+  //
+  // Capped, because a guess that runs away is worse than a short gap: if
+  // somebody's phone goes quiet we carry on for EXTRAPOLATE_MAX and then hold,
+  // rather than running them off into the distance and yanking them back.
   function placeGhost(p, g, t, realDt) {
     const buf = p.buf;
 
@@ -375,35 +366,55 @@ const Coop = (() => {
     }
     if (!buf || buf.length === 0) return;
 
-    const at = now() - (p.base || 0) - (p.delay || INTERP_MS);
-
-    let a = null, b = null;
-    for (let i = buf.length - 1; i >= 0; i--) {
-      if (buf[i].st <= at) { a = buf[i]; b = buf[i + 1] || null; break; }
-    }
+    // Their clock, right now, plus the smoothing's own lag.
+    //
+    // The ease at the bottom of this function is a filter, and a filter
+    // chasing something that keeps moving always sits a little behind it: at
+    // this rate, about 45ms worth. Aiming 45ms ahead cancels exactly that, so
+    // the ease still hides the bumps without quietly putting everyone behind
+    // again. Measured: 0.74m behind without it, 0.50m with, same steadiness.
+    const EASE_LAG = 45;
+    const at = now() - (p.base || 0) + EASE_LAG;
+    const newest = buf[buf.length - 1];
 
     let tx, ty;
-    if (a && b) {
-      const span = b.st - a.st;
-      const f = span > 0 ? Math.max(0, Math.min(1, (at - a.st) / span)) : 1;
-      tx = a.x + (b.x - a.x) * f;
-      ty = a.y + (b.y - a.y) * f;
-    } else if (a) {
-      // Nothing newer yet: hold at the last real position rather than guess
-      // where they went. A wrong guess has to be taken back, and taking it
-      // back is a jump.
-      tx = a.x; ty = a.y;
+    if (at <= newest.st) {
+      // We are inside what we actually know: glide between the two real
+      // positions either side of this moment. No guessing needed.
+      let a = null, b = null;
+      for (let i = buf.length - 1; i >= 0; i--) {
+        if (buf[i].st <= at) { a = buf[i]; b = buf[i + 1] || null; break; }
+      }
+      if (a && b) {
+        const span = b.st - a.st;
+        const f = span > 0 ? Math.max(0, Math.min(1, (at - a.st) / span)) : 1;
+        tx = a.x + (b.x - a.x) * f;
+        ty = a.y + (b.y - a.y) * f;
+      } else if (a) { tx = a.x; ty = a.y; }
+      else { tx = buf[0].x; ty = buf[0].y; }
     } else {
-      tx = buf[0].x; ty = buf[0].y;
+      // Past the last packet: carry their speed forward over the gap.
+      const prev = buf.length > 1 ? buf[buf.length - 2] : null;
+      const ahead = Math.min(EXTRAPOLATE_MAX, at - newest.st);
+      if (prev && newest.st > prev.st) {
+        const span = newest.st - prev.st;
+        const vx = (newest.x - prev.x) / span;
+        const vy = (newest.y - prev.y) / span;
+        tx = newest.x + vx * ahead;
+        // Sideways only. Guessing a jump or a fall forward is how a runner
+        // ends up hanging in mid air and then dropping, and height is the one
+        // thing an eye notices immediately.
+        ty = newest.y + (Math.abs(vy) < 0.4 ? vy * ahead : 0);
+      } else { tx = newest.x; ty = newest.y; }
     }
 
-    // A short ease onto that point, so a dropped packet shows as a slight
-    // change of speed rather than a step. Frame rate independent.
+    // A short ease onto that point, so a correction after a bad guess shows as
+    // a change of speed rather than a step. Frame rate independent.
     const k = 1 - Math.exp(-22 * realDt);
     g.x += (tx - g.x) * k;
     g.y += (ty - g.y) * k;
 
-    while (buf.length > 2 && buf[1].st <= at) buf.shift();
+    while (buf.length > 3 && buf[1].st <= at - 400) buf.shift();
   }
 
   // Called every frame from the game's update.
@@ -439,11 +450,9 @@ const Coop = (() => {
       if (!g || !t) continue;
       // ── Where they actually are on this screen ─────────────────────────
       //
-      // Drawn INTERP_MS behind the newest position, between the two queued
-      // positions that straddle that moment. So a runner moves at the speed
-      // they were really moving, the whole time, instead of easing towards the
-      // last thing we heard and then sitting still until the next one lands.
-      // That easing and stalling is what the jumping was.
+      // Their clock, now: played back between two real positions while we have
+      // them, and carried forward on their own speed over the gap after the
+      // last one. So who is ahead on your screen is who is ahead.
       placeGhost(p, g, t, realDt);
       g.h = t.h || STAND_H; g.facing = t.f || 1; g.pose = [t.a || "idle", t.n | 0];
       g.boostTime = t.b ? 1 : 0; g.shield = !!t.sh; g.ground = t.g ? { y: g.y } : null;

@@ -105,9 +105,12 @@ async function rateFor(peerCount) {
   ok("snapshots carry the sender's clock", /ts: now\(\)/.test(src), "no ts field");
   ok("playback is on the sender's clock, not arrival",
      /buf\[i\]\.st <= at/.test(src), "still indexing on arrival time");
-  const interp = /const INTERP_MS = (\d+)/.exec(src);
-  ok("there is an interpolation delay", Boolean(interp), "INTERP_MS not found");
-  ok("and it is about one and a half updates", interp && +interp[1] >= 80 && +interp[1] <= 160, interp && interp[1]);
+  ok("runners are drawn at their clock now, not behind it",
+     /const at = now\(\) - \(p\.base \|\| 0\) \+ EASE_LAG;/.test(src), "still playing back behind");
+  const ex = /const EXTRAPOLATE_MAX = (\d+)/.exec(src);
+  ok("a gap is covered by carrying their speed forward", Boolean(ex), "EXTRAPOLATE_MAX not found");
+  ok("and the guess is capped", ex && +ex[1] <= 400, ex && ex[1]);
+  ok("height is never guessed forward on a big change", /Math\.abs\(vy\) < 0\.4 \? vy \* ahead : 0/.test(src), "");
 }
 
 /* ---------------------------------------------------------------------------
@@ -127,14 +130,12 @@ async function rateFor(peerCount) {
   // on the source for the pieces, and simulate the maths with the real
   // constants pulled from the file.
   const src = fs.readFileSync(path.join(__dirname, "..", "engine", "net.js"), "utf8");
-  const INTERP_MS = +/const INTERP_MS = (\d+)/.exec(src)[1];
   const SEND_HZ = +/const SEND_HZ = (\d+)/.exec(src)[1];
-  const EASE = +/1 - Math\.exp\(-(\d+) \* realDt\)/.exec(src)[1];
+  const EXTRAPOLATE_MAX = +/const EXTRAPOLATE_MAX = (\d+)/.exec(src)[1];
 
   // Lift placeGhost out of the real file and run it exactly as written.
   const body = src.slice(src.indexOf("function placeGhost"), src.indexOf("  // Called every frame"));
-  const INTERP_MAX = +/const INTERP_MAX = (\d+)/.exec(src)[1];
-  const sandbox = { now: () => CLOCK, Math, BUF_MAX: 8, INTERP_MS, INTERP_MAX, console };
+  const sandbox = { now: () => CLOCK, Math, BUF_MAX: 8, EXTRAPOLATE_MAX, console };
   vm.createContext(sandbox);
   vm.runInContext(body + "\n;globalThis.placeGhost = placeGhost;", sandbox);
   ok("placeGhost was lifted out of the shipped file", typeof sandbox.placeGhost === "function", "");
@@ -159,9 +160,6 @@ async function rateFor(peerCount) {
         const pk = packets[next];
         const seen = CLOCK - pk.ts;
         p.base = p.base === undefined ? seen : Math.min(seen, p.base + 0.02 * 16);
-        const late = Math.max(0, seen - p.base);
-        p.jit = p.jit === undefined ? late : p.jit + (late - p.jit) * (late > p.jit ? 0.4 : 0.01);
-        p.delay = Math.min(INTERP_MAX, Math.max(INTERP_MS, p.jit * 1.5 + 60));
         p.buf.push({ st: pk.ts, x: pk.x, y: pk.y });
         if (p.buf.length > 8) p.buf.shift();
         t = { x: pk.x, y: pk.y };
@@ -183,8 +181,8 @@ async function rateFor(peerCount) {
      near(clean.mean, clean.ideal, 0.25), clean.mean.toFixed(2) + " vs " + clean.ideal.toFixed(2));
   ok("steady on a good line", clean.wobble < 0.05, "wobble " + clean.wobble.toFixed(3));
   ok("steady on a rough line", rough.wobble < 0.08, "wobble " + rough.wobble.toFixed(3));
-  ok("the cushion grows itself on a bad line", awful.wobble < 0.08, "wobble " + awful.wobble.toFixed(3));
-  ok("and a bad line is still better than the old code on a good one",
+  ok("holds together on a bad line", awful.wobble < 0.08, "wobble " + awful.wobble.toFixed(3));
+  ok("and a bad line beats the old code on a good one",
      awful.wobble < 0.291, awful.wobble.toFixed(3) + " vs 0.291");
   ok("never runs backwards", clean.least >= 0 && rough.least >= 0, clean.least.toFixed(2));
 
@@ -206,7 +204,7 @@ async function rateFor(peerCount) {
     ok("a peer who goes quiet stops where they were", near(g.x, 100, 0.5), g.x.toFixed(2));
   }
 
-  void openP; void me; void EASE;
+  void openP; void me;
 }
 
 /* ---------------------------------------------------------------------------
