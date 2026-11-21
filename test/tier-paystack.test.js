@@ -27,6 +27,23 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'fake';
 const { makeDb, installFetch, check, eq, report } = require('./fakes');
 const tiers = require('../netlify/lib/tierPaystackSub');
 
+// Copied from the two files that actually decide whether anybody hears about
+// a payment. If either list changes and this one does not, these tests fail,
+// which is the point: a receipt nobody can receive is the bug that sat in this
+// system for two days.
+//
+//   send-billing-emails.js  EMAILABLE_KINDS   -> whether an email is sent
+//   NotificationsPage.js    categoryFor()     -> whether a card is drawn
+const EMAILABLE_KINDS = new Set([
+  'payment_failed', 'expired', 'ended', 'job_health',
+  'started', 'subscription_unmatched', 'unattributed_payment',
+]);
+const DRAWABLE_TYPES = new Set([
+  'purchase', 'sale', 'split_confirmed', 'split_settled', 'payout', 'tip', 'subscription',
+  'announcement', 'admin_message', 'admin_reminder', 'new_post', 'session_live',
+  'featured_placement', 'tier_granted', 'chat_message',
+]);
+
 const TIER = 'tier-uuid';
 const OWNER = 'owner-uuid';
 const USER = 'user-uuid';
@@ -84,6 +101,7 @@ const CASES = [
       artist_tier_subscriptions: [],
       artists: [{ id: OWNER, user_id: USER, current_tier_id: null }],
       platform_tiers: [{ id: TIER, slug: 'pro', name: 'Pro' }],
+      admins: [{ user_id: 'admin-1' }, { user_id: 'admin-2' }],
       notifications: [],
     }),
     // The artist side also has to set the tier pointer the dashboard reads.
@@ -107,6 +125,7 @@ const CASES = [
       }],
       listener_tier_subscriptions: [],
       platform_tiers: [{ id: TIER, slug: 'fan_pro', name: 'Fan Pro' }],
+      admins: [{ user_id: 'admin-1' }, { user_id: 'admin-2' }],
       notifications: [],
     }),
     extra: (db) => {
@@ -150,6 +169,14 @@ const CASES = [
       const receipts = db.tables.notifications.filter(n => n.metadata && n.metadata.kind === 'started');
       eq(p('paid: exactly one receipt'), receipts.length, 1);
       eq(p('paid: the receipt can be emailed'), receipts[0] && receipts[0].email_requested, true);
+      // These three are what actually decide whether an email leaves the
+      // building and whether a card appears in the app.
+      check(p('paid: the receipt has a recipient the emailer can resolve'),
+        Boolean(receipts[0] && receipts[0].user_id), 'user_id was empty');
+      eq(p('paid: its kind is one send-billing-emails will send'),
+        EMAILABLE_KINDS.has(receipts[0] && receipts[0].metadata.kind), true);
+      eq(p('paid: its type is one the notifications page draws'),
+        DRAWABLE_TYPES.has(receipts[0] && receipts[0].type), true);
 
       C.extra(db);
     }
@@ -234,7 +261,16 @@ const CASES = [
 
       check(p('unmatched: refused'), !out.ok, JSON.stringify(out));
       const alerts = db.tables.notifications.filter(n => n.metadata && n.metadata.kind === 'subscription_unmatched');
-      eq(p('unmatched: an admin alert was raised'), alerts.length, 1);
+      // One per admin. A single row with no user reaches nobody: the emailer
+      // resolves the address from user_id, and the notifications page reads
+      // "artist_id = mine OR user_id = mine".
+      eq(p('unmatched: one alert per admin'), alerts.length, 2);
+      check(p('unmatched: every alert is addressed to an admin'),
+        alerts.every(a => a.user_id === 'admin-1' || a.user_id === 'admin-2'),
+        JSON.stringify(alerts.map(a => a.user_id)));
+      check(p('unmatched: every alert has a recipient the emailer can resolve'),
+        alerts.every(a => Boolean(a.user_id)), 'a user_id was empty');
+      eq(p('unmatched: it is typed so the app draws it'), alerts[0] && alerts[0].type, 'admin_message');
       eq(p('unmatched: the alert can be emailed'), alerts[0] && alerts[0].email_requested, true);
       check(p('unmatched: the alert names the subscription'),
         alerts[0] && String(alerts[0].message).includes(SUB_CODE), alerts[0] && alerts[0].message);
@@ -284,8 +320,12 @@ const CASES = [
       eq(p('failed renewal: the tier is NOT taken away'), row.status, 'active');
       eq(p('failed renewal: Paystack\'s own word is kept'), row.paystack_status, 'attention');
       eq(p('failed renewal: the period is unchanged'), row.expires_at, '2026-12-20T00:00:00.000Z');
-      eq(p('failed renewal: the subscriber is told'),
-        db.tables.notifications.filter(n => n.metadata && n.metadata.kind === 'payment_failed').length, 1);
+      const failures = db.tables.notifications.filter(n => n.metadata && n.metadata.kind === 'payment_failed');
+      eq(p('failed renewal: the subscriber is told'), failures.length, 1);
+      check(p('failed renewal: the notice has a recipient'),
+        Boolean(failures[0] && failures[0].user_id), 'user_id was empty');
+      eq(p('failed renewal: its kind is emailable'),
+        EMAILABLE_KINDS.has(failures[0] && failures[0].metadata.kind), true);
     }
 
     // ── 7. Cancelling ───────────────────────────────────────────────────────

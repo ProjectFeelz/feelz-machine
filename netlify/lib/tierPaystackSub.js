@@ -361,6 +361,15 @@ function makeSubject(s) {
 
     try {
       const userId = await s.userIdFor({ admin, row });
+      if (!userId) {
+        // send-billing-emails.js resolves the address from user_id, so a
+        // receipt without one is closed out as 'no_user_on_notification' and
+        // never sent. Written anyway, because the in-app card may still be
+        // reachable by artist_id, but said loudly: this is a paying customer
+        // who will not get their receipt.
+        console.error(tag, 'NO USER on the subscription that just went live, row', row.id,
+          '- the receipt cannot be emailed.');
+      }
       const { data: tierRow } = row.tier_id
         ? await admin.from('platform_tiers').select('name, slug').eq('id', row.tier_id).maybeSingle()
         : { data: null };
@@ -397,9 +406,20 @@ function makeSubject(s) {
   }
 
   /**
-   * A live subscription nobody claims. The PayPal side raises the same alert
-   * for the same reason, and that alert is the only thing turning a silent
-   * loss into something somebody can act on the same day.
+   * A live subscription nobody claims.
+   *
+   * ADDRESSED TO EVERY ADMIN, ONE ROW EACH, AND THAT IS THE WHOLE POINT.
+   *
+   * The first version of this wrote a single row with user_id null, which
+   * reaches nobody twice over. send-billing-emails.js resolves an address from
+   * user_id and closes a row out as 'no_user_on_notification' when there is
+   * none, so no email. And NotificationsPage reads
+   * `artist_id = mine OR user_id = mine`, so no card either. It would have
+   * been a loud alert written to a table and seen by no human being.
+   *
+   * paypal-webhook.js already had this right: read the admins table, write one
+   * notification per admin. This copies that exactly, type 'admin_message' and
+   * all, so both alerts arrive looking the same.
    */
   async function raiseUnmatchedAlert({ admin, code, planCode, customerCode, data }) {
     try {
@@ -408,19 +428,23 @@ function makeSubject(s) {
         ? `R${(Number(data.plan.amount) / 100).toFixed(2)}`
         : 'an unknown amount';
 
-      const { error } = await admin.from('notifications').insert({
-        ...(s.notificationOwner ? s.notificationOwner(null) : {}),
-        user_id: null,
-        type:    'subscription',
+      const { data: admins, error: adminErr } = await admin.from('admins').select('user_id');
+      if (adminErr) {
+        console.error(tag, 'could not read the admins to alert:', adminErr.message);
+        return;
+      }
+      const rows = (admins || []).map(a => a.user_id).filter(Boolean).map(uid => ({
+        user_id: uid,
+        type:    'admin_message',
         title:   'A Paystack subscription could not be matched',
-        message: `Paystack subscription ${code} is billing ${amount} and no ${s.label} account is linked to it. `
-               + 'Somebody is paying and has not been given their plan. '
+        message: `Paystack subscription ${code} is billing ${amount} and no ${s.label} account `
+               + 'is linked to it. Somebody is paying and has not been given their plan. '
                + (email ? `The subscriber's email is ${email}. ` : '')
                + `Plan ${planCode || 'unknown'}, customer ${customerCode || 'unknown'}.`,
         email_requested: true,
         metadata: {
-          // Already in EMAILABLE_KINDS. The PayPal equivalent sat unsent for
-          // two days because its kind was not on that list.
+          // In EMAILABLE_KINDS in send-billing-emails.js. The PayPal
+          // equivalent sat unsent for two days because its kind was not.
           kind:         'subscription_unmatched',
           audience:     'admin',
           provider:     'paystack',
@@ -429,7 +453,17 @@ function makeSubject(s) {
           plan:         planCode || null,
           customer:     customerCode || null,
         },
-      });
+      }));
+
+      if (rows.length === 0) {
+        // No admins means the alert has nowhere to go. That is worth saying,
+        // because the silence would otherwise look like "no problem found".
+        console.error(tag, 'NOBODY TO ALERT about unmatched subscription', code,
+          '- the admins table returned no user ids.');
+        return;
+      }
+
+      const { error } = await admin.from('notifications').insert(rows);
       if (error) console.error(tag, 'unmatched alert refused:', error.message);
     } catch (e) {
       console.error(tag, 'unmatched alert threw:', e.message);
