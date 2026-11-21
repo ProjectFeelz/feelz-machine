@@ -191,7 +191,17 @@ let rawDrawImage = null;
 let COUNTING = false;
 const drawCount = { n: 0, srcs: new Set() };
 window.setDrawCounting = v => { COUNTING = !!v; };
-window.readDrawCount = () => { const r = { n: drawCount.n, u: drawCount.srcs.size }; drawCount.n = 0; drawCount.srcs.clear(); return r; };
+// ?diag only: the short name of each picture a phase asked for, so a slow
+// phase can say WHICH artwork it was reading, not just how many times.
+const shortName = s => {
+  const u = s && s.src;
+  if (typeof u === "string") return u.slice(u.lastIndexOf("/") + 1).replace(/\.webp$/, "");
+  return s && s.width ? "canvas" + s.width + "x" + s.height : "?";
+};
+window.readDrawCount = () => {
+  const r = { n: drawCount.n, u: drawCount.srcs.size, names: [...drawCount.srcs].map(shortName) };
+  drawCount.n = 0; drawCount.srcs.clear(); return r;
+};
 
 function tileFor(img, sx, sy, sw, sh, dw, dh) {
   const w = Math.round(dw), h = Math.round(dh);
@@ -283,7 +293,8 @@ function worthTiling(img, sw, sh, dw, dh) {
 }
 
 // How much of the artwork is being sampled, for the ?diag panel.
-window.tileStats = () => ({ tiles: tiles.size, mp: +(tilePixels / 1e6).toFixed(2), on: PRESCALE, refused: noTile.size });
+window.tileStats = () => ({ tiles: tiles.size, mp: +(tilePixels / 1e6).toFixed(2), on: PRESCALE, refused: noTile.size,
+  why: [...noTile].map(k => { const p = k.split("|"); return shortName({ src: p[0] }) + " " + (p[2] || ""); }) });
 
 // THE SAME SWAP, WITHOUT BUILDING AN ARRAY ON EVERY SINGLE DRAW.
 //

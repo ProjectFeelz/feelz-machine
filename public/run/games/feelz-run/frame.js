@@ -67,8 +67,9 @@ function T(name, fn) {
   // of cheap ones.
   if (window.readDrawCount) {
     const c = window.readDrawCount();
-    const q = diag.calls[name] || (diag.calls[name] = { n: [], u: [] });
+    const q = diag.calls[name] || (diag.calls[name] = { n: [], u: [], names: [] });
     q.n.push(c.n); q.u.push(c.u);
+    if (c.names && c.names.length) q.names = c.names;
     if (q.n.length > 90) { q.n.shift(); q.u.shift(); }
   }
 }
@@ -110,7 +111,7 @@ function diagPanel() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "rgba(6, 6, 12, 0.82)";
   const PY0 = 74;                       // clear of the records pill at the top
-  ctx.fillRect(6, PY0 - 16, 258, 32 + (order.length + 1) * 14);
+  ctx.fillRect(6, PY0 - 16, 420, 32 + (order.length + 5) * 14);
   ctx.font = "600 11px ui-monospace, Menlo, Consolas, monospace";
   ctx.textAlign = "left"; ctx.textBaseline = "middle";
   ctx.fillStyle = "#8ff0a8";
@@ -128,6 +129,19 @@ function diagPanel() {
     const c = diag.medCalls[k];
     ctx.fillText(k.padEnd(9) + v.toFixed(1).padStart(5) + (c ? "   " + c : ""), 12, y);
     y += 14;
+  }
+  // The three slowest phases name the artwork they were reading, and the tiler
+  // says which pieces it turned down. Both are questions a timing cannot answer.
+  ctx.font = "600 9px ui-monospace, Menlo, Consolas, monospace";
+  ctx.fillStyle = "#c8b48f";
+  const slow = order.filter(k => diag.med[k] > 3 && diag.calls[k] && diag.calls[k].names.length).slice(0, 3);
+  for (const k of slow) {
+    ctx.fillText(k + ": " + diag.calls[k].names.join(" ").slice(0, 86), 12, y);
+    y += 12;
+  }
+  if (ts && ts.why && ts.why.length) {
+    ctx.fillStyle = "#e09a9a";
+    ctx.fillText("refused: " + ts.why.join("  ").slice(0, 86), 12, y);
   }
   ctx.restore();
 }
