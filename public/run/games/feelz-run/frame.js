@@ -95,18 +95,22 @@ function diagPanel() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "rgba(6, 6, 12, 0.82)";
   const PY0 = 74;                       // clear of the records pill at the top
-  ctx.fillRect(6, PY0 - 16, 224, 22 + (order.length + 1) * 14);
+  ctx.fillRect(6, PY0 - 16, 232, 32 + (order.length + 1) * 14);
   ctx.font = "600 11px ui-monospace, Menlo, Consolas, monospace";
   ctx.textAlign = "left"; ctx.textBaseline = "middle";
   ctx.fillStyle = "#8ff0a8";
-  ctx.fillText(diag.line2 || "", 14, 18);
-  let y = 36;
+  ctx.fillText(diag.line2 || "", 12, PY0 - 4);
+  ctx.fillStyle = "#9fb4c7";
+  const ts = window.tileStats ? window.tileStats() : null;
+  ctx.fillText("canvas " + W + "x" + H + "  L" + DIAG_LEVEL
+             + (ts ? "  tiles " + (ts.on ? ts.tiles + " / " + ts.mp + "MP" : "OFF") : ""), 12, PY0 + 10);
+  let y = PY0 + 28;
   for (const k of order) {
     const v = diag.med[k];
     if (v === undefined) continue;
     ctx.fillStyle = v > 8 ? "#ff9a9a" : v > 3 ? "#ffc46a" : "#9fb4c7";
-    ctx.fillText(k.padEnd(9) + v.toFixed(1) + " ms", 14, y);
-    y += 15;
+    ctx.fillText(k.padEnd(9) + v.toFixed(1), 12, y);
+    y += 14;
   }
   ctx.restore();
 }

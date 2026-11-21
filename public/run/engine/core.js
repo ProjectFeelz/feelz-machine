@@ -131,6 +131,89 @@ function freeze(c) {
   } catch (e) { /* a canvas that can't be read: keep drawing it as it is */ }
   return c;
 }
+// SHRINK A PIECE ONCE, THEN DRAW IT AT ITS OWN SIZE.   ?prescale=0 turns it off
+//
+// The painted artwork lives on big sheets: meshy-kit is 4096x3120, which is
+// 12.8 megapixels, and props-2d is 3.1. The game canvas is 960x540, which is
+// half a megapixel. So a building is a small piece of an enormous sheet, drawn
+// shrunk, sixty times a second.
+//
+// A desktop GPU swallows that. A phone's does not. There are no mip levels on
+// a 2D canvas, so every pixel drawn pulls from texels scattered across a 51MB
+// texture, the texture cache misses on nearly all of them, and the GPU falls
+// behind while the processor sits idle. That is exactly what the Samsung
+// measured: every part of the game under a millisecond of its own work, and
+// 110ms owed to the GPU.
+//
+// So the first time a piece is drawn at a given size it is shrunk once into a
+// small tile of its own, and after that the tile is drawn at its natural size
+// with nothing to shrink. The picture is the same. If anything it is slightly
+// better, because one careful downscale beats sampling the same shrink afresh
+// on every frame.
+//
+// This is NOT a quality setting. Nothing is drawn smaller, softer or at lower
+// resolution: the same pixels end up in the same places.
+//
+// Bounded on both sides. Only sheets over two megapixels, only draws that
+// shrink by half or more, only pieces big enough to be worth keeping and small
+// enough to be cheap, and the oldest tiles are dropped once there are
+// TILE_MAX.
+const PRESCALE = (() => { try { return new URLSearchParams(location.search).get("prescale") !== "0"; } catch (e) { return true; } })();
+const BIG_SHEET = 2e6;          // source pixels before a sheet counts as big
+const SHRINK_MIN = 1.5;         // how much smaller a draw must be to be worth a tile
+const TILE_MIN = 24 * 24;       // below this a tile costs more than it saves
+const TILE_MAX_AREA = 360 * 360;
+const TILE_BUDGET = 6e6;        // about 24MB of tiles, oldest dropped first
+const tiles = new Map();
+let tilePixels = 0;
+// The real drawImage, captured below. Tiles are built with THIS, never with
+// the wrapper: the wrapper would see a big sheet being shrunk, decide it
+// wanted a tile, and call back into here for ever.
+let rawDrawImage = null;
+
+function tileFor(img, sx, sy, sw, sh, dw, dh) {
+  const w = Math.round(dw), h = Math.round(dh);
+  const key = (img.src || img.id || "") + "|" + Math.round(sx) + "," + Math.round(sy) + ","
+            + Math.round(sw) + "," + Math.round(sh) + "|" + w + "x" + h;
+  const hit = tiles.get(key);
+  if (hit) { tiles.delete(key); tiles.set(key, hit); return hit; }   // keep the fresh ones
+
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const g = c.getContext("2d");
+  g.imageSmoothingEnabled = true;
+  try { g.imageSmoothingQuality = "high"; } catch (e) {}
+  rawDrawImage.call(g, img, sx, sy, sw, sh, 0, 0, w, h);
+
+  tiles.set(key, c);
+  tilePixels += w * h;
+  // Kept to a budget by area, not by how many: one big tile costs as much as
+  // many small ones, and counting tiles would let a handful of large ones eat
+  // a phone's memory.
+  while (tilePixels > TILE_BUDGET && tiles.size > 1) {
+    const oldestKey = tiles.keys().next().value;
+    const old = tiles.get(oldestKey);
+    tiles.delete(oldestKey);
+    tilePixels -= old.width * old.height;
+  }
+  // Same reason as everything else here: a canvas used as a source is redrawn
+  // step by step on some drivers, a picture is not.
+  return freeze(c);
+}
+
+function worthTiling(img, sw, sh, dw, dh) {
+  if (!PRESCALE || !rawDrawImage) return false;
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  if (!iw || !ih || iw * ih < BIG_SHEET) return false;
+  if (!(dw > 0 && dh > 0 && sw > 0 && sh > 0)) return false;
+  if (sw / dw < SHRINK_MIN || sh / dh < SHRINK_MIN) return false;
+  const area = dw * dh;
+  return area >= TILE_MIN && area <= TILE_MAX_AREA;
+}
+
+// How much of the artwork is being sampled, for the ?diag panel.
+window.tileStats = () => ({ tiles: tiles.size, mp: +(tilePixels / 1e6).toFixed(2), on: PRESCALE });
+
 // THE SAME SWAP, WITHOUT BUILDING AN ARRAY ON EVERY SINGLE DRAW.
 //
 // This used to be written with a rest parameter, `function (src, ...rest)`,
@@ -145,13 +228,22 @@ function freeze(c) {
 // handed straight on. No array, no spread.
 (() => {
   const P = CanvasRenderingContext2D.prototype, raw = P.drawImage;
+  rawDrawImage = raw;
   P.drawImage = function (src, a, b, c, d, e, f, g, h) {
     const im = src && src.toBlob ? frozenArt.get(src) : null;
     const s = im || src;
     switch (arguments.length) {
       case 3: return raw.call(this, s, a, b);
       case 5: return raw.call(this, s, a, b, c, d);
-      case 9: return raw.call(this, s, a, b, c, d, e, f, g, h);
+      case 9: {
+        // A small piece of a big sheet, shrunk: draw the tile instead.
+        if (s && s.src !== undefined && worthTiling(s, c, d, g, h)) {
+          const t = tileFor(s, a, b, c, d, g, h);
+          const ti = frozenArt.get(t) || t;
+          return raw.call(this, ti, 0, 0, t.width, t.height, e, f, g, h);
+        }
+        return raw.call(this, s, a, b, c, d, e, f, g, h);
+      }
       default: return raw.call(this, s, a, b, c, d, e, f, g, h);
     }
   };
