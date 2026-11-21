@@ -503,6 +503,23 @@ const FLY_POSE = { lean: 1.2, backLeg: 0.3, backKnee: 0.05, frontLeg: -1.2, fron
   }
 
   const frameCache = new Map(), FRAME_CACHE_MAX = 48;
+
+  // ONE CANVAS PER RUNNER, REDRAWN ONLY WHEN THEIR POSE CHANGES.
+  //
+  // Everyone else in a co-op run is drawn from a position that arrives 15 times
+  // a second. Their pose is a sprite frame number off the wire, so it takes a
+  // handful of values and sits still between updates. Rendering them in 3D on
+  // every one of 60 frames draws the same pose four times over, and at four
+  // runners that is four full renders a frame for three frames' worth of
+  // nothing.
+  //
+  // So each runner keeps a canvas and it is redrawn only when their pose
+  // actually changes. The picture is identical, because the pose it is made
+  // from is identical. This is not a quality setting and it cannot be seen.
+  //
+  // Bounded by how many runners there are, six at most, rather than by how many
+  // poses they pass through, which is what frameCache is for.
+  const holdCache = new Map();
   function render(id, key, anim, t, facing, opts) {
     // the menu draws at a calm pace, so it always gets the 3D model once it's in
     if (!(opts && opts.menu ? loaded(id) : ready(id))) return null;
@@ -520,6 +537,22 @@ const FLY_POSE = { lean: 1.2, backLeg: 0.3, backKnee: 0.05, frontLeg: -1.2, fron
       cacheKey = id + "|" + anim + "|" + fi + "|" + (facing < 0 ? -1 : 1) + "|" + (opts.turn !== undefined ? opts.turn : "") + "|" + (opts.outfit ? JSON.stringify(opts.outfit) : "") + "|" + (opts.fly ? 1 : 0);
       const hit = frameCache.get(cacheKey);
       if (hit) { frameCache.delete(cacheKey); frameCache.set(cacheKey, hit); return hit; }
+    }
+    // Held runners: hand back the canvas we already have unless the pose moved.
+    let holdSlot = null;
+    if (opts && opts.hold) {
+      const poseKey = id + "|" + anim + "|" + t.toFixed(4) + "|" + (facing < 0 ? -1 : 1)
+                    + "|" + (opts.turn !== undefined ? opts.turn : "")
+                    + "|" + (opts.outfit ? JSON.stringify(opts.outfit) : "");
+      holdSlot = holdCache.get(opts.hold);
+      if (holdSlot && holdSlot.key === poseKey) return holdSlot.canvas;
+      if (!holdSlot) {
+        const c = document.createElement("canvas");
+        c.width = glCanvas.width; c.height = glCanvas.height;
+        holdSlot = { key: "", canvas: c, g: c.getContext("2d") };
+        holdCache.set(opts.hold, holdSlot);
+      }
+      holdSlot.key = poseKey;
     }
     outfitMap(m, opts && opts.outfit);
     for (const other of Object.values(m.actions)) other.act.enabled = other === a;
@@ -550,6 +583,11 @@ const FLY_POSE = { lean: 1.2, backLeg: 0.3, backKnee: 0.05, frontLeg: -1.2, fron
     for (const k in models) if (models[k].holder && k !== id) models[k].holder.visible = false;
     renderer.render(scene, camera);
     m.holder.visible = false;
+    if (holdSlot) {
+      holdSlot.g.clearRect(0, 0, holdSlot.canvas.width, holdSlot.canvas.height);
+      holdSlot.g.drawImage(glCanvas, 0, 0);
+      return holdSlot.canvas;
+    }
     // Handed back as is (no copy, which would stall the GPU on phones): draw
     // it straight away, before rendering the next runner.
     if (cacheKey) {
@@ -699,7 +737,10 @@ const FLY_POSE = { lean: 1.2, backLeg: 0.3, backKnee: 0.05, frontLeg: -1.2, fron
     return footCache[key];
   }
 
-  return { footfalls, preload, register, ready, settled, has, want, wantProp, render, renderProp, bake, mood, SIZE, VIEW_METRES, FOOT };
+  // A runner who has left: let their canvas go.
+  function drop(holdKey) { holdCache.delete(holdKey); }
+
+  return { footfalls, preload, register, ready, settled, has, want, wantProp, render, renderProp, bake, drop, mood, SIZE, VIEW_METRES, FOOT };
 })();
 
 // Koda loads straight away; Zora and the enemies the first time they appear.

@@ -33,6 +33,42 @@ function updateRunGate(dt) {
   for (const p of players) p.autoRun = 1.4;
 }
 
+// THE RUNNER'S PHYSICS NEVER TAKES A STEP LONGER THAN ONE SIXTIETH OF A SECOND.
+//
+// The loop hands update() however long the last frame took, capped at 50ms.
+// On a phone managing 20 frames a second that is a single 50ms step, and in
+// one step Koda travels 18 pixels and gains 95 pixels a second of fall speed.
+// Collisions are only tested at the ends of a step, so at that size he clips
+// corners and drops through thin ledges. That is the glitching on older
+// phones, and it is arithmetic rather than anything you can see: turning the
+// graphics down raised the frame rate a little, which shortened the step,
+// which is why it seemed to help without ever being the cause.
+//
+// So a long frame is walked in several short steps instead of one long one.
+//
+// Deliberately NOT a strict fixed timestep with a carried remainder. That is
+// the textbook answer, but it makes the runner move in 16.7ms jumps while the
+// camera moves every frame, which shows as a shimmer on 90Hz and 120Hz
+// screens that are currently perfectly smooth. This keeps every frame at 60fps
+// and above behaving exactly as it does today, and only splits the long frames
+// that are actually broken.
+//
+// Jump, attack and crouch are edge triggered inside updatePlayer, and the edge
+// is cleared on the first step, so a press still fires once per frame however
+// many steps a frame takes.
+const PHYS_MAX_STEP = 1 / 60;
+const PHYS_MAX_STEPS = 6;        // 100ms of catch-up at most, then the frame is let go
+
+function stepPlayers(dt) {
+  let left = dt, n = 0;
+  while (left > 1e-6 && n < PHYS_MAX_STEPS) {
+    const step = left > PHYS_MAX_STEP ? PHYS_MAX_STEP : left;
+    for (let i = 0; i < players.length; i++) updatePlayer(players[i], i, step);
+    left -= step;
+    n++;
+  }
+}
+
 function update(realDt) {
   banner.time = Math.max(0, banner.time - realDt);
   toast.time = Math.max(0, toast.time - realDt);
@@ -81,7 +117,7 @@ function update(realDt) {
   else {
     inward.fade = Math.max(0, inward.fade - dt);   // the dip to black after a run into the picture lifts again
     for (const pl of players) if (pl.autoRun > 0) pl.autoRun = Math.max(0, pl.autoRun - dt);
-    players.forEach((p, i) => updatePlayer(p, i, dt));
+    stepPlayers(dt);
     updateWardens(dt);
     updateDrones(dt);
     checkInward();

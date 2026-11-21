@@ -131,11 +131,29 @@ function freeze(c) {
   } catch (e) { /* a canvas that can't be read: keep drawing it as it is */ }
   return c;
 }
+// THE SAME SWAP, WITHOUT BUILDING AN ARRAY ON EVERY SINGLE DRAW.
+//
+// This used to be written with a rest parameter, `function (src, ...rest)`,
+// and then called on with `raw.call(this, im || src, ...rest)`. A rest
+// parameter builds a fresh array every time the function runs, and a 2D game
+// calls drawImage hundreds of times a frame. That is hundreds of throwaway
+// arrays a frame, on every device, in the hottest path there is, and it is
+// what the rubbish collector keeps waking up to clear: the little catches that
+// have nothing to do with how much is on screen.
+//
+// drawImage only ever takes 3, 5 or 9 arguments, so each is spelled out and
+// handed straight on. No array, no spread.
 (() => {
   const P = CanvasRenderingContext2D.prototype, raw = P.drawImage;
-  P.drawImage = function (src, ...rest) {
+  P.drawImage = function (src, a, b, c, d, e, f, g, h) {
     const im = src && src.toBlob ? frozenArt.get(src) : null;
-    return raw.call(this, im || src, ...rest);
+    const s = im || src;
+    switch (arguments.length) {
+      case 3: return raw.call(this, s, a, b);
+      case 5: return raw.call(this, s, a, b, c, d);
+      case 9: return raw.call(this, s, a, b, c, d, e, f, g, h);
+      default: return raw.call(this, s, a, b, c, d, e, f, g, h);
+    }
   };
 })();
 

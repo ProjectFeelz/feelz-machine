@@ -220,11 +220,24 @@ function drawPlayers() {
     const modelId = img === art.koda || outfit3 ? "koda" : img === art.zora ? "zora" : null;
     const [anim3, t3] = typeof Char3D !== "undefined" && modelId ? kodaPose3D(p) : [null, 0];
     const facing3 = p.climb ? -p.climb.side : p.facing;
+    // THE OTHER RUNNERS KEEP THEIR OWN CANVAS AND ARE REDRAWN ONLY WHEN THEIR
+    // POSE CHANGES.
+    //
+    // Their pose is a sprite frame number that arrives over the network 15
+    // times a second, and kodaPose3D above turns that number straight back
+    // into the same animation time every frame until the next one lands. So
+    // the render is identical in between, and doing it again 60 times a second
+    // is the single biggest cost of a four player run.
+    //
+    // Your own Koda is NOT held: he is posed from live physics and is redrawn
+    // every frame exactly as before.
+    const hold = p.coopGhost ? "coop:" + (p.coopId || p.coopName || p.id) : null;
     const model = anim3 && Char3D.has(modelId, anim3)
       ? Char3D.render(modelId, "p" + p.id + (p.coopName || ""), anim3, t3, facing3,
           // On a ladder he faces into the picture, back to us. (The climb clip itself turns him
           // round, so no extra turn here.)
-          Object.assign(p.climb && anim3 === "climb" ? { turn: 0 } : {}, { outfit: outfit3 })) : null;
+          Object.assign(p.climb && anim3 === "climb" ? { turn: 0 } : {}, { outfit: outfit3 },
+                        hold ? { hold } : {})) : null;
     if (!art.koda.ready && !model) continue;
     const under = p.ground || floorBelow(p.x, p.y, true);
     const floor = under ? under.y : p.y, lift = Math.max(0, floor - p.y);

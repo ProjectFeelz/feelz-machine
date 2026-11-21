@@ -25,6 +25,22 @@ const Coop = (() => {
   const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const MAX_PLAYERS = 6;
   const SONG_EVERY = 1;
+  // HOW OFTEN A RUNNER'S POSITION GOES OUT, AND HOW FAR BEHIND IT IS DRAWN.
+  //
+  // This used to drop from 15 a second to 10 and then 8 as players joined, to
+  // "stay well inside the channel's limits". The limit on this project is 2500
+  // events a second; six players at 15 a second is 90. The throttle was
+  // guarding against nothing, and it was the direct cause of the jumping: the
+  // fewer updates arrive, the longer each runner sits still between them.
+  //
+  // So it is a flat 15 a second now, however many are playing.
+  const SEND_HZ = 15;
+  // Everyone else is drawn this far behind the latest news of them, so there
+  // are always two known positions to glide between instead of one to rush at.
+  // A little over one update apart, which is what buys the smoothness; much
+  // more only adds lag.
+  const INTERP_MS = 110;
+  const BUF_MAX = 8;
   const DRIFT = 0.9;             // seconds of song drift before a guest is nudged back in line
   const SEEK_GAP = 4;            // and at most one nudge every few seconds
   // Everyone's colour, in the order they joined (the host first).
@@ -109,6 +125,8 @@ const Coop = (() => {
     const was = nameOf(id);
     st.roster = st.roster.filter(r => r.id !== id);
     st.peers.delete(id);
+    // Their held drawing goes with them.
+    if (typeof Char3D !== "undefined" && Char3D.drop) Char3D.drop("coop:" + id);
     if (st.host) { applyRoster(st.roster); hostRoster(); }
     if (st.on && gameState !== "finished") showToast("CO-OP", was + (why || " LEFT THE GAME."), "", 3);
     if (st.lobby) lobbyChanged(was + " left.");
@@ -168,6 +186,19 @@ const Coop = (() => {
         const p = st.peers.get(from);
         if (!p) return;
         p.target = d;
+        // Kept in a short queue, stamped on arrival, so tick() can draw them
+        // between two real positions instead of chasing the newest one.
+        // Arrival time rather than the sender's clock: we have no agreed clock
+        // with another guest, and the queue only needs the spacing.
+        if (!p.buf) p.buf = [];
+        const arrived = now();
+        // Their clock against ours. Jitter only ever makes a packet look LATE,
+        // never early, so the smallest difference we have seen is the honest
+        // one. It is allowed to creep upwards slowly in case a clock drifts.
+        const seen = arrived - (typeof d.ts === "number" ? d.ts : arrived);
+        p.base = p.base === undefined ? seen : Math.min(seen, p.base + 0.02 * realDtMs());
+        p.buf.push({ st: (typeof d.ts === "number" ? d.ts : arrived - p.base), x: d.x, y: d.y });
+        if (p.buf.length > BUF_MAX) p.buf.shift();
         // Just after a missed checkpoint, a snapshot sent before they rewound can't move the deadline on.
         p.cp = Math.max(0, now() < st.cpHoldUntil ? Math.min(d.cp | 0, st.cpHoldMax) : d.cp | 0);
         break;
@@ -279,7 +310,7 @@ const Coop = (() => {
       clearInterval(st.countTimer);
       if (!st.lobby) return;
       st.lobby = false; st.on = true;
-      for (const p of st.peers.values()) { p.ghost = freshGhost(p.colour); p.target = null; p.cp = 0; }
+      for (const p of st.peers.values()) { p.ghost = freshGhost(p.colour); p.ghost.coopId = p.id; p.target = null; p.cp = 0; p.buf = []; p.base = undefined; }
       st.sendT = 0; st.songT = 0; st.tripT = 0;
       if (typeof coopBegin === "function") coopBegin();
     }, Math.max(0, localAt - now()));
@@ -289,7 +320,7 @@ const Coop = (() => {
   function toLobby(missionId) {
     clearTimeout(st.startTimer); clearInterval(st.countTimer);
     st.on = false; st.lobby = true;
-    for (const p of st.peers.values()) { p.ghost = null; p.target = null; p.cp = 0; }
+    for (const p of st.peers.values()) { p.ghost = null; p.target = null; p.cp = 0; p.buf = []; p.base = undefined; }
     if (missionId) chooseMission(missionId);
     if (typeof coopToLobby === "function") coopToLobby();
     lobbyChanged();
@@ -300,17 +331,74 @@ const Coop = (() => {
     toLobby(missionId);
   }
 
+  // How long the last frame took, in ms, for the slow creep on p.base.
+  let lastTick = 0;
+  function realDtMs() { const n = now(), d = lastTick ? n - lastTick : 16; return Math.max(1, Math.min(100, d)); }
+
+  // One runner's drawn position, from their queue of real ones.
+  //
+  // Played back on THEIR clock, not on arrival times. Arrival times carry the
+  // network's jitter straight into the picture: a packet 25ms late makes the
+  // runner appear to speed up and then slow down. Their own stamps are evenly
+  // spaced because they were sent evenly spaced, and p.base lines their clock
+  // up with ours.
+  function placeGhost(p, g, t, realDt) {
+    const buf = p.buf;
+
+    // A long way off: they respawned, rewound or just appeared. Go there.
+    if (Math.abs(t.x - g.x) > 600 || Math.abs(t.y - g.y) > 600) {
+      g.x = t.x; g.y = t.y;
+      if (buf) buf.length = 0;
+      return;
+    }
+    if (!buf || buf.length === 0) return;
+
+    const at = now() - (p.base || 0) - INTERP_MS;
+
+    let a = null, b = null;
+    for (let i = buf.length - 1; i >= 0; i--) {
+      if (buf[i].st <= at) { a = buf[i]; b = buf[i + 1] || null; break; }
+    }
+
+    let tx, ty;
+    if (a && b) {
+      const span = b.st - a.st;
+      const f = span > 0 ? Math.max(0, Math.min(1, (at - a.st) / span)) : 1;
+      tx = a.x + (b.x - a.x) * f;
+      ty = a.y + (b.y - a.y) * f;
+    } else if (a) {
+      // Nothing newer yet: hold at the last real position rather than guess
+      // where they went. A wrong guess has to be taken back, and taking it
+      // back is a jump.
+      tx = a.x; ty = a.y;
+    } else {
+      tx = buf[0].x; ty = buf[0].y;
+    }
+
+    // A short ease onto that point, so a dropped packet shows as a slight
+    // change of speed rather than a step. Frame rate independent.
+    const k = 1 - Math.exp(-22 * realDt);
+    g.x += (tx - g.x) * k;
+    g.y += (ty - g.y) * k;
+
+    while (buf.length > 2 && buf[1].st <= at) buf.shift();
+  }
+
   // Called every frame from the game's update.
   function tick(realDt) {
     if (!st.on) return;
+    lastTick = now();
     const me = players[0];
     if (!me) return;
     st.sendT -= realDt;
     if (st.sendT <= 0 && st.ch) {
-      // Fewer updates a second with more players, so the channel stays well inside its limits.
-      st.sendT = st.peers.size >= 4 ? 1 / 8 : st.peers.size >= 2 ? 1 / 10 : 1 / 15;
+      st.sendT = 1 / SEND_HZ;
       const pose = kodaPose(me);
       send("s", {
+        // Our own clock. Only the GAPS between a sender's own stamps are ever
+        // used, so two phones whose clocks disagree still works: the
+        // disagreement is a constant and cancels out.
+        ts: now(),
         x: Math.round(me.x), y: Math.round(me.y), h: me.h,
         f: me.climb ? me.climb.side : me.facing,
         a: pose[0], n: pose[1], b: me.boostTime > 0 ? 1 : 0, sh: me.shield ? 1 : 0,
@@ -327,10 +415,14 @@ const Coop = (() => {
     for (const p of st.peers.values()) {
       const g = p.ghost, t = p.target;
       if (!g || !t) continue;
-      // Everyone else glides towards their latest position.
-      const far = Math.abs(t.x - g.x) > 600 || Math.abs(t.y - g.y) > 600;
-      const k = far ? 1 : Math.min(1, realDt * 12);
-      g.x += (t.x - g.x) * k; g.y += (t.y - g.y) * k;
+      // ── Where they actually are on this screen ─────────────────────────
+      //
+      // Drawn INTERP_MS behind the newest position, between the two queued
+      // positions that straddle that moment. So a runner moves at the speed
+      // they were really moving, the whole time, instead of easing towards the
+      // last thing we heard and then sitting still until the next one lands.
+      // That easing and stalling is what the jumping was.
+      placeGhost(p, g, t, realDt);
       g.h = t.h || STAND_H; g.facing = t.f || 1; g.pose = [t.a || "idle", t.n | 0];
       g.boostTime = t.b ? 1 : 0; g.shield = !!t.sh; g.ground = t.g ? { y: g.y } : null;
       g.cp = t.cp | 0; g.finished = !!t.fin; g.hidden = !!t.iw || !!t.fin;
@@ -383,7 +475,7 @@ const Coop = (() => {
     get ghosts() {
       if (!st.on) return [];
       const out = [];
-      for (const p of st.peers.values()) if (p.ghost && p.target && !p.ghost.hidden) { p.ghost.coopName = p.name; out.push(p.ghost); }
+      for (const p of st.peers.values()) if (p.ghost && p.target && !p.ghost.hidden) { p.ghost.coopName = p.name; p.ghost.coopId = p.id; out.push(p.ghost); }
       return out;
     },
     partnerName() { const names = [...st.peers.values()].map(p => p.name); return names.length ? names.join(", ") : "YOUR CREW"; },

@@ -10,14 +10,33 @@ function mirroredText(t, x, y, w) { ctx.save(); ctx.translate(x, y); ctx.scale(-
 // The look (3D buildings, weather, light) never stops a frame: if any of it
 // fails, it is skipped and the game draws on. A part that keeps failing is
 // switched off for the visit.
+// Counted by name rather than by reading the function back as text.
+//
+// This used to do `const key = fn.toString()` on every call. That turns the
+// function into a string every time, five times a frame, and the five
+// functions were themselves written fresh at each call site on every frame.
+// Both are gone: the name is passed in, and the five calls below hand over
+// the function that already exists instead of wrapping it in a new one.
 const fxFails = {};
-function safeFx(fn) {
-  const key = fn.toString();
-  if (fxFails[key] > 5) return;
+function safeFx(name, fn) {
+  if (fxFails[name] > 5) return;
   ctx.save();
-  try { fn(); } catch (e) { fxFails[key] = (fxFails[key] || 0) + 1; if (fxFails[key] === 1) console.warn("[fx] skipped:", e && e.message); }
+  try { fn(); } catch (e) { fxFails[name] = (fxFails[name] || 0) + 1; if (fxFails[name] === 1) console.warn("[fx] skipped:", name, e && e.message); }
   ctx.restore();
 }
+
+// Written once, here, instead of five new functions on every frame.
+//
+// Still wrappers rather than the methods themselves: World3D and Atmos are
+// defined in other files that may load after this one, and calling through a
+// wrapper also keeps each method's own `this`.
+const FX = {
+  world3d: () => World3D.draw(),
+  back:    () => Atmos.back(),
+  reflect: () => Atmos.reflect(),
+  front:   () => Atmos.front(),
+  grade:   () => Atmos.grade()
+};
 
 function render() {
   if (inward.active) { renderInward(); return; }
@@ -26,8 +45,8 @@ function render() {
   const mirror = mission && mission.mirror;
   if (mirror) { ctx.translate(W, 0); ctx.scale(-1, 1); ctx.fillText = mirroredText; }
   drawBackground();
-  safeFx(() => World3D.draw());
-  safeFx(() => Atmos.back());
+  safeFx("world3d", FX.world3d);
+  safeFx("atmos.back", FX.back);
   drawDecor();
   drawTunnels();
   drawMud();
@@ -40,7 +59,7 @@ function render() {
     if (s.kind === "awning" && level.stalls.length) continue;   // drawn with the stalls
     drawSolid(s);
   }
-  safeFx(() => Atmos.reflect());
+  safeFx("atmos.reflect", FX.reflect);
   drawBeatSolids();
   drawValves();
   drawClimbs();
@@ -63,7 +82,7 @@ function render() {
   drawStallFronts();
   drawHedges();
   drawCrowds("front");
-  safeFx(() => Atmos.front());
+  safeFx("atmos.front", FX.front);
   drawDebris();
   drawStormFront();
   drawParticles();
@@ -73,7 +92,7 @@ function render() {
   const baseRain = mission.weather && mission.weather.rain !== undefined ? mission.weather.rain : 0.15;
   drawRain(indoors ? 0 : baseRain + storm.strength * 0.9);
   if (mirror) { ctx.restore(); ctx.save(); ctx.fillText = rawFillText; }
-  safeFx(() => Atmos.grade());
+  safeFx("atmos.grade", FX.grade);
   drawPrayer();
   drawScreenFx();
   ctx.restore();
