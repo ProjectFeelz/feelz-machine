@@ -159,8 +159,12 @@ function freeze(c) {
 // enough to be cheap, and the oldest tiles are dropped once there are
 // TILE_MAX.
 const PRESCALE = (() => { try { return new URLSearchParams(location.search).get("prescale") !== "0"; } catch (e) { return true; } })();
-const BIG_SHEET = 2e6;          // source pixels before a sheet counts as big
-const SHRINK_MIN = 1.5;         // how much smaller a draw must be to be worth a tile
+// Lowered from 2e6 after the first Samsung reading came back "tiles 0 / 0MP".
+// Nothing in the lower city is over two megapixels: lower-city-kit is 1.0,
+// city-kit 1.26, lc-far 0.80. The sheet I built the threshold around,
+// meshy-kit at 12.8, is not used in that mission at all.
+const BIG_SHEET = 2.4e5;        // source pixels before a sheet counts as big
+const SHRINK_MIN = 1.2;         // how much smaller a draw must be to be worth a tile
 const TILE_MIN = 24 * 24;       // below this a tile costs more than it saves
 const TILE_MAX_AREA = 360 * 360;
 const TILE_BUDGET = 6e6;        // about 24MB of tiles, oldest dropped first
@@ -170,6 +174,16 @@ let tilePixels = 0;
 // the wrapper: the wrapper would see a big sheet being shrunk, decide it
 // wanted a tile, and call back into here for ever.
 let rawDrawImage = null;
+
+// ?diag only: how many times a frame asks to draw a picture, and how many
+// different pictures it asks for. Thirty milliseconds spread over five calls
+// means something costs a fortune per call, most likely the picture being
+// decoded again. Thirty over five hundred means it is simply a lot of work.
+// Without that split there is no way to tell them apart from the outside.
+let COUNTING = false;
+const drawCount = { n: 0, srcs: new Set() };
+window.setDrawCounting = v => { COUNTING = !!v; };
+window.readDrawCount = () => { const r = { n: drawCount.n, u: drawCount.srcs.size }; drawCount.n = 0; drawCount.srcs.clear(); return r; };
 
 function tileFor(img, sx, sy, sw, sh, dw, dh) {
   const w = Math.round(dw), h = Math.round(dh);
@@ -232,6 +246,7 @@ window.tileStats = () => ({ tiles: tiles.size, mp: +(tilePixels / 1e6).toFixed(2
   P.drawImage = function (src, a, b, c, d, e, f, g, h) {
     const im = src && src.toBlob ? frozenArt.get(src) : null;
     const s = im || src;
+    if (COUNTING) { drawCount.n++; drawCount.srcs.add(src); }
     switch (arguments.length) {
       case 3: return raw.call(this, s, a, b);
       case 5: return raw.call(this, s, a, b, c, d);

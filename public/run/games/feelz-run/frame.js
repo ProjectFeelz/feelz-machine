@@ -43,7 +43,7 @@ function safeFx(name, fn) {
 --------------------------------------------------------------------------- */
 const DIAG_LEVEL = (() => { const m = /[?&]diag=([12])\b/.exec(location.search); return m ? +m[1] : 0; })();
 const DIAG = DIAG_LEVEL > 0;
-const diag = { hist: {}, med: {}, n: 0, line2: "" };
+const diag = { hist: {}, calls: {}, med: {}, medCalls: {}, n: 0, line2: "" };
 
 // ?diag=1 times the game's own work. ?diag=2 also makes the GPU finish after
 // each part, which is slower overall but says WHICH part the waiting belongs
@@ -55,6 +55,7 @@ function sync() { if (DIAG_LEVEL >= 2) { try { ctx.getImageData(0, 0, 1, 1); } c
 
 function T(name, fn) {
   if (!DIAG) { fn(); return; }
+  if (window.readDrawCount) window.readDrawCount();     // zero it for this phase
   const t0 = performance.now();
   fn();
   sync();
@@ -62,6 +63,14 @@ function T(name, fn) {
   const h = diag.hist[name] || (diag.hist[name] = []);
   h.push(d);
   if (h.length > 90) h.shift();
+  // Calls and distinct pictures, so an expensive call can be told from a lot
+  // of cheap ones.
+  if (window.readDrawCount) {
+    const c = window.readDrawCount();
+    const q = diag.calls[name] || (diag.calls[name] = { n: [], u: [] });
+    q.n.push(c.n); q.u.push(c.u);
+    if (q.n.length > 90) { q.n.shift(); q.u.shift(); }
+  }
 }
 // shell.js hands in the parts that happen outside render().
 if (DIAG) window.diagNote = (name, ms) => { if (!DIAG) return; const h = diag.hist[name] || (diag.hist[name] = []); h.push(ms); if (h.length > 90) h.shift(); };
@@ -80,6 +89,12 @@ function diagPanel() {
       const a = diag.hist[k].slice().sort((x, y) => x - y);
       diag.med[k] = a[Math.floor(a.length / 2)] || 0;
     }
+    diag.medCalls = {};
+    for (const k in diag.calls) {
+      const n = diag.calls[k].n.slice().sort((x, y) => x - y);
+      const u = diag.calls[k].u.slice().sort((x, y) => x - y);
+      diag.medCalls[k] = (n[Math.floor(n.length / 2)] || 0) + "/" + (u[Math.floor(u.length / 2)] || 0);
+    }
     if (!diag.line2) {
       let gpu = "?";
       try {
@@ -95,12 +110,13 @@ function diagPanel() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "rgba(6, 6, 12, 0.82)";
   const PY0 = 74;                       // clear of the records pill at the top
-  ctx.fillRect(6, PY0 - 16, 232, 32 + (order.length + 1) * 14);
+  ctx.fillRect(6, PY0 - 16, 258, 32 + (order.length + 1) * 14);
   ctx.font = "600 11px ui-monospace, Menlo, Consolas, monospace";
   ctx.textAlign = "left"; ctx.textBaseline = "middle";
   ctx.fillStyle = "#8ff0a8";
   ctx.fillText(diag.line2 || "", 12, PY0 - 4);
   ctx.fillStyle = "#9fb4c7";
+  if (window.setDrawCounting) window.setDrawCounting(true);
   const ts = window.tileStats ? window.tileStats() : null;
   ctx.fillText("canvas " + W + "x" + H + "  L" + DIAG_LEVEL
              + (ts ? "  tiles " + (ts.on ? ts.tiles + " / " + ts.mp + "MP" : "OFF") : ""), 12, PY0 + 10);
@@ -109,7 +125,8 @@ function diagPanel() {
     const v = diag.med[k];
     if (v === undefined) continue;
     ctx.fillStyle = v > 8 ? "#ff9a9a" : v > 3 ? "#ffc46a" : "#9fb4c7";
-    ctx.fillText(k.padEnd(9) + v.toFixed(1), 12, y);
+    const c = diag.medCalls[k];
+    ctx.fillText(k.padEnd(9) + v.toFixed(1).padStart(5) + (c ? "   " + c : ""), 12, y);
     y += 14;
   }
   ctx.restore();
