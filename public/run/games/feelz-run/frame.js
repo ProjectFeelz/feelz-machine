@@ -41,13 +41,23 @@ function safeFx(name, fn) {
    The numbers are milliseconds, the middle value of the last 90 frames. A
    frame has 16.7ms to play with at 60fps.
 --------------------------------------------------------------------------- */
-const DIAG = /[?&]diag=1\b/.test(location.search);
+const DIAG_LEVEL = (() => { const m = /[?&]diag=([12])\b/.exec(location.search); return m ? +m[1] : 0; })();
+const DIAG = DIAG_LEVEL > 0;
 const diag = { hist: {}, med: {}, n: 0, line2: "" };
+
+// ?diag=1 times the game's own work. ?diag=2 also makes the GPU finish after
+// each part, which is slower overall but says WHICH part the waiting belongs
+// to. On the first Samsung reading every part of the game measured under a
+// tenth of a millisecond and the wait at the end was 110ms, so the question
+// stopped being "what is the game doing" and became "what is it asking the
+// GPU to do". Level 2 answers that.
+function sync() { if (DIAG_LEVEL >= 2) { try { ctx.getImageData(0, 0, 1, 1); } catch (e) {} } }
 
 function T(name, fn) {
   if (!DIAG) { fn(); return; }
   const t0 = performance.now();
   fn();
+  sync();
   const d = performance.now() - t0;
   const h = diag.hist[name] || (diag.hist[name] = []);
   h.push(d);
@@ -75,17 +85,18 @@ function diagPanel() {
       try {
         const c = document.createElement("canvas"), gl = c.getContext("webgl");
         const e = gl.getExtension("WEBGL_debug_renderer_info");
-        gpu = String(gl.getParameter(e.UNMASKED_RENDERER_WEBGL)).slice(0, 46);
+        gpu = String(gl.getParameter(e.UNMASKED_RENDERER_WEBGL)).replace(/^ANGLE \(|\)$/g, "").slice(0, 40);
       } catch (e) {}
       diag.line2 = gpu;
     }
   }
-  const order = ["frame", "update", "world3d", "atmos", "scenery", "runners", "weather", "overlays", "gpuWait"];
+  const order = ["frame", "update", "bg", "decor", "solids", "props", "runners", "atmos", "weather", "dark", "rain", "screenfx", "hud", "bloom", "overlays", "gpuWait"];
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "rgba(6, 6, 12, 0.82)";
-  ctx.fillRect(6, 6, 212, 20 + order.length * 15);
-  ctx.font = "600 12px ui-monospace, Menlo, Consolas, monospace";
+  const PY0 = 74;                       // clear of the records pill at the top
+  ctx.fillRect(6, PY0 - 16, 224, 22 + (order.length + 1) * 14);
+  ctx.font = "600 11px ui-monospace, Menlo, Consolas, monospace";
   ctx.textAlign = "left"; ctx.textBaseline = "middle";
   ctx.fillStyle = "#8ff0a8";
   ctx.fillText(diag.line2 || "", 14, 18);
@@ -119,61 +130,45 @@ function render() {
   if (shake > 0) ctx.translate((Math.random() - 0.5) * shake * 30, (Math.random() - 0.5) * shake * 30);
   const mirror = mission && mission.mirror;
   if (mirror) { ctx.translate(W, 0); ctx.scale(-1, 1); ctx.fillText = mirroredText; }
-  T("scenery", drawBackground);
+  T("bg", drawBackground);
   T("world3d", () => safeFx("world3d", FX.world3d));
   T("atmos", () => safeFx("atmos.back", FX.back));
-  drawDecor();
-  drawTunnels();
-  drawMud();
+  T("decor", () => { drawDecor(); drawTunnels(); drawMud(); });
   // The street first, then what stands on it, then everything else: so the street
   // dressing sits on the road surface instead of behind its edge.
-  for (const s of level.solids) if (s.kind === "ground" && onScreen(s.x, s.w, 200)) drawSolid(s);
-  drawSetDressing();
-  for (const s of level.solids) {
-    if (s.kind === "ground" || !onScreen(s.x, s.w, 200)) continue;
-    if (s.kind === "awning" && level.stalls.length) continue;   // drawn with the stalls
-    drawSolid(s);
-  }
+  T("solids", () => {
+    for (const s of level.solids) if (s.kind === "ground" && onScreen(s.x, s.w, 200)) drawSolid(s);
+    drawSetDressing();
+    for (const s of level.solids) {
+      if (s.kind === "ground" || !onScreen(s.x, s.w, 200)) continue;
+      if (s.kind === "awning" && level.stalls.length) continue;   // drawn with the stalls
+      drawSolid(s);
+    }
+  });
   T("atmos", () => safeFx("atmos.reflect", FX.reflect));
-  drawBeatSolids();
-  drawValves();
-  drawClimbs();
-  drawZiplines();
-  drawCrowds("back");
-  drawCheckpoints();
-  drawGoal();
-  drawPickups();
+  T("props", () => { drawBeatSolids(); drawValves(); drawClimbs(); drawZiplines();
+                     drawCrowds("back"); drawCheckpoints(); drawGoal(); drawPickups(); });
   T("runners", drawWardens);
-  drawStalls();      // enforcers walk the back of the market, behind the stalls
-  drawDrones();
-  drawCages();
-  drawScanners();
-  drawTails();
-  drawZoraCompanion();
-  drawHound();
-  drawDogs();
+  T("props", () => { drawStalls(); drawDrones(); drawCages(); drawScanners();
+                     drawTails(); drawZoraCompanion(); drawHound(); drawDogs(); });
   T("runners", drawPlayers);
   T("runners", drawCoopPartner);
-  drawStallFronts();
-  drawHedges();
-  drawCrowds("front");
+  T("props", () => { drawStallFronts(); drawHedges(); drawCrowds("front"); });
   T("atmos", () => safeFx("atmos.front", FX.front));
   T("weather", () => { drawDebris(); drawStormFront(); drawParticles(); });
-  drawDarkness();
-  drawShadowFront();
+  T("dark", () => { drawDarkness(); drawShadowFront(); });
   const indoors = sectionAt(cameraX + W / 2).world === "ve";
   const baseRain = mission.weather && mission.weather.rain !== undefined ? mission.weather.rain : 0.15;
-  drawRain(indoors ? 0 : baseRain + storm.strength * 0.9);
+  T("rain", () => drawRain(indoors ? 0 : baseRain + storm.strength * 0.9));
   if (mirror) { ctx.restore(); ctx.save(); ctx.fillText = rawFillText; }
   T("atmos", () => safeFx("atmos.grade", FX.grade));
-  drawPrayer();
-  drawScreenFx();
+  T("screenfx", () => { drawPrayer(); drawScreenFx(); });
   ctx.restore();
   ctx.fillText = rawFillText;
-  drawSystemsHud();
+  T("hud", drawSystemsHud);
   if (typeof drawTutorial === "function") drawTutorial();
   drawCheckpointMiss();
-  postBloom();
+  T("bloom", postBloom);
   drawSongBar();
   drawLyrics();
   drawBanner();
