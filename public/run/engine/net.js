@@ -39,7 +39,17 @@ const Coop = (() => {
   // are always two known positions to glide between instead of one to rush at.
   // A little over one update apart, which is what buys the smoothness; much
   // more only adds lag.
+  //
+  // This is the floor, not the figure. A line that delivers packets unevenly
+  // needs a deeper cushion than its unevenness, or the queue runs dry between
+  // updates and the runner holds still until the next one lands. So each peer
+  // gets their own, grown from how late their packets actually run: a good
+  // line stays at the floor, a bad phone on a bad tower gets more, and it
+  // comes back down as the line settles. Measured in the harness: at 120ms of
+  // jitter a fixed 110ms cushion was worse than a rough line, and this is not
+  // worse than one.
   const INTERP_MS = 110;
+  const INTERP_MAX = 320;
   const BUF_MAX = 8;
   const DRIFT = 0.9;             // seconds of song drift before a guest is nudged back in line
   const SEEK_GAP = 4;            // and at most one nudge every few seconds
@@ -197,6 +207,13 @@ const Coop = (() => {
         // one. It is allowed to creep upwards slowly in case a clock drifts.
         const seen = arrived - (typeof d.ts === "number" ? d.ts : arrived);
         p.base = p.base === undefined ? seen : Math.min(seen, p.base + 0.02 * realDtMs());
+        // How late this one ran against the best we have seen. Up quickly, so
+        // a line that turns bad is covered within a packet or two; down slowly,
+        // so one good packet does not throw the cushion away.
+        const late = Math.max(0, seen - p.base);
+        p.jit = p.jit === undefined ? late
+              : p.jit + (late - p.jit) * (late > p.jit ? 0.4 : 0.01);
+        p.delay = Math.min(INTERP_MAX, Math.max(INTERP_MS, p.jit * 1.5 + 60));
         p.buf.push({ st: (typeof d.ts === "number" ? d.ts : arrived - p.base), x: d.x, y: d.y });
         if (p.buf.length > BUF_MAX) p.buf.shift();
         // Just after a missed checkpoint, a snapshot sent before they rewound can't move the deadline on.
@@ -310,7 +327,7 @@ const Coop = (() => {
       clearInterval(st.countTimer);
       if (!st.lobby) return;
       st.lobby = false; st.on = true;
-      for (const p of st.peers.values()) { p.ghost = freshGhost(p.colour); p.ghost.coopId = p.id; p.target = null; p.cp = 0; p.buf = []; p.base = undefined; }
+      for (const p of st.peers.values()) { p.ghost = freshGhost(p.colour); p.ghost.coopId = p.id; p.target = null; p.cp = 0; p.buf = []; p.base = undefined; p.jit = undefined; p.delay = INTERP_MS; }
       st.sendT = 0; st.songT = 0; st.tripT = 0;
       if (typeof coopBegin === "function") coopBegin();
     }, Math.max(0, localAt - now()));
@@ -320,7 +337,7 @@ const Coop = (() => {
   function toLobby(missionId) {
     clearTimeout(st.startTimer); clearInterval(st.countTimer);
     st.on = false; st.lobby = true;
-    for (const p of st.peers.values()) { p.ghost = null; p.target = null; p.cp = 0; p.buf = []; p.base = undefined; }
+    for (const p of st.peers.values()) { p.ghost = null; p.target = null; p.cp = 0; p.buf = []; p.base = undefined; p.jit = undefined; p.delay = INTERP_MS; }
     if (missionId) chooseMission(missionId);
     if (typeof coopToLobby === "function") coopToLobby();
     lobbyChanged();
@@ -353,7 +370,7 @@ const Coop = (() => {
     }
     if (!buf || buf.length === 0) return;
 
-    const at = now() - (p.base || 0) - INTERP_MS;
+    const at = now() - (p.base || 0) - (p.delay || INTERP_MS);
 
     let a = null, b = null;
     for (let i = buf.length - 1; i >= 0; i--) {
