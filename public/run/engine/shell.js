@@ -233,48 +233,18 @@ function frameDue(now, which, minMs) {
    THE GAME LOOP
 --------------------------------------------------------------------------- */
 
-// Add ?debug=1 to the game's address to see how this device is coping: frame rate, how fast the
-// game runs against real time, and what is switched on. Nothing is drawn without it.
-const DEBUG_HUD = (() => { try { return new URLSearchParams(location.search).get("debug") === "1"; } catch (e) { return false; } })();
-const dbg = { t: 0, n: 0, fps: 0, worst: 0, w: 0, game: 0, real: 0, speed: 1, gpu: null };
-function drawDebugHud(now, dt) {
-  const ms = now - (dbg.last || now); dbg.last = now;
-  dbg.t += ms; dbg.n += 1; dbg.w = Math.max(dbg.w, ms); dbg.game += dt; dbg.real += ms / 1000;
-  if (dbg.t >= 1000) { dbg.fps = Math.round(dbg.n * 1000 / dbg.t); dbg.worst = Math.round(dbg.w); dbg.speed = dbg.real ? dbg.game / dbg.real : 1; dbg.t = 0; dbg.n = 0; dbg.w = 0; dbg.game = 0; dbg.real = 0; }
-  if (dbg.gpu === null) {
-    try { const g = document.createElement("canvas").getContext("webgl"); const x = g && g.getExtension("WEBGL_debug_renderer_info"); dbg.gpu = x ? g.getParameter(x.UNMASKED_RENDERER_WEBGL) : "unknown"; } catch (e) { dbg.gpu = "unknown"; }
-  }
-  const lines = [
-    dbg.fps + " fps · worst frame " + dbg.worst + " ms · game speed " + Math.round(dbg.speed * 100) + "%",
-    "3D Koda " + (typeof Char3D !== "undefined" && Char3D.ready("koda") ? "on" : "off") +
-      " · 3D city " + (typeof World3D !== "undefined" && World3D.debug ? World3D.debug().state : "-") +
-      " · effects " + (typeof Atmos !== "undefined" ? Atmos.quality() : "-"),
-    "screen " + innerWidth + "x" + innerHeight + " @" + (window.devicePixelRatio || 1) + " · " + String(dbg.gpu).slice(0, 40)
-  ];
-  ctx.save();
-  // Above the touch buttons, so a phone shows all of it.
-  ctx.fillStyle = "rgba(0, 0, 0, 0.7)"; ctx.fillRect(8, 112, 720, 86);
-  ctx.fillStyle = "#7fe39a"; ctx.font = "600 14px monospace"; ctx.textAlign = "left";
-  lines.concat(SMOOTH ? ["smooth mode on"] : []).forEach((l, i) => ctx.fillText(l, 16, 134 + i * 19));
-  ctx.restore();
-}
-
 function gameLoop(now) {
   if (gameState !== "playing") {
     if (gameState === "finished") { render(); }
     return;
   }
   if (!frameDue(now, "run", 10)) { requestAnimationFrame(gameLoop); return; }
-  // Smooth mode lets a slow frame count for up to twice as much, worked out in two steps, so a phone
-  // that draws few frames still keeps up with the song.
-  const dt = Math.max(0, Math.min(SMOOTH ? 0.1 : 0.05, (now - lastTime) / 1000));
+  const dt = Math.max(0, Math.min(0.05, (now - lastTime) / 1000));
   lastTime = now;
   frameTime += dt;
-  if (dt > 0.05) { update(dt / 2); update(dt / 2); }
-  else update(dt);
+  update(dt);
   // A drawing error never stops the run: the next frame still comes.
   try { render(); } catch (e) { if (!gameLoop.warned) { gameLoop.warned = true; console.warn("[render]", e); } }
-  if (DEBUG_HUD) drawDebugHud(now, dt);
   updateHud();
   if (gameState === "playing") requestAnimationFrame(gameLoop);
   else if (gameState === "finished") requestAnimationFrame(finishedLoop);

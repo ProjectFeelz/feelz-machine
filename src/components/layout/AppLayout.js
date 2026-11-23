@@ -97,7 +97,7 @@ function SplashScreen() {
 }
 
 // ── LIVE chip ────────────────────────────────────────────────────────────────
-// Top left of the phone's top bar on every page: red and pulsing with the
+// In the phone's top bar, beside the bell, on every page: red and pulsing with the
 // host's picture while somebody is live, amber when a stream is about to
 // start, and a quiet LIVE button to the Live page the rest of the time, so
 // streams and replays can always be found on a phone.
@@ -120,7 +120,7 @@ function LiveChip() {
   const go = () => navigate(first && (isLive ? live === 1 : soon === 1) ? `/session/${first.id}` : '/live');
   return (
     <button onClick={go} aria-label={isLive ? 'Watch the live stream' : 'See the upcoming stream'}
-      className={`pointer-events-auto flex items-center gap-1.5 h-8 pl-1 pr-2.5 rounded-full border max-w-[55vw] ${isLive ? 'bg-red-500/15 border-red-500/40' : 'bg-amber-400/10 border-amber-400/30'}`}>
+      className={`pointer-events-auto flex items-center gap-1.5 h-8 pl-1 pr-2.5 rounded-full border ${isLive ? 'bg-red-500/15 border-red-500/40' : 'bg-amber-400/10 border-amber-400/30'}`}>
       <span className={`relative w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ring-2 ${isLive ? 'ring-red-500 fm-live-ring' : 'ring-amber-400'}`}>
         {host?.profile_image_url
           ? <img src={host.profile_image_url} alt="" className="w-full h-full object-cover" />
@@ -129,9 +129,6 @@ function LiveChip() {
       <span className={`text-[11px] font-black tracking-wide ${isLive ? 'text-red-300' : 'text-amber-300'}`}>
         {isLive ? (live > 1 ? `${live} LIVE` : 'LIVE') : 'SOON'}
       </span>
-      {host?.artist_name && (
-        <span className="text-[11px] font-bold text-white/80 truncate">{host.artist_name}</span>
-      )}
       <style>{`
         .fm-live-ring { animation: fm-live-ring 1.6s ease-in-out infinite; }
         @keyframes fm-live-ring { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.6); } 50% { box-shadow: 0 0 0 5px rgba(239,68,68,0); } }
@@ -158,10 +155,12 @@ function MobileBellButton() {
       className="md:hidden fixed top-0 left-0 right-0 z-[60] flex items-center justify-between px-4 pointer-events-none"
       style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)', height: 'calc(max(env(safe-area-inset-top, 0px), 12px) + 44px)' }}
     >
-      <LiveChip />
+      <span />
       <div className="flex items-center space-x-1.5 pointer-events-auto">
-        {/* Streaks are not shown here any more, to keep the bar clear for
-            the LIVE button. They are reported in notifications instead. */}
+        {/* The LIVE button sits where the streak badges were, next to the bell,
+            so it never lands on a page's own title on the left. Streaks are
+            reported in notifications instead. */}
+        <LiveChip />
 
         {/* Notifications bell */}
         <button

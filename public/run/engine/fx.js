@@ -32,7 +32,7 @@ function showToast(title, text, kind, seconds) { toast = { title, text, kind, ti
 
 /* ---------- the finish: bloom, vignette and fine scanlines ---------- */
 
-const fx = { bloom: !SMOOTH && typeof ctx.filter === "string", small: null, sk: null, vignette: null, lines: null, last: 0, slow: 0 };
+const fx = { bloom: typeof ctx.filter === "string", small: null, sk: null, vignette: null, lines: null, last: 0, slow: 0 };
 
 function postBloom() {
   if (!fx.bloom) return;
