@@ -105,3 +105,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
   #minimap { width: 120px; height: 90px; }
   .hud-objective { font-size: 12px; }
 }
+
+.hud-objective.pulse { animation: objPulse 2.4s ease-out; }
+@keyframes objPulse {
+  0% { transform: translateX(-50%) scale(1.25); background: rgba(242, 181, 68, .9); color: #1b1203; }
+  40% { transform: translateX(-50%) scale(1.12); background: rgba(242, 181, 68, .9); color: #1b1203; }
+  100% { transform: translateX(-50%) scale(1); }
+}

@@ -318,9 +318,13 @@ function driveHoldsClock(realDt) {
     return true;
   }
   if (moving) {
+    const wasHeld = songHeld;
     songHeld = false; sfx.rewindTape(false);
     if (drive.rewinding || drive.stopT > 0.25) {
       if (soundOn && songAudio.paused && !reading) resumeSong(); else if (drive.rewinding) seekSong(songClock);
+    } else if (wasHeld && soundOn && songAudio.paused && !reading) {
+      // A step back shorter than a quarter of a second still paused the song: start it again too.
+      resumeSong();
     }
     drive.stopT = 0; drive.rewinding = false; drive.rate = 1;
     if (!drive.trail.length || songClock - drive.trail[drive.trail.length - 1].t > 0.05) {

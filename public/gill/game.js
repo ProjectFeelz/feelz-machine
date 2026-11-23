@@ -60,18 +60,18 @@ function staticModel(name) {
 
 /* ---------- renderer and scene ---------- */
 const renderer = new THREE.WebGLRenderer({ antialias: !phone, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, phone ? 1.75 : 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, phone ? 1.25 : 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = phone ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 $("stage").appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x15121c);
-scene.fog = new THREE.Fog(0x15121c, 38, 90);
+scene.fog = new THREE.Fog(0x15121c, 28, 70);
 try {
   const pm = new THREE.PMREMGenerator(renderer);
   scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -79,7 +79,7 @@ try {
 } catch (e) { /* lights only */ }
 
 const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.5, 220);
-const CAM_OFFSET = new THREE.Vector3(0, 21, 15.5);
+const CAM_OFFSET = new THREE.Vector3(0, 11.5, 8.5);
 
 const hemi = new THREE.HemisphereLight(0xb9c8ff, 0x3a2a1c, 0.7);
 scene.add(hemi);
@@ -161,14 +161,16 @@ function buildGround() {
 
 /* ---------- buildings (static, with collision boxes) ---------- */
 const blockers = [];        // { minX, maxX, minZ, maxZ, mesh, mats, faded }
-async function placeBuilding(name, x, z, yaw, height) {
+// Square to the streets only (0, 90, 180, 270 degrees), so a building's collision box is its real
+// footprint. `maxFoot` caps how wide it can be, so ways into each zone stay open.
+async function placeBuilding(name, x, z, yaw, height, maxFoot = 13) {
   const src = await staticModel(name);
   if (!src) return;
   const m = src.clone(true);
-  m.rotation.y = yaw;
+  m.rotation.y = Math.round(yaw / (Math.PI / 2)) * (Math.PI / 2);
   const box = new THREE.Box3().setFromObject(m);
   const size = box.getSize(new THREE.Vector3());
-  const k = height / Math.max(0.001, size.y);
+  const k = Math.min(height / Math.max(0.001, size.y), maxFoot / Math.max(0.001, size.x, size.z));
   m.scale.setScalar(k);
   const box2 = new THREE.Box3().setFromObject(m);
   const c = box2.getCenter(new THREE.Vector3());
@@ -199,10 +201,11 @@ async function buildCity(onProgress) {
       slots.push([a + off, inset, 0], [a + off, ZONE - inset, Math.PI], [inset, a + off, Math.PI / 2], [ZONE - inset, a + off, -Math.PI / 2]);
     }
     // Corners.
-    slots.push([inset, inset, Math.PI / 4], [ZONE - inset, inset, -Math.PI / 4], [inset, ZONE - inset, Math.PI * 0.75], [ZONE - inset, ZONE - inset, -Math.PI * 0.75]);
+    slots.push([inset, inset, 0], [ZONE - inset, inset, 0], [inset, ZONE - inset, Math.PI], [ZONE - inset, ZONE - inset, Math.PI]);
     // A little cover inside, not in the final zone (it needs room to run).
-    if (!z.final) slots.push([a - 10 + r() * 4, a + 9 + r() * 3, r() * Math.PI], [a + 9 + r() * 3, a - 11 + r() * 4, r() * Math.PI]);
-    for (const [sx, sz, yaw] of slots) jobs.push(() => placeBuilding(pick(), o.x + sx, o.y + sz, yaw, 7 + r() * 7));
+    const cover = z.final ? [] : [[a - 11, a + 11, Math.floor(r() * 4) * Math.PI / 2], [a + 11, a - 11, Math.floor(r() * 4) * Math.PI / 2]];
+    for (const [sx, sz, yaw] of slots) jobs.push(() => placeBuilding(pick(), o.x + sx, o.y + sz, yaw, 7 + r() * 7, 12));
+    for (const [sx, sz, yaw] of cover) jobs.push(() => placeBuilding(pick(), o.x + sx, o.y + sz, yaw, 4 + r() * 3, 7));
   }
   let done = 0;
   // A few at a time, so a phone is never asked to parse everything at once.
@@ -253,6 +256,112 @@ function sightClear(ax, az, bx, bz) {
   return true;
 }
 
+
+/* ---------- arm correction (ported from Feelz Run's char3d.js) ----------
+   The moves were made on bodies with narrower shoulders, so arms sink into
+   chests and hands fold across the middle. After each animation step the arms
+   are turned out until elbows and hands sit beside the body, and running arms
+   swing opposite the legs. Same numbers as Feelz Run. */
+function keepRest(root, bone) {
+  const list = root.userData.rest || (root.userData.rest = []);
+  if (!list.some(r => r.bone === bone)) list.push({ bone, q: bone.quaternion.clone() });
+}
+function restoreRest(root) { for (const r of root.userData.rest || []) r.bone.quaternion.copy(r.q); }
+const findBone = (root, re) => { let f = null; root.traverse(o => { if (!f && o.isBone && re.test(o.name)) f = o; }); if (f) keepRest(root, f); return f; };
+const ARM_SWING = 0.3;
+const _sw = { a: new THREE.Vector3(), b: new THREE.Vector3(), q: new THREE.Quaternion(), pq: new THREE.Quaternion(), axis: new THREE.Vector3(), rq: new THREE.Quaternion() };
+function armSwing(root, amount) {
+  if (!root.userData.swing) root.userData.swing = ["Left", "Right"].map(sd => ({ arm: findBone(root, new RegExp(sd + "Arm$")), hip: findBone(root, new RegExp(sd + "UpLeg$")), knee: findBone(root, new RegExp(sd + "Leg$")) }));
+  root.updateMatrixWorld(true);
+  root.getWorldQuaternion(_sw.rq);
+  _sw.axis.set(1, 0, 0).applyQuaternion(_sw.rq).normalize();
+  for (const side of root.userData.swing) {
+    if (!side.arm || !side.hip || !side.knee) continue;
+    side.hip.getWorldPosition(_sw.a); side.knee.getWorldPosition(_sw.b);
+    root.worldToLocal(_sw.a); root.worldToLocal(_sw.b);
+    const len = Math.max(1e-4, _sw.a.distanceTo(_sw.b));
+    const legFwd = Math.max(-1, Math.min(1, (_sw.b.z - _sw.a.z) / len / 0.6));
+    side.arm.parent.getWorldQuaternion(_sw.pq);
+    _sw.q.setFromAxisAngle(_sw.axis, legFwd * amount);
+    side.arm.quaternion.premultiply(_sw.pq.clone().invert().multiply(_sw.q).multiply(_sw.pq));
+    side.arm.updateMatrixWorld(true);
+  }
+}
+const ARM_CLEAR = 1.05, ARM_CLEAR_MAX = 0.7, ARM_CLAVICLE = 0.3, HAND_CLEAR = 0.85, HAND_CLEAR_MAX = 0.9, BODY_DEPTH = 0.55;
+const ARM_WIDE = 1.9, ARM_WIDE_MAX = 1.1, ARM_WIDE_LIFT = 0.45;
+const _ac = {};
+for (const k of ["c", "l", "r", "e", "s", "lat", "up", "fwd", "n", "t"]) _ac[k] = new THREE.Vector3();
+_ac.q = new THREE.Quaternion(); _ac.pq = new THREE.Quaternion();
+function armClear(root, wide) {
+  if (!root.userData.clear) {
+    const chest = findBone(root, /Spine2$/) || findBone(root, /Spine1$/), neck = findBone(root, /Neck$/);
+    root.userData.clear = { chest, neck, sides: ["Left", "Right"].map(sd => ({ clav: findBone(root, new RegExp(sd + "Shoulder$")), arm: findBone(root, new RegExp(sd + "Arm$")), fore: findBone(root, new RegExp(sd + "ForeArm$")) })) };
+  }
+  const C = root.userData.clear;
+  if (!C.chest || !C.neck || C.sides.some(sd => !sd.arm || !sd.fore)) return;
+  root.updateMatrixWorld(true);
+  const W = (b, v) => b.getWorldPosition(v);
+  W(C.sides[0].arm, _ac.l); W(C.sides[1].arm, _ac.r);
+  const sw = _ac.l.distanceTo(_ac.r) / 2;
+  if (sw < 1e-5) return;
+  _ac.c.addVectors(_ac.l, _ac.r).multiplyScalar(0.5);
+  _ac.lat.subVectors(_ac.l, _ac.r).normalize();
+  W(C.neck, _ac.up); W(C.chest, _ac.t); _ac.up.sub(_ac.t);
+  _ac.up.addScaledVector(_ac.lat, -_ac.up.dot(_ac.lat)).normalize();
+  _ac.fwd.crossVectors(_ac.lat, _ac.up).normalize();
+  const outOf = (sd, k) => { W(sd.fore, _ac.e); return k * _ac.e.sub(_ac.c).dot(_ac.lat) / sw; };
+  const turn = (bone, ang) => {
+    bone.parent.getWorldQuaternion(_ac.pq);
+    _ac.q.setFromAxisAngle(_ac.fwd, ang);
+    bone.quaternion.premultiply(_ac.pq.clone().invert().multiply(_ac.q).multiply(_ac.pq));
+    bone.updateMatrixWorld(true);
+  };
+  C.sides.forEach((sd, i) => {
+    const k = i === 0 ? 1 : -1;
+    W(sd.arm, _ac.s); W(sd.fore, _ac.e);
+    _ac.n.subVectors(_ac.e, _ac.s);
+    if (_ac.n.dot(_ac.up) > 0) return;
+    const ex = outOf(sd, k);
+    const want = wide ? ARM_WIDE : ARM_CLEAR;
+    if (ex >= want) return;
+    // Seen from above, an elbow in front of the chest still reads as folded in, so no exception for depth here.
+    const upper = Math.max(0.2, Math.hypot(_ac.n.dot(_ac.lat), _ac.n.dot(_ac.up)) / sw);
+    const ang = Math.min(wide ? ARM_WIDE_MAX : ARM_CLEAR_MAX, (want - ex) / upper);
+    const share = sd.clav ? ARM_CLAVICLE : 0;
+    if (sd.clav) turn(sd.clav, ang * share);
+    turn(sd.arm, ang * (1 - share));
+    if (outOf(sd, k) < ex) { if (sd.clav) turn(sd.clav, -2 * ang * share); turn(sd.arm, -2 * ang * (1 - share)); }
+  });
+  const handOf = sd => sd.hand || (sd.hand = (() => { let f = null; sd.fore.traverse(o => { if (!f && o !== sd.fore && o.isBone && /Hand$/.test(o.name)) f = o; }); return f; })());
+  C.sides.forEach((sd, i) => {
+    const k = i === 0 ? 1 : -1;
+    const hand = handOf(sd);
+    if (!hand) return;
+    const handOut = () => { W(hand, _ac.e); return k * _ac.e.sub(_ac.c).dot(_ac.lat) / sw; };
+    const hx = handOut();
+    if (hx >= HAND_CLEAR) return;
+    W(sd.fore, _ac.s); W(hand, _ac.e);
+    const fore = Math.max(0.2, _ac.s.distanceTo(_ac.e) / sw);
+    const ang = Math.min(HAND_CLEAR_MAX, (HAND_CLEAR - hx) / fore);
+    _ac.n.subVectors(_ac.e, _ac.s).normalize();
+    _ac.t.crossVectors(_ac.n, _ac.lat);
+    if (_ac.t.lengthSq() < 1e-6) return;
+    _ac.t.normalize();
+    const spin = (bone, a) => { bone.parent.getWorldQuaternion(_ac.pq); _ac.q.setFromAxisAngle(_ac.t, a); bone.quaternion.premultiply(_ac.pq.clone().invert().multiply(_ac.q).multiply(_ac.pq)); bone.updateMatrixWorld(true); };
+    spin(sd.fore, ang);
+    if (handOut() < hx) spin(sd.fore, -2 * ang);
+  });
+  if (wide) for (const sd of C.sides) {
+    const hand = handOf(sd);
+    if (!hand) continue;
+    const ahead = () => { W(hand, _ac.e); W(sd.arm, _ac.s); return _ac.e.sub(_ac.s).dot(_ac.fwd); };
+    const before = ahead();
+    const swing = a => { sd.arm.parent.getWorldQuaternion(_ac.pq); _ac.q.setFromAxisAngle(_ac.lat, a); sd.arm.quaternion.premultiply(_ac.pq.clone().invert().multiply(_ac.q).multiply(_ac.pq)); sd.arm.updateMatrixWorld(true); };
+    swing(ARM_WIDE_LIFT);
+    if (ahead() < before) swing(-2 * ARM_WIDE_LIFT);
+  }
+}
+
 /* ---------- animated characters ---------- */
 function stripRootMotion(clip) {
   for (const t of clip.tracks) {
@@ -265,17 +374,24 @@ class Actor {
   constructor(gltf, metres) {
     this.root = new THREE.Group();
     const model = gltf.scene;
-    const box = new THREE.Box3().setFromObject(model);
-    const h = box.getSize(new THREE.Vector3()).y || 1;
-    model.scale.setScalar(metres / h);
-    const box2 = new THREE.Box3().setFromObject(model);
-    model.position.y = -box2.min.y;
+    // Measured by the skeleton, the way Feelz Run does it: a skinned mesh's own
+    // box ignores the bones, so it comes out at the wrong size.
+    this.root.add(model);
+    this.root.updateMatrixWorld(true);
+    let lo = Infinity, hi = -Infinity;
+    const v = new THREE.Vector3();
+    model.traverse(o => { if (o.isBone) { o.getWorldPosition(v); lo = Math.min(lo, v.y); hi = Math.max(hi, v.y); } });
+    if (!isFinite(lo)) { const box = new THREE.Box3().setFromObject(model); lo = box.min.y; hi = box.max.y; }
+    const k = metres / Math.max(0.01, hi - lo);
+    model.scale.multiplyScalar(k);
+    model.position.y = -lo * k;
     model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     this.root.add(model);
     this.mixer = new THREE.AnimationMixer(model);
     this.clips = {};
     for (const c of gltf.animations) { stripRootMotion(c); this.clips[c.name] = this.mixer.clipAction(c); }
     this.current = null;
+    this.model = model;
     this.pos = this.root.position;
     this.yaw = 0;
   }
@@ -295,7 +411,15 @@ class Actor {
     return a.getClip().duration / speed;
   }
   face(yaw, t) { this.yaw = angleLerp(this.yaw, yaw, t); this.root.rotation.y = this.yaw; }
-  update(dt) { this.mixer.update(dt); }
+  update(dt) {
+    restoreRest(this.model);
+    this.mixer.update(dt);
+    // Fix the arms on the moves where they sit inside the body. Fight moves
+    // and the takedown keep their own arms, they reach out on purpose.
+    const name = this.current ? this.current.getClip().name : "";
+    if (/^(run|sprint)$/.test(name)) armSwing(this.model, ARM_SWING);
+    if (!/^(punch|kick|takedown|hit|ko|alert)$/.test(name)) armClear(this.model, /^crouch/.test(name));
+  }
 }
 async function makeActor(file, metres) { return new Actor(await loadGLB(MODELS + file), metres); }
 
@@ -345,9 +469,34 @@ const stick = { id: null, x: 0, z: 0, mag: 0 };
   const tap = (id, fn) => $(id).addEventListener("pointerdown", e => { e.preventDefault(); if (state === "play") fn(); });
   tap("btnAttack", attack); tap("btnAction", action); tap("btnSneak", toggleSneak);
 })();
+/* Game controllers (Xbox, PlayStation and the like, through the browser's gamepad support):
+   left stick or d-pad moves, A hits, X is the action, B sneaks, RT sprints, Start pauses. */
+const pad = { x: 0, z: 0, mag: 0, prev: [] };
+function pollPad() {
+  const list = navigator.getGamepads ? navigator.getGamepads() : [];
+  const g = [...list].find(q => q && q.connected);
+  pad.x = 0; pad.z = 0; pad.mag = 0;
+  if (!g) return;
+  const btn = i => !!(g.buttons[i] && (g.buttons[i].pressed || g.buttons[i].value > 0.5));
+  let x = g.axes[0] || 0, z = g.axes[1] || 0;
+  if (btn(14)) x = -1; if (btn(15)) x = 1; if (btn(12)) z = -1; if (btn(13)) z = 1;
+  const m = Math.hypot(x, z);
+  if (m > 0.22) { pad.x = x / m; pad.z = z / m; pad.mag = btn(7) || btn(10) ? 1 : Math.min(0.9, m); }
+  const press = i => btn(i) && !pad.prev[i];
+  if (state === "title") { if ((press(0) || press(9)) && !$("playBtn").disabled) $("playBtn").click(); }
+  else if (state === "cutscene") { if (press(0) || press(2)) advanceCutscene(); if (press(9)) endCutscene(); }
+  else if (state === "paused") { if (press(9) || press(1) || press(0)) resume(); }
+  else if (state === "play") {
+    if (press(0)) attack();
+    if (press(2) || press(3)) action();
+    if (press(1)) toggleSneak();
+    if (press(9)) pause();
+  }
+  pad.prev = g.buttons.map((b, i) => btn(i));
+}
 function readInput() {
   const k = keyVector();
-  const s = stick.mag ? stick : k;
+  const s = stick.mag ? stick : pad.mag ? pad : k;
   input.x = s.x; input.z = s.z; input.mag = s.mag;
 }
 function toggleSneak() { input.sneak = !input.sneak; $("btnSneak").classList.toggle("on", input.sneak); }
@@ -370,7 +519,13 @@ function writeSave() { try { localStorage.setItem("gill.save", JSON.stringify(sa
 /* ---------- HUD ---------- */
 let toastT = 0;
 function toast(text, secs = 3) { const t = $("toast"); t.textContent = text; t.classList.add("show"); toastT = secs; }
-function setObjective(text) { $("objective").textContent = text; }
+function setObjective(text) {
+  const el = $("objective");
+  if (el.textContent === text) return;
+  el.textContent = text;
+  // A new objective flashes, so it is never missed.
+  el.classList.remove("pulse"); void el.offsetWidth; el.classList.add("pulse");
+}
 function drawHearts() { $("hearts").textContent = "♥".repeat(Math.max(0, health)) + "♡".repeat(Math.max(0, 5 - health)); }
 function drawClues() { $("clueCount").textContent = save.clues.length; $("clueTotal").textContent = S.cluesToFinal; }
 function refreshObjective() {
@@ -478,7 +633,7 @@ async function spawnZone(z) {
       scene.add(a.root);
       a.play("walk");
       enemies.push({ a, zone: z.id, route, leg: 1, state: "patrol", meter: 0, hp: kind === "gilded" ? 5 : 3,
-        cool: 0, hitT: 0, lastSeen: new THREE.Vector3(), searchT: 0, speed: 1.6 + r() * 0.4 });
+        cool: 0, hitT: 0, lastSeen: new THREE.Vector3(), searchT: 0, speed: 2 + r() * 0.5 });
       if (state === "play") refreshObjective();
     }).catch(() => {});
   }
@@ -644,7 +799,7 @@ function updateKoda(dt) {
   if (attackLock > 0) { attackLock -= dt; koda.update(dt); return; }
   const sneaking = input.sneak;
   const sprint = !sneaking && input.mag > 0.93;
-  const speed = input.mag === 0 ? 0 : sneaking ? 1.9 : sprint ? 6.8 : 4.3;
+  const speed = input.mag === 0 ? 0 : sneaking ? 2.6 : sprint ? 8.2 : 5.4;
   if (speed > 0) {
     moveWithCollision(koda.pos, input.x * speed * dt, input.z * speed * dt, 0.45);
     koda.face(Math.atan2(input.x, input.z), Math.min(1, dt * 14));
@@ -781,7 +936,7 @@ function updateEnemies(dt) {
     if (e.cool > 0) continue;
     if (d > 1.45) {
       const tx = e.lastSeen.x - a.pos.x, tz = e.lastSeen.z - a.pos.z, td = Math.hypot(tx, tz) || 1;
-      moveWithCollision(a.pos, tx / td * 4.6 * dt, tz / td * 4.6 * dt, 0.45);
+      moveWithCollision(a.pos, tx / td * 5.4 * dt, tz / td * 5.4 * dt, 0.45);
       a.face(Math.atan2(tx, tz), Math.min(1, dt * 8));
       a.play("run");
     } else {
@@ -844,6 +999,64 @@ function drawMinimap() {
   mm.fillStyle = "#fff"; mm.beginPath(); mm.arc(ox + koda.pos.x * k, oz + koda.pos.z * k, 3, 0, 7); mm.fill();
 }
 
+/* ---------- where to go next ----------
+   An arrow on the ground at Koda's feet, pointing at what the objective is
+   about: the clue in this zone, the race ring, Zora, or the way out. */
+const guide = (() => {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 1.6); shape.lineTo(0.55, 0.7); shape.lineTo(0.2, 0.7); shape.lineTo(0.2, 0); shape.lineTo(-0.2, 0); shape.lineTo(-0.2, 0.7); shape.lineTo(-0.55, 0.7); shape.closePath();
+  const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+  m.rotation.x = Math.PI / 2;   // lies flat, pointing along the group's +Z (the way it is turned)
+  const g = new THREE.Group(); g.add(m); g.visible = false; scene.add(g);
+  return g;
+})();
+function objectiveTarget() {
+  if (escape) return { x: escape.exit.x, z: escape.exit.y };
+  if (zora && zora.waiting) return { x: zora.pos.x, z: zora.pos.z };
+  if (race) return { x: race.spot.end.x, z: race.spot.end.y };
+  const here = currentZone;
+  if (here) {
+    const c = clues.find(q => q.zone === here.id);
+    if (c) return { x: c.g.position.x, z: c.g.position.z };
+    const rs = raceSpots[here.id];
+    if (rs && !save.clues.includes(here.id)) return { x: rs.start.x, z: rs.start.y };
+    if (here.focus === "fight" && !save.clues.includes(here.id)) {
+      const e = enemies.find(q => q.zone === here.id && q.state !== "ko");
+      if (e) return { x: e.a.pos.x, z: e.a.pos.z };
+    }
+  }
+  // Otherwise the nearest zone that still has a clue to give.
+  let best = null, bd = Infinity;
+  for (const z of S.zones) {
+    if (z.final || save.clues.includes(z.id)) continue;
+    const c = zoneCenter(z), d = Math.hypot(c.x - koda.pos.x, c.y - koda.pos.z);
+    if (d < bd) { bd = d; best = { x: c.x, z: c.y }; }
+  }
+  return best;
+}
+function updateGuide(now) {
+  const t = objectiveTarget();
+  const d = t ? Math.hypot(t.x - koda.pos.x, t.z - koda.pos.z) : 0;
+  guide.visible = !!t && d > 3;
+  if (!guide.visible) return;
+  guide.position.set(koda.pos.x, 0.06, koda.pos.z);
+  guide.rotation.y = Math.atan2(t.x - koda.pos.x, t.z - koda.pos.z);
+  // the arrow sits a step out from his feet and breathes a little
+  guide.children[0].position.set(0, 0, 1.4 + Math.sin(now / 260) * 0.15);
+}
+
+/* ---------- debug readout (?debug=1) ---------- */
+const debugOn = /[?&]debug=1/.test(location.search);
+const dbgEl = debugOn ? Object.assign(document.body.appendChild(document.createElement("div")), { style: "position:fixed;left:8px;bottom:8px;z-index:50;font:600 12px monospace;color:#7fe39a;background:rgba(0,0,0,.7);padding:6px 8px;border-radius:6px;pointer-events:none" }) : null;
+const dbg = { t: 0, n: 0, worst: 0 };
+function drawDebug(now, real) {
+  dbg.t += real; dbg.n++; dbg.worst = Math.max(dbg.worst, real);
+  if (dbg.t >= 1) {
+    dbgEl.textContent = `${dbg.n} fps · worst ${Math.round(dbg.worst * 1000)} ms · ${innerWidth}x${innerHeight} @${renderer.getPixelRatio().toFixed(2)} · ${renderer.info.render.calls} draws`;
+    dbg.t = 0; dbg.n = 0; dbg.worst = 0;
+  }
+}
+
 /* ---------- camera ---------- */
 const camTarget = new THREE.Vector3();
 function updateCamera(dt, snap) {
@@ -860,9 +1073,13 @@ function updateCamera(dt, snap) {
 let lastT = performance.now(), mmT = 0;
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  const real = Math.min(0.1, (now - lastT) / 1000); lastT = now;
+  pollPad();
+  const dt = Math.min(0.05, real);
+  if (debugOn) drawDebug(now, real);
   if (state === "play" && koda) {
-    tick(dt, now);
+    // A slow frame is worked out in two steps, so the game keeps real time instead of slowing down.
+    if (real > 0.05) { tick(real / 2, now); tick(real / 2, now); } else tick(real, now);
   } else if (koda && state === "cutscene") {
     koda.update(dt); if (zora) zora.update(dt);
   }
@@ -879,6 +1096,7 @@ function tick(dt, now) {
     for (const c of clues) { c.gem.rotation.y += dt * 1.6; c.gem.position.y = 1.1 + Math.sin(now / 400) * 0.12;
       if (Math.hypot(koda.pos.x - c.g.position.x, koda.pos.z - c.g.position.z) < 1.4) { takeClue(c); break; } }
     updateOcclusion();
+    updateGuide(now);
     if ((mmT -= dt) <= 0) { drawMinimap(); mmT = 0.1; }
     if (toastT > 0 && (toastT -= dt) <= 0) $("toast").classList.remove("show");
     updateCamera(dt);
@@ -950,6 +1168,6 @@ $("newBtn").addEventListener("click", () => startGame(true));
   $("playBtn").disabled = false;
   toTitle(false);
   // Expose a little for testing from the console.
-  window.GILL = { get koda() { return koda; }, get zora() { return zora; }, enemies, clues, npcs, get state() { return state; }, save: () => save, blockers, keys, input,
+  window.GILL = { guide, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, enemies, clues, npcs, get state() { return state; }, save: () => save, blockers, keys, input,
     sim(seconds) { let t = performance.now(); for (let i = 0; i < seconds * 30; i++) { t += 33; tick(1 / 30, t); } } };
 })();
