@@ -170,3 +170,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .tip { top: calc(56px + var(--sat)); font-size: 12px; padding: 7px 10px; max-width: 40vw; }
   .title-buttons.col { gap: 8px; }
 }
+
+.timer.low { color: #ff5a46; animation: low 1s steps(2) infinite; }
+@keyframes low { 50% { opacity: .55; } }
+.rows .fail { margin: 6px 0 4px; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.5; }

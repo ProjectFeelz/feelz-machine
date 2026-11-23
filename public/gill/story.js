@@ -61,32 +61,40 @@ window.GILL_STORY = {
       cutscene: "opening",
       goal: "Zora is gone. Search the first four quadrants and bring the song back together." },
     { song: "Selina",          trackId: "b1be1034-20f0-4829-a12d-23200e805d69", quadrants: ["q03", "q04", "q05", "q06"],
-      goal: "Somebody chalked her route on a wall. Follow it east." },
+      goal: "You keep seeing her everywhere. The streets won't hold still. Get through without being detected." },
     { song: "Put It On Me",    trackId: "476e10c7-8465-4c14-9345-81be91aafa8a", quadrants: ["q09", "q10", "q11", "q12"],
-      goal: "A ticket stub with a dock number. Work the south side." },
+      goal: "The Veil came down in pieces. Clear the way to her trail and help the people stuck behind the rubble." },
     { song: "Free ride",       trackId: "9becf0b9-dd08-4c2b-afac-503f9462c3f0", quadrants: ["q02", "q03", "q06", "q07"],
-      goal: "Tyre marks heading for the river. Move fast." },
+      goal: "The streets are open. Race the song." },
     { song: "Where You Dey",   trackId: "de00fb92-df32-40cc-9b64-23818efedc68", quadrants: ["q04", "q05", "q11", "q12"],
       cutscene: "vision",
-      goal: "Her voice on a cassette. Find where it was recorded." },
+      goal: "Search for her. Every clue counts." },
     { song: "Baddest",         trackId: "871cfb08-a17b-46ed-a1f8-624810a66087", quadrants: ["q06", "q08", "q09", "q11"],
-      goal: "The wardens know you're coming. Hit them where they stand." },
+      goal: "The Circle's wardens hold this ground. Fight your way through." },
     { song: "To My Angels",    trackId: "8811396e-9f2d-47ac-970f-e9c645348f8d", quadrants: ["q01", "q07", "q09", "q10"],
       cutscene: "neighbours",
-      goal: "The neighbours saw them take her. Ask around, stay quiet." },
+      goal: "The people of the city have your back. Find the safe place and listen to them." },
     { song: "Not at All",      trackId: "ba0c4b70-7da8-475f-9fa8-a3a83e1979b4", quadrants: ["q02", "q05", "q08", "q12"],
-      goal: "A key on a red cord, on a sleeping guard. Take it without waking anyone." },
+      goal: "You can't see the patrols here. Follow what the neighbours tell you and slip through." },
     { song: "Can't Copy You",  trackId: "f82186d2-8a76-4377-b7d8-e50837459d9c", quadrants: ["q03", "q06", "q10", "q11"],
-      goal: "Her drawing of the two of you. Somebody's been copying her steps." },
+      goal: "The Veil sends copies of her. They look like Zora, but they aren't. Trust what you know." },
     { song: "That Juice",      trackId: "70dc6426-0b9a-4209-85f5-1ce7016a8774", quadrants: ["q04", "q09", "q10", "q12"],
-      goal: "A map of the tunnels. Race the guards through them." },
+      goal: "The closer you get, the more colour comes back. Keep going." },
     { song: "Thinking of You", trackId: "effed5a5-cc3a-431f-943e-8546863df254", quadrants: ["q05", "q07", "q11", "q12"],
       cutscene: "tower",
-      goal: "Her scarf on the gate of the old tower. She's close." },
+      goal: "The water goes dark. Chase what took her." },
     { song: "Run",             trackId: "7305e3c4-d143-44c1-9c87-d8fc54564942", quadrants: ["q09", "q10", "q11", "q12"],
       cutscene: "finalOpen", final: true,
       goal: "Bring the last song together and get Zora out." }
   ],
+
+  /* Story notes from the Story Bible, for the missions still to be built out:
+     The Circle took Zora: Koda and Zora together threaten the reality they built.
+     Breaking the Veil made the world brighter and freed people; the Circle wants its order back.
+     Nyoka (The Snake) betrays his own people to the Circle. Koda's brother is an ally.
+     Ahead: 2 Selina wobbles like a hallucination; 3 rubble clearing that unlocks superspeed for 4;
+     8 hidden patrols, guided by the community; 9 Zora copies and music puzzles; 10 grey world that
+     gains colour, ending underwater; 11 the dark water chase. Voices: Steve C-SA (Koda), Cynth (Zora). */
 
   // Placeholder scenes. Each one shows as a single card until it is recorded.
   cutscenes: {

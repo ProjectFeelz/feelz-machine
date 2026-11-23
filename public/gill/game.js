@@ -633,7 +633,7 @@ function startMusic(m) {
   for (let i = 0; i < n; i++) {
     const src = ac.createBufferSource();
     src.buffer = music.stems ? music.stems[i] : music.buffer;
-    src.loop = true;
+    src.loop = false;
     let node = src;
     if (!music.stems) for (const [type, f] of BANDS[i % BANDS.length]) {
       const fl = ac.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = 0.7;
@@ -645,12 +645,16 @@ function startMusic(m) {
     music.sources.push(src); music.parts.push(g);
   }
   // Before any part is in, the song is heard faintly, as if through a wall.
-  const hs = ac.createBufferSource(); hs.buffer = music.stems ? music.stems[0] : music.buffer; hs.loop = true;
+  const hs = ac.createBufferSource(); hs.buffer = music.stems ? music.stems[0] : music.buffer; hs.loop = false;
   const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 320;
   const hg = ac.createGain(); hg.gain.value = 0.22;
   hs.connect(lp); lp.connect(hg); hg.connect(music.master); hs.start(t0);
   music.sources.push(hs); music.hint = hg;
   setHint();
+}
+function songLength() {
+  if (music.stems) return Math.max(...music.stems.map(b => b.duration));
+  return music.buffer ? music.buffer.duration : 0;
 }
 function setHint() {
   if (!music.hint || !mission) return;
@@ -704,6 +708,7 @@ function showCard({ kicker, title, lines, goal, button }) {
     $("cardBtn").textContent = button || "Start";
     $("card").classList.remove("hidden");
     $("touch").classList.add("hidden");
+    if (music.ac && music.sources.length) music.ac.suspend();
     cardDone = resolve;
   });
 }
@@ -713,6 +718,7 @@ function cardContinue() {
   if (phone) $("touch").classList.remove("hidden");
   state = "play";
   lastT = performance.now();
+  if (music.ac) music.ac.resume();
   const d = cardDone; cardDone = null; d && d();
 }
 $("card").addEventListener("click", cardContinue);   // a tap anywhere on the card carries on
@@ -792,10 +798,15 @@ async function startMission(i, { showIntro = true } = {}) {
   const loading = loadMissionMusic(mission);
   if (showIntro) {
     const cs = def.cutscene && S.cutscenes[def.cutscene];
-    await showCard({ kicker: `MISSION ${i + 1} OF ${S.missions.length}`, title: def.song, lines: cs, goal: def.goal + " Each lit quadrant holds one part of the song: unlock them in any order to build your own mix.", button: "Start the mission" });
+    await showCard({ kicker: `MISSION ${i + 1} OF ${S.missions.length}`, title: def.song, lines: cs, goal: def.goal + " Each lit quadrant holds one part of the song: unlock them in any order to build your own mix, before the song ends.", button: "Start the mission" });
   }
   await loading;
-  if (mission && mission.index === i) startMusic(mission);
+  if (mission && mission.index === i) {
+    startMusic(mission);
+    // The mission lasts exactly as long as the song. The clock starts with it.
+    mission.t = 0;
+    mission.limit = songLength() || 210;
+  }
   tip("start");
   refreshObjective();
 }
@@ -891,12 +902,34 @@ async function songComplete() {
 /* ---------- score ---------- */
 function scoreFor(m) {
   const parts = m.quads.filter(q => q.done).length * 1000;
-  const time = Math.max(0, Math.round(3000 - m.t * 8));
+  const time = Math.max(0, Math.round((m.limit ? m.limit - m.t : 0) * 15));
   const stealth = m.quads.filter(q => q.done && !q.seen).length * 400;
   const takedowns = m.stats.takedowns * 200, kos = m.stats.kos * 100, hurt = -m.stats.hurt * 150;
   const total = Math.max(0, parts + time + stealth + takedowns + kos + hurt);
   const grade = total >= 7500 ? "S" : total >= 6000 ? "A" : total >= 4500 ? "B" : "C";
   return { rows: [["Parts unlocked", parts], ["Time bonus", time], ["Unseen quadrants", stealth], ["Takedowns", takedowns], ["Guards put down", kos], ["Hits taken", hurt]], total, grade };
+}
+function failMission() {
+  const m = mission;
+  if (!m || m.finished) return;
+  m.finished = true;
+  state = "score";
+  stopMusic();
+  const got = m.quads.filter(q => q.done).length;
+  $("scoreKicker").textContent = "THE SONG ENDED";
+  $("scoreTitle").textContent = `Mission ${m.index + 1}: ${m.def.song}`;
+  $("scoreGrade").textContent = `${got}/${m.quads.length}`;
+  $("scoreRows").innerHTML = `<p class="fail">${m.def.final && got === m.quads.length ? "Get Zora out before the song ends." : "Unlock every part before the song ends."} Finish this mission to open the next one.</p>`;
+  $("scoreMix").textContent = got ? "Your mix so far: " + m.order.join(" → ") : "";
+  m.failed = true;
+  $("nextBtn").textContent = "Back to the title";
+  $("nextBtn").className = "ghost";
+  $("replayBtn").textContent = "Try again";
+  $("replayBtn").className = "primary";
+  $("replayBtn").parentNode.prepend($("replayBtn"));
+  $("score").classList.remove("hidden");
+  $("hud").classList.add("hidden");
+  $("touch").classList.add("hidden");
 }
 function finishMission() {
   const m = mission;
@@ -910,6 +943,12 @@ function finishMission() {
   save.unlocked = Math.max(save.unlocked, Math.min(S.missions.length - 1, m.index + 1));
   if (m.def.final) save.finished = true;
   writeSave();
+  stopMusic();
+  $("scoreKicker").textContent = "MISSION COMPLETE";
+  $("nextBtn").className = "primary";
+  $("replayBtn").textContent = "Play it again";
+  $("replayBtn").className = "ghost";
+  $("replayBtn").parentNode.append($("replayBtn"));
   $("scoreTitle").textContent = `Mission ${m.index + 1}: ${m.def.song}`;
   $("scoreGrade").textContent = sc.grade;
   $("scoreRows").innerHTML = sc.rows.map(([k, v]) => `<div><span>${k}</span><b>${v >= 0 ? "" : "-"}${Math.abs(v)}</b></div>`).join("") +
@@ -924,7 +963,7 @@ function finishMission() {
 $("nextBtn").addEventListener("click", () => {
   $("score").classList.add("hidden");
   const m = mission;
-  if (!m || m.index >= S.missions.length - 1) return toTitle();
+  if (!m || m.failed || m.index >= S.missions.length - 1) return toTitle();
   state = "play";
   startMission(m.index + 1);
 });
@@ -943,7 +982,7 @@ function updateZora(dt) {
       zora.waiting = false;
       showCard({ kicker: "CUTSCENE", title: "Zora", lines: S.cutscenes.found, button: "Run" }).then(() => {
         const ex = new THREE.Vector2(WORLD_W + ROAD - 3, zoneCenter(Q("q12")).y);
-        escape = { t: 60, exit: ex, mesh: ringAt(ex.x, ex.y, 3) };
+        escape = { exit: ex, mesh: ringAt(ex.x, ex.y, 3) };
         for (const e of enemies) if (e.state !== "ko") alertEnemy(e);
         refreshObjective();
       });
@@ -958,14 +997,9 @@ function updateZora(dt) {
     zora.face(Math.atan2(dx, dz), 0.25);
   } else zora.play("idle");
   if (escape) {
-    escape.t -= dt;
-    $("race").textContent = Math.max(0, escape.t).toFixed(1);
     if (Math.hypot(koda.pos.x - escape.exit.x, koda.pos.z - escape.exit.y) < 3.2) {
-      scene.remove(escape.mesh); escape = null; $("race").textContent = "";
+      scene.remove(escape.mesh); escape = null; $("race").textContent = ""; mission.homeFree = true;
       showCard({ kicker: "CUTSCENE", title: "Home", lines: S.cutscenes.ending, button: "See your score" }).then(finishMission);
-    } else if (escape.t <= 0) {
-      escape.t = 45;
-      toast("They're closing in. Keep going!", 2.5);
     }
   }
 }
@@ -1440,6 +1474,14 @@ function frame(now) {
   }
   if (!window.GILL_NORENDER) renderer.render(scene, camera);
 }
+// Time left on the song. Red for the last 20 seconds.
+function drawClock() {
+  const el = $("timer");
+  if (!mission.limit) { el.textContent = "0:00"; return; }
+  const left = Math.max(0, Math.ceil(mission.limit - mission.t));
+  el.textContent = Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0");
+  el.classList.toggle("low", left <= 20);
+}
 function tick(dt, now) {
   mission.t += dt;
   runTimers(dt);
@@ -1453,7 +1495,11 @@ function tick(dt, now) {
   if ((mmT -= dt) <= 0) { drawMinimap(); mmT = 0.1; }
   if (toastT > 0 && (toastT -= dt) <= 0) $("toast").classList.remove("show");
   if (tipT > 0 && (tipT -= dt) <= 0) nextTip();
-  $("timer").textContent = Math.floor(mission.t / 60) + ":" + String(Math.floor(mission.t % 60)).padStart(2, "0");
+  drawClock();
+  if (mission.limit && !mission.finished && mission.t >= mission.limit) {
+    const allIn = mission.quads.every(q => q.done);
+    if (!allIn || (mission.def.final && !mission.homeFree)) failMission();
+  }
   updateCamera(dt);
 }
 
