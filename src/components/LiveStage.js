@@ -58,6 +58,8 @@ const canFullscreen = () =>
   typeof document !== 'undefined' &&
   !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
 
+const clock = (s) => { s = Math.max(0, Math.floor(s || 0)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = String(s % 60).padStart(2, '0'); return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`; };
+
 export default function LiveStage({ videoId, title, hostName, hostImage, isHost = false, overlay = null, topBar = null, replay = false, onTime = null, poster = null }) {
   const wrapRef   = useRef(null);
   const mountRef  = useRef(null);
@@ -71,15 +73,18 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
   const [errorCode, setErrorCode] = useState(null);
   const [isFull, setIsFull]   = useState(false);
   const [chrome, setChrome]   = useState(true);   // our controls showing
+  // Replays: where the video is and how long it is, for the seek bar.
+  const [pos, setPos] = useState(0);
+  const [dur, setDur] = useState(0);
 
   // Replays report where the video is, so the chat, reactions and tips can
   // come back in at the moment they happened.
   const onTimeRef = useRef(onTime);
   onTimeRef.current = onTime;
   useEffect(() => {
-    if (!replay || !onTime) return undefined;
+    if (!replay) return undefined;
     const t = setInterval(() => {
-      try { const s = playerRef.current?.getCurrentTime?.(); if (typeof s === 'number' && !Number.isNaN(s)) onTimeRef.current?.(s); } catch { /* not ready */ }
+      try { const s = playerRef.current?.getCurrentTime?.(); if (typeof s === 'number' && !Number.isNaN(s)) { onTimeRef.current?.(s); setPos(s); } const d = playerRef.current?.getDuration?.(); if (d) setDur(d); } catch { /* not ready */ }
     }, 500);
     return () => clearInterval(t);
   }, [replay, !!onTime]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -184,6 +189,9 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
       p().playVideo();
     }
   };
+
+  const seekTo = (t) => { if (!p()) return; try { const d = p().getDuration() || dur; const to = Math.max(0, Math.min(d || t, t)); p().seekTo(to, true); setPos(to); onTimeRef.current?.(to); } catch { /* not ready */ } wake(); };
+  const seekBy = (d) => { if (!p()) return; try { seekTo((p().getCurrentTime() || 0) + d); } catch { /* not ready */ } };
 
   const toggleMute = () => {
     if (!p()) return;
@@ -322,7 +330,20 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
       {/* Our controls */}
       {(phase === 'playing' || phase === 'paused') && (
         <div className={`absolute bottom-0 left-0 right-0 transition-opacity duration-300 ${chrome ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-          <div className="bg-gradient-to-t from-black/85 to-transparent px-3 pb-3 pt-10 flex items-center gap-2">
+          {replay && dur > 0 && (
+            <div className="bg-gradient-to-t from-black/85 to-black/60 px-3 pt-6 flex items-center gap-2 text-[11px] font-bold text-white/80 tabular-nums">
+              <button type="button" onClick={() => seekBy(-10)} aria-label="Back 10 seconds"
+                className="px-2 py-1 rounded-full bg-white/15 hover:bg-white/25 text-white">-10s</button>
+              <span>{clock(pos)}</span>
+              <input type="range" min={0} max={dur} step={1} value={Math.min(pos, dur)}
+                onChange={(e) => seekTo(Number(e.target.value))} aria-label="Seek"
+                className="flex-1 accent-pink-500" />
+              <span>{clock(dur)}</span>
+              <button type="button" onClick={() => seekBy(10)} aria-label="Forward 10 seconds"
+                className="px-2 py-1 rounded-full bg-white/15 hover:bg-white/25 text-white">+10s</button>
+            </div>
+          )}
+          <div className={`${replay && dur > 0 ? 'bg-black/60 pt-2' : 'bg-gradient-to-t from-black/85 to-transparent pt-10'} px-3 pb-3 flex items-center gap-2`}>
             <button type="button" onClick={togglePlay} aria-label={phase === 'playing' ? 'Pause' : 'Play'}
               className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur flex items-center justify-center transition">
               {phase === 'playing' ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white ml-0.5" />}

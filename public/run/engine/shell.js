@@ -22,11 +22,6 @@ function tryLandscape() {
   if (!window.matchMedia("(pointer: coarse)").matches) { if (el.requestFullscreen) el.requestFullscreen({ navigationUI: "hide" }).catch(() => {}); return; }
   const go = el.requestFullscreen ? el.requestFullscreen({ navigationUI: "hide" }) : null;
   Promise.resolve(go).then(() => {
-    // Already drawn sideways by the CSS, which is what the start screen shows.
-    // Asking the phone to turn as well lands on the same picture, but turns it
-    // a second time on the way, and that second turn is the jarring one. A
-    // phone whose rotation is free never has this class, so it still locks.
-    if (document.documentElement.classList.contains("rotated")) return;
     if (screen.orientation && screen.orientation.lock) return screen.orientation.lock("landscape");
   }).catch(() => { /* not allowed here: the turn-sideways card does the job */ }).then(() => setTimeout(checkOrientation, 300));
 }
@@ -238,6 +233,31 @@ function frameDue(now, which, minMs) {
    THE GAME LOOP
 --------------------------------------------------------------------------- */
 
+// Add ?debug=1 to the game's address to see how this device is coping: frame rate, how fast the
+// game runs against real time, and what is switched on. Nothing is drawn without it.
+const DEBUG_HUD = (() => { try { return new URLSearchParams(location.search).get("debug") === "1"; } catch (e) { return false; } })();
+const dbg = { t: 0, n: 0, fps: 0, worst: 0, w: 0, game: 0, real: 0, speed: 1, gpu: null };
+function drawDebugHud(now, dt) {
+  const ms = now - (dbg.last || now); dbg.last = now;
+  dbg.t += ms; dbg.n += 1; dbg.w = Math.max(dbg.w, ms); dbg.game += dt; dbg.real += ms / 1000;
+  if (dbg.t >= 1000) { dbg.fps = Math.round(dbg.n * 1000 / dbg.t); dbg.worst = Math.round(dbg.w); dbg.speed = dbg.real ? dbg.game / dbg.real : 1; dbg.t = 0; dbg.n = 0; dbg.w = 0; dbg.game = 0; dbg.real = 0; }
+  if (dbg.gpu === null) {
+    try { const g = document.createElement("canvas").getContext("webgl"); const x = g && g.getExtension("WEBGL_debug_renderer_info"); dbg.gpu = x ? g.getParameter(x.UNMASKED_RENDERER_WEBGL) : "unknown"; } catch (e) { dbg.gpu = "unknown"; }
+  }
+  const lines = [
+    dbg.fps + " fps · worst frame " + dbg.worst + " ms · game speed " + Math.round(dbg.speed * 100) + "%",
+    "3D Koda " + (typeof Char3D !== "undefined" && Char3D.ready("koda") ? "on" : "off") +
+      " · 3D city " + (typeof World3D !== "undefined" && World3D.debug ? World3D.debug().state : "-") +
+      " · effects " + (typeof Atmos !== "undefined" ? Atmos.quality() : "-"),
+    "screen " + innerWidth + "x" + innerHeight + " @" + (window.devicePixelRatio || 1) + " · " + String(dbg.gpu).slice(0, 40)
+  ];
+  ctx.save();
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)"; ctx.fillRect(8, H - 74, 720, 66);
+  ctx.fillStyle = "#7fe39a"; ctx.font = "600 14px monospace"; ctx.textAlign = "left";
+  lines.forEach((l, i) => ctx.fillText(l, 16, H - 52 + i * 19));
+  ctx.restore();
+}
+
 function gameLoop(now) {
   if (gameState !== "playing") {
     if (gameState === "finished") { render(); }
@@ -247,26 +267,11 @@ function gameLoop(now) {
   const dt = Math.max(0, Math.min(0.05, (now - lastTime) / 1000));
   lastTime = now;
   frameTime += dt;
-  // ?diag=1 only: how long the whole frame took, and how much of it was the
-  // game's thinking rather than its drawing. window.diagNote is a no-op
-  // without the switch. See the panel in games/feelz-run/frame.js.
-  const _t0 = window.diagNote ? performance.now() : 0;
   update(dt);
-  if (window.diagNote) { window.diagNote("update", performance.now() - _t0); window.diagNote("frame", dt * 1000); }
   // A drawing error never stops the run: the next frame still comes.
-  //
-  // Timed whole as well as in parts. If every part of the drawing adds up to
-  // half a millisecond and the whole frame takes a hundred and forty, the time
-  // is going somewhere the parts cannot see, and knowing THAT is worth more
-  // than any amount of detail about the drawing.
-  const _r0 = window.diagNote ? performance.now() : 0;
   try { render(); } catch (e) { if (!gameLoop.warned) { gameLoop.warned = true; console.warn("[render]", e); } }
-  if (window.diagNote) window.diagNote("render", performance.now() - _r0);
-  // The HUD is HTML, not canvas. Writing to it can make the browser lay the
-  // whole page out again, and no amount of canvas timing would ever show it.
-  const _h0 = window.diagNote ? performance.now() : 0;
+  if (DEBUG_HUD) drawDebugHud(now, dt);
   updateHud();
-  if (window.diagNote) window.diagNote("hudDom", performance.now() - _h0);
   if (gameState === "playing") requestAnimationFrame(gameLoop);
   else if (gameState === "finished") requestAnimationFrame(finishedLoop);
 }
