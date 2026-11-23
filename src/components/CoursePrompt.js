@@ -87,7 +87,9 @@ export default function CoursePrompt({ userId }) {
   const open = () => { markHandled(userId); setShow(false); navigate('/learn'); };
 
   return (
-    <div className="px-4 md:px-8 pt-3">
+    // pt-14 on a phone clears the fixed top bar (LIVE, the bell and your
+    // picture), the same room AdminNav leaves.
+    <div className="px-4 md:px-8 pt-14 md:pt-3">
       <div className="flex items-center gap-3 rounded-xl border border-lime-400/20 bg-lime-400/[0.05] p-3.5">
         <span className="w-9 h-9 rounded-lg bg-lime-400/15 flex items-center justify-center flex-shrink-0">
           <GraduationCap className="w-4.5 h-4.5 text-lime-300" />

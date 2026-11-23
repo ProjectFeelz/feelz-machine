@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <script>if (/\/gill$/.test(location.pathname)) location.replace(location.pathname + "/" + location.search);</script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#07060b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>G.I.L.L. · Good Intentions Last Longest</title>
+  <meta name="description" content="Koda goes after Zora across a city that plays Big Feelz' Good Intentions Last Longest. A Feelz Machine game.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="stage"></div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-zone"><span id="zoneName">ZONE</span><span id="zoneSong">Song</span></div>
+    <div class="hud-objective" id="objective">Find out where they took her.</div>
+    <div class="hud-right">
+      <div class="hearts" id="hearts"></div>
+      <div class="clues"><span id="clueCount">0</span><small>/<span id="clueTotal">8</span> clues</small></div>
+      <button class="icon-btn" id="pauseBtn" aria-label="Pause">II</button>
+    </div>
+    <div class="alert" id="alert" aria-live="polite"></div>
+    <div class="race" id="race"></div>
+    <canvas id="minimap" width="160" height="120" aria-hidden="true"></canvas>
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <!-- Touch controls -->
+  <div id="touch" class="hidden">
+    <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
+    <div class="buttons">
+      <button class="tbtn" id="btnSneak" aria-label="Sneak">SNEAK</button>
+      <button class="tbtn" id="btnAction" aria-label="Action">ACTION</button>
+      <button class="tbtn big" id="btnAttack" aria-label="Attack">HIT</button>
+    </div>
+  </div>
+
+  <!-- Title -->
+  <div id="title" class="screen">
+    <div class="title-card">
+      <p class="kicker">A FEELZ MACHINE GAME · BIG FEELZ</p>
+      <h1>G.I.L.L.</h1>
+      <p class="sub">Good Intentions Last Longest</p>
+      <p class="blurb">Zora was taken when the Veil fell. Search the city, stay out of sight, fight when you have to, and bring her home.</p>
+      <div class="title-buttons">
+        <button class="primary" id="playBtn">Play</button>
+        <button class="ghost hidden" id="newBtn">New game</button>
+      </div>
+      <p class="loading" id="loading">Loading the city…</p>
+      <details class="how">
+        <summary>How to play</summary>
+        <p><b>Phone:</b> left thumb moves (push far to sprint). SNEAK to crouch, HIT to fight, ACTION to talk, pick up and take down from behind.</p>
+        <p><b>Keyboard:</b> WASD or arrows to move, Shift to sprint, C to sneak, J or Space to hit, E for action, Esc to pause.</p>
+      </details>
+    </div>
+  </div>
+
+  <!-- Pause -->
+  <div id="pause" class="screen hidden">
+    <div class="title-card">
+      <h2>Paused</h2>
+      <div class="title-buttons col">
+        <button class="primary" id="resumeBtn">Resume</button>
+        <button class="ghost" id="muteBtn">Music: on</button>
+        <button class="ghost" id="quitBtn">Back to title</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cutscene -->
+  <div id="cutscene" class="hidden" role="dialog" aria-live="polite">
+    <div class="cs-bars"></div>
+    <div class="cs-box">
+      <p class="cs-who" id="csWho"></p>
+      <p class="cs-say" id="csSay"></p>
+      <p class="cs-hint">Tap to continue</p>
+    </div>
+    <button class="cs-skip" id="csSkip">Skip</button>
+  </div>
+
+  <audio id="musicA" preload="none" loop></audio>
+  <audio id="musicB" preload="none" loop></audio>
+
+  <script src="story.js"></script>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
