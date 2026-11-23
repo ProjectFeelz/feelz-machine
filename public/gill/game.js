@@ -3,9 +3,14 @@
 
    A top-down action game on the Feelz Engine's 3D pieces: the same three.js
    build, models and moves as Feelz Run, seen from an angled 3/4 camera.
-   One open city, twelve zones, one song per zone as the sound bed.
 
-   Story words live in story.js (GILL_STORY). This file is the game.
+   The game is played mission by mission, one song each, in album order. A
+   mission lights up four quadrants of the city. Each quadrant holds one part
+   of the song; finish its task and the part joins the mix. The order you
+   finish them in is the order the song builds up, so every run produces its
+   own version of the track. Missions are scored and graded.
+
+   Story words and mission data live in story.js (GILL_STORY).
 --------------------------------------------------------------------------- */
 
 import * as THREE from "../run/vendor/three-0.160.0/three.module.min.js";
@@ -17,12 +22,13 @@ const $ = id => document.getElementById(id);
 const phone = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
 
 /* ---------- city layout ---------- */
-const ZONE = 56;           // metres across one zone
-const ROAD = 10;           // the street between zones
+const ZONE = 56;           // metres across one quadrant
+const ROAD = 10;           // the street between quadrants
 const COLS = 4, ROWS = 3;
 const zoneOrigin = z => new THREE.Vector2(z.grid[0] * (ZONE + ROAD), z.grid[1] * (ZONE + ROAD));
 const zoneCenter = z => zoneOrigin(z).addScalar(ZONE / 2);
 const WORLD_W = COLS * (ZONE + ROAD) - ROAD, WORLD_H = ROWS * (ZONE + ROAD) - ROAD;
+const Q = id => S.quadrants.find(q => q.id === id);
 
 const BUILDINGS = ["tenement", "hostel", "kodas-building", "lc-b1", "lc-b2", "lc-b4", "lc-b5", "lc-b6", "lc-b7",
   "mc-b2", "mc-b4", "mc-b6", "mc-b7", "mc-b8", "rc-b1", "rc-b3", "rc-b4", "rc-b5", "uc-b1", "uc-b2", "uc-b3", "uc-b4",
@@ -30,13 +36,15 @@ const BUILDINGS = ["tenement", "hostel", "kodas-building", "lc-b1", "lc-b2", "lc
 const ENEMIES = { sentinel: 2.1, guard: 1.85, "street-warden": 1.9, hunter: 1.85, handler: 1.9, gilded: 2.0 };
 const TOWNSFOLK = ["neighbour_1_elder", "neighbour_2_woman", "neighbour_3_man", "family_mother", "dock_foreman",
   "musician_street", "musician_can_drum", "musician_wire_guitar", "koda_brother", "crew_4_heavy"];
+const PART_COLOURS = [0x5ad1ff, 0xf2b544, 0xd58cff, 0x7fe39a];
 
 /* ---------- small helpers ---------- */
 function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 function angleLerp(a, b, t) { let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI; if (d < -Math.PI) d += Math.PI * 2; return a + d * t; }
+const dist2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 function zoneAt(x, z) {
-  for (const zn of S.zones) { const o = zoneOrigin(zn); if (x >= o.x && x <= o.x + ZONE && z >= o.y && z <= o.y + ZONE) return zn; }
+  for (const q of S.quadrants) { const o = zoneOrigin(q); if (x >= o.x && x <= o.x + ZONE && z >= o.y && z <= o.y + ZONE) return q; }
   return null;
 }
 
@@ -86,7 +94,7 @@ scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffd9a8, 2.6);
 sun.castShadow = true;
 sun.shadow.mapSize.set(phone ? 1024 : 2048, phone ? 1024 : 2048);
-const SH = 26;
+const SH = 22;
 Object.assign(sun.shadow.camera, { left: -SH, right: SH, top: SH, bottom: -SH, near: 1, far: 90 });
 sun.shadow.bias = -0.0006;
 scene.add(sun, sun.target);
@@ -123,6 +131,7 @@ function groundTexture(kind) {
   t.anisotropy = 4;
   return t;
 }
+const pads = {};   // quadrant id -> its ground material (lit up when it is part of the mission)
 function buildGround() {
   const asphalt = groundTexture("asphalt");
   asphalt.repeat.set((WORLD_W + 80) / 8, (WORLD_H + 80) / 8);
@@ -132,19 +141,19 @@ function buildGround() {
   road.position.set(WORLD_W / 2, -0.01, WORLD_H / 2);
   road.receiveShadow = true;
   scene.add(road);
-  for (const z of S.zones) {
-    const o = zoneOrigin(z);
+  for (const q of S.quadrants) {
+    const o = zoneOrigin(q);
     const paving = groundTexture("paving");
     paving.repeat.set(ZONE / 6, ZONE / 6);
-    const tint = new THREE.Color(z.tint).multiplyScalar(0.75);
-    const pad = new THREE.Mesh(new THREE.PlaneGeometry(ZONE, ZONE),
-      new THREE.MeshStandardMaterial({ color: tint, map: paving, roughness: 0.85 }));
+    const tint = new THREE.Color(q.tint).multiplyScalar(0.75);
+    const mat = new THREE.MeshStandardMaterial({ color: tint, map: paving, roughness: 0.85, emissive: 0x000000 });
+    const pad = new THREE.Mesh(new THREE.PlaneGeometry(ZONE, ZONE), mat);
     pad.rotation.x = -Math.PI / 2;
     pad.position.set(o.x + ZONE / 2, 0, o.y + ZONE / 2);
     pad.receiveShadow = true;
     scene.add(pad);
+    pads[q.id] = { mat, base: tint.clone() };
   }
-  // Street lamps along the roads, for light and a sense of place.
   const poleMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1f, metalness: 0.6, roughness: 0.4 });
   const bulbMat = new THREE.MeshStandardMaterial({ color: 0xffd28a, emissive: 0xffb04a, emissiveIntensity: 2.2 });
   const poleGeo = new THREE.CylinderGeometry(0.08, 0.12, 4.2, 8), bulbGeo = new THREE.SphereGeometry(0.22, 10, 8);
@@ -160,9 +169,9 @@ function buildGround() {
 }
 
 /* ---------- buildings (static, with collision boxes) ---------- */
-const blockers = [];        // { minX, maxX, minZ, maxZ, mesh, mats, faded }
-// Square to the streets only (0, 90, 180, 270 degrees), so a building's collision box is its real
-// footprint. `maxFoot` caps how wide it can be, so ways into each zone stay open.
+const blockers = [];
+// Square to the streets only, so a building's collision box is its real footprint.
+// `maxFoot` caps how wide it can be, so ways into each quadrant stay open.
 async function placeBuilding(name, x, z, yaw, height, maxFoot = 13) {
   const src = await staticModel(name);
   if (!src) return;
@@ -190,25 +199,21 @@ async function placeBuilding(name, x, z, yaw, height, maxFoot = 13) {
 
 async function buildCity(onProgress) {
   const jobs = [];
-  for (const z of S.zones) {
-    const r = rng(z.id.charCodeAt(1) * 977 + z.id.charCodeAt(2) * 131);
-    const o = zoneOrigin(z);
+  for (const q of S.quadrants) {
+    const r = rng(q.id.charCodeAt(1) * 977 + q.id.charCodeAt(2) * 131);
+    const o = zoneOrigin(q);
     const pick = () => BUILDINGS[Math.floor(r() * BUILDINGS.length)];
     const inset = 7.5, a = ZONE / 2;
-    // Two buildings on each side of the zone, the middle of each side left open as a way in.
     const slots = [];
     for (const off of [-16, 16]) {
       slots.push([a + off, inset, 0], [a + off, ZONE - inset, Math.PI], [inset, a + off, Math.PI / 2], [ZONE - inset, a + off, -Math.PI / 2]);
     }
-    // Corners.
     slots.push([inset, inset, 0], [ZONE - inset, inset, 0], [inset, ZONE - inset, Math.PI], [ZONE - inset, ZONE - inset, Math.PI]);
-    // A little cover inside, not in the final zone (it needs room to run).
-    const cover = z.final ? [] : [[a - 11, a + 11, Math.floor(r() * 4) * Math.PI / 2], [a + 11, a - 11, Math.floor(r() * 4) * Math.PI / 2]];
+    const cover = [[a - 11, a + 11, Math.floor(r() * 4) * Math.PI / 2], [a + 11, a - 11, Math.floor(r() * 4) * Math.PI / 2]];
     for (const [sx, sz, yaw] of slots) jobs.push(() => placeBuilding(pick(), o.x + sx, o.y + sz, yaw, 7 + r() * 7, 12));
     for (const [sx, sz, yaw] of cover) jobs.push(() => placeBuilding(pick(), o.x + sx, o.y + sz, yaw, 4 + r() * 3, 7));
   }
   let done = 0;
-  // A few at a time, so a phone is never asked to parse everything at once.
   const queue = jobs.slice();
   const worker = async () => { while (queue.length) { await queue.shift()(); done++; onProgress && onProgress(done / jobs.length); } };
   await Promise.all([worker(), worker(), worker(), worker()]);
@@ -219,7 +224,7 @@ function updateOcclusion() {
   if (!koda) return;
   const kx = koda.pos.x, kz = koda.pos.z;
   for (const b of blockers) {
-    const hides = b.minZ > kz - 1 && b.minZ < kz + 14 && kx > b.minX - 2 && kx < b.maxX + 2;
+    const hides = b.minZ > kz - 1 && b.minZ < kz + 12 && kx > b.minX - 2 && kx < b.maxX + 2;
     if (hides !== b.faded) {
       b.faded = hides;
       for (const m of b.mats) { m.transparent = hides; m.opacity = hides ? 0.28 : 1; m.depthWrite = !hides; m.needsUpdate = true; }
@@ -233,13 +238,11 @@ function blocked(x, z, r) {
   return null;
 }
 function moveWithCollision(pos, dx, dz, r) {
-  // Axis by axis, so a wall slides you along it instead of stopping you dead.
   if (!blocked(pos.x + dx, pos.z, r)) pos.x += dx;
   if (!blocked(pos.x, pos.z + dz, r)) pos.z += dz;
   pos.x = clamp(pos.x, -ROAD + 1, WORLD_W + ROAD - 1);
   pos.z = clamp(pos.z, -ROAD + 1, WORLD_H + ROAD - 1);
 }
-// Line of sight: does the segment cross a building box? (2D slab test)
 function sightClear(ax, az, bx, bz) {
   const dx = bx - ax, dz = bz - az;
   for (const b of blockers) {
@@ -255,7 +258,15 @@ function sightClear(ax, az, bx, bz) {
   }
   return true;
 }
-
+// A free spot near (x, z), not inside a building.
+function freeSpot(x, z, r = 1.2, rand = Math.random) {
+  for (let i = 0; i < 60; i++) {
+    const a = rand() * Math.PI * 2, d = i * 0.35;
+    const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
+    if (!blocked(px, pz, r)) return { x: px, z: pz };
+  }
+  return { x, z };
+}
 
 /* ---------- arm correction (ported from Feelz Run's char3d.js) ----------
    The moves were made on bodies with narrower shoulders, so arms sink into
@@ -363,40 +374,44 @@ function armClear(root, wide) {
 }
 
 /* ---------- animated characters ---------- */
-function stripRootMotion(clip) {
+// Keep moves in place: the game moves the body, not the clip. The hips are held
+// at their resting spot on the ground plane in EVERY clip, so changing from one
+// move to another never makes a body jump (the guards' "glitch back").
+function stripRootMotion(clip, restX, restZ) {
   for (const t of clip.tracks) {
     if (!/hips\.position$/i.test(t.name)) continue;
-    const v = t.values, x0 = v[0], z0 = v[2];
-    for (let i = 0; i < v.length; i += 3) { v[i] = x0; v[i + 2] = z0; }
+    const v = t.values;
+    for (let i = 0; i < v.length; i += 3) { v[i] = restX; v[i + 2] = restZ; }
   }
 }
 class Actor {
   constructor(gltf, metres) {
     this.root = new THREE.Group();
     const model = gltf.scene;
-    // Measured by the skeleton, the way Feelz Run does it: a skinned mesh's own
-    // box ignores the bones, so it comes out at the wrong size.
     this.root.add(model);
     this.root.updateMatrixWorld(true);
-    let lo = Infinity, hi = -Infinity;
+    // Measured by the skeleton, the way Feelz Run does it.
+    let lo = Infinity, hi = -Infinity, hips = null;
     const v = new THREE.Vector3();
-    model.traverse(o => { if (o.isBone) { o.getWorldPosition(v); lo = Math.min(lo, v.y); hi = Math.max(hi, v.y); } });
+    model.traverse(o => {
+      if (o.isBone) { o.getWorldPosition(v); lo = Math.min(lo, v.y); hi = Math.max(hi, v.y); if (!hips && /hips$/i.test(o.name)) hips = o; }
+    });
     if (!isFinite(lo)) { const box = new THREE.Box3().setFromObject(model); lo = box.min.y; hi = box.max.y; }
     const k = metres / Math.max(0.01, hi - lo);
     model.scale.multiplyScalar(k);
     model.position.y = -lo * k;
     model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
-    this.root.add(model);
     this.mixer = new THREE.AnimationMixer(model);
     this.clips = {};
-    for (const c of gltf.animations) { stripRootMotion(c); this.clips[c.name] = this.mixer.clipAction(c); }
+    const rx = hips ? hips.position.x : 0, rz = hips ? hips.position.z : 0;
+    for (const c of gltf.animations) { stripRootMotion(c, rx, rz); this.clips[c.name] = this.mixer.clipAction(c); }
     this.current = null;
     this.model = model;
     this.pos = this.root.position;
     this.yaw = 0;
   }
   has(name) { return !!this.clips[name]; }
-  play(name, { once = false, fade = 0.18, speed = 1 } = {}) {
+  play(name, { once = false, fade = 0.15, speed = 1 } = {}) {
     const a = this.clips[name];
     if (!a) return 0;
     if (this.current === a && !once) { a.timeScale = speed; return a.getClip().duration; }
@@ -411,17 +426,17 @@ class Actor {
     return a.getClip().duration / speed;
   }
   face(yaw, t) { this.yaw = angleLerp(this.yaw, yaw, t); this.root.rotation.y = this.yaw; }
+  faceTo(x, z, t = 1) { this.face(Math.atan2(x - this.pos.x, z - this.pos.z), t); }
   update(dt) {
     restoreRest(this.model);
     this.mixer.update(dt);
-    // Fix the arms on the moves where they sit inside the body. Fight moves
-    // and the takedown keep their own arms, they reach out on purpose.
     const name = this.current ? this.current.getClip().name : "";
     if (/^(run|sprint)$/.test(name)) armSwing(this.model, ARM_SWING);
-    if (!/^(punch|kick|takedown|hit|ko|alert)$/.test(name)) armClear(this.model, /^crouch/.test(name));
+    if (!/^(punch|kick|takedown|hit|ko|alert|flykick|jump|spinkick)$/.test(name)) armClear(this.model, /^crouch/.test(name));
   }
 }
 async function makeActor(file, metres) { return new Actor(await loadGLB(MODELS + file), metres); }
+const forward = a => new THREE.Vector2(Math.sin(a.yaw), Math.cos(a.yaw));
 
 /* ---------- input ---------- */
 const keys = new Set();
@@ -429,13 +444,12 @@ const input = { x: 0, z: 0, mag: 0, sneak: false };
 addEventListener("keydown", e => {
   if (e.repeat) return;
   keys.add(e.code);
-  if (state !== "play") {
-    if (state === "cutscene" && (e.code === "Space" || e.code === "Enter")) advanceCutscene();
-    if (state === "paused" && e.code === "Escape") resume();
-    return;
-  }
+  if (state === "card" && (e.code === "Space" || e.code === "Enter" || e.code === "KeyJ")) return cardContinue();
+  if (state === "paused" && (e.code === "Escape" || e.code === "KeyP")) return resume();
+  if (state !== "play") return;
   if (e.code === "KeyC" || e.code === "ControlLeft") toggleSneak();
-  if (e.code === "KeyJ" || e.code === "Space") attack();
+  if (e.code === "KeyJ" || e.code === "KeyK") attack();
+  if (e.code === "Space") jump();
   if (e.code === "KeyE") action();
   if (e.code === "Escape" || e.code === "KeyP") pause();
 });
@@ -467,10 +481,10 @@ const stick = { id: null, x: 0, z: 0, mag: 0 };
   const end = e => { if (e.pointerId !== stick.id) return; stick.id = null; stick.mag = 0; knob.style.transform = ""; };
   el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
   const tap = (id, fn) => $(id).addEventListener("pointerdown", e => { e.preventDefault(); if (state === "play") fn(); });
-  tap("btnAttack", attack); tap("btnAction", action); tap("btnSneak", toggleSneak);
+  tap("btnAttack", attack); tap("btnAction", action); tap("btnSneak", toggleSneak); tap("btnJump", jump);
 })();
-/* Game controllers (Xbox, PlayStation and the like, through the browser's gamepad support):
-   left stick or d-pad moves, A hits, X is the action, B sneaks, RT sprints, Start pauses. */
+/* Game controllers: left stick or d-pad moves, A jumps, X hits, Y is the action,
+   B sneaks, RT sprints, Start pauses. A carries on from a card. */
 const pad = { x: 0, z: 0, mag: 0, prev: [] };
 function pollPad() {
   const list = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -484,11 +498,13 @@ function pollPad() {
   if (m > 0.22) { pad.x = x / m; pad.z = z / m; pad.mag = btn(7) || btn(10) ? 1 : Math.min(0.9, m); }
   const press = i => btn(i) && !pad.prev[i];
   if (state === "title") { if ((press(0) || press(9)) && !$("playBtn").disabled) $("playBtn").click(); }
-  else if (state === "cutscene") { if (press(0) || press(2)) advanceCutscene(); if (press(9)) endCutscene(); }
-  else if (state === "paused") { if (press(9) || press(1) || press(0)) resume(); }
+  else if (state === "card") { if (press(0) || press(9) || press(2)) cardContinue(); }
+  else if (state === "score") { if (press(0)) $("nextBtn").click(); }
+  else if (state === "paused") { if (press(9) || press(1)) resume(); }
   else if (state === "play") {
-    if (press(0)) attack();
-    if (press(2) || press(3)) action();
+    if (press(0)) jump();
+    if (press(2)) attack();
+    if (press(3)) action();
     if (press(1)) toggleSneak();
     if (press(9)) pause();
   }
@@ -501,278 +517,442 @@ function readInput() {
 }
 function toggleSneak() { input.sneak = !input.sneak; $("btnSneak").classList.toggle("on", input.sneak); }
 
-/* ---------- game state ---------- */
-let state = "title";            // title | play | paused | cutscene
-let koda = null, zora = null;
-const enemies = [], npcs = [], clues = [];
-let save = loadSave();
-let health = 5, invuln = 0, attackLock = 0, comboStep = 0;
-let currentZone = null, race = null, escape = null;
-const spawnedZones = new Set();
-
+/* ---------- save ---------- */
 function loadSave() {
-  try { return Object.assign({ clues: [], done: [], finished: false }, JSON.parse(localStorage.getItem("gill.save") || "{}")); }
-  catch (e) { return { clues: [], done: [], finished: false }; }
+  const empty = { unlocked: 0, best: {}, tips: {}, finished: false };
+  try { return Object.assign(empty, JSON.parse(localStorage.getItem("gill.save2") || "{}")); }
+  catch (e) { return empty; }
 }
-function writeSave() { try { localStorage.setItem("gill.save", JSON.stringify(save)); } catch (e) { /* private mode */ } }
+let save = loadSave();
+function writeSave() { try { localStorage.setItem("gill.save2", JSON.stringify(save)); } catch (e) { /* private mode */ } }
 
 /* ---------- HUD ---------- */
-let toastT = 0;
+let toastT = 0, tipT = 0;
 function toast(text, secs = 3) { const t = $("toast"); t.textContent = text; t.classList.add("show"); toastT = secs; }
+const tipQueue = [];
+function tip(key) {
+  if (save.tips[key] || !S.tips[key]) return;
+  save.tips[key] = true; writeSave();
+  tipQueue.push(S.tips[key]);
+  if (tipT <= 0) nextTip();
+}
+function nextTip() {
+  const t = $("tip");
+  if (!tipQueue.length) { t.classList.remove("show"); tipT = 0; return; }
+  t.textContent = tipQueue.shift(); t.classList.add("show"); tipT = 6;
+}
 function setObjective(text) {
   const el = $("objective");
   if (el.textContent === text) return;
   el.textContent = text;
-  // A new objective flashes, so it is never missed.
   el.classList.remove("pulse"); void el.offsetWidth; el.classList.add("pulse");
 }
 function drawHearts() { $("hearts").textContent = "♥".repeat(Math.max(0, health)) + "♡".repeat(Math.max(0, 5 - health)); }
-function drawClues() { $("clueCount").textContent = save.clues.length; $("clueTotal").textContent = S.cluesToFinal; }
+function drawMixer() {
+  const el = $("mixer");
+  if (!mission) { el.innerHTML = ""; return; }
+  el.innerHTML = mission.quads.map((qd, i) => {
+    const c = "#" + PART_COLOURS[i].toString(16).padStart(6, "0");
+    return `<div class="ch${qd.done ? " on" : ""}" style="--c:${c}"><span class="bar"><i></i></span><b>${qd.partName}</b></div>`;
+  }).join("");
+}
 function refreshObjective() {
-  if (escape) return setObjective("Get Zora out of the city. Run!");
-  if (finalOpen() && !save.finished) return setObjective("Zora is in the last zone, \"" + S.zones.find(z => z.final).song + "\". Go.");
-  const z = currentZone;
-  if (z && !z.final && !save.clues.includes(z.id)) {
-    if (z.focus === "race") return setObjective(race ? "Reach the light before the time runs out." : "Step into the gold ring to start the run.");
-    if (z.focus === "fight" && zoneEnemiesLeft(z) > 0) return setObjective("Clear the wardens out of " + z.song + " (" + zoneEnemiesLeft(z) + " left).");
-    return setObjective("Find the clue hidden in " + z.song + ".");
+  if (!mission) return;
+  const m = mission, left = m.quads.filter(q => !q.done);
+  if (escape) return setObjective("Get Zora out. Reach the gold light!");
+  if (zora && zora.waiting) return setObjective("Find Zora in the Old Tower.");
+  if (!left.length) return setObjective("The song is complete.");
+  const here = currentQuad && m.quads.find(q => q.q === currentQuad && !q.done);
+  if (here) {
+    const p = here.partName;
+    if (here.q.focus === "race") return setObjective(race ? `Reach ${p} before time runs out!` : `Step into the gold ring to race for ${p}.`);
+    if (here.q.focus === "fight") return setObjective(`Put down the guards to free ${p} (${quadEnemiesLeft(here)} left).`);
+    if (here.q.focus === "sneak") return setObjective(`Sneak to ${p} without being seen.`);
+    return setObjective(`Find ${p} in ${here.q.name}.`);
   }
-  setObjective(`Find clues across the city (${save.clues.length}/${S.cluesToFinal}).`);
+  setObjective(`Mission ${m.index + 1}: ${m.def.song}. Unlock the parts in the lit quadrants (${m.quads.length - left.length}/${m.quads.length}).`);
 }
 
-/* ---------- music ---------- */
-const music = { a: $("musicA"), b: $("musicB"), front: null, urls: {}, zoneId: null, muted: false, vol: 0.8 };
+/* ---------- music: the song, built up part by part ---------- */
+const music = { ac: null, master: null, buffer: null, stems: null, sources: [], parts: [], hint: null, muted: false, key: null, loading: null };
+function audioCtx() {
+  if (!music.ac) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    music.ac = new AC();
+    music.master = music.ac.createGain(); music.master.gain.value = 0.9;
+    music.master.connect(music.ac.destination);
+  }
+  if (music.ac.state === "suspended") music.ac.resume().catch(() => {});
+  return music.ac;
+}
 async function songUrl(trackId) {
-  if (music.urls[trackId]) return music.urls[trackId];
-  const res = await fetch("/.netlify/functions/stream-url", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trackId })
+  try {
+    const res = await fetch("/.netlify/functions/stream-url", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trackId })
+    });
+    const data = await res.json().catch(() => ({}));
+    const t = data && data.tracks && data.tracks[trackId];
+    if (res.ok && t && t.url) return t.url;
+  } catch (e) { /* fall through */ }
+  // Testing away from feelzmachine.com: any song from Feelz Run will do.
+  if (/localhost|127\.0\.0\.1/.test(location.hostname)) return "../run/assets/audio/m01-against-the-storm.mp3";
+  throw new Error("no song");
+}
+async function decode(url) {
+  const ac = audioCtx();
+  const buf = await (await fetch(url)).arrayBuffer();
+  return await new Promise((res, rej) => ac.decodeAudioData(buf, res, rej));
+}
+function stopMusic() {
+  for (const s of music.sources) { try { s.stop(); } catch (e) { /* stopped */ } try { s.disconnect(); } catch (e) { /* gone */ } }
+  music.sources = []; music.parts = []; music.hint = null;
+}
+// Four placeholder parts cut from the full song by sound, until real stems exist.
+const BANDS = [
+  [["lowpass", 180]],
+  [["highpass", 180], ["lowpass", 900]],
+  [["highpass", 900], ["lowpass", 4200]],
+  [["highpass", 4200]]
+];
+async function loadMissionMusic(m) {
+  const key = m.def.trackId;
+  if (music.key === key && (music.buffer || music.stems)) return;
+  music.key = key; music.buffer = null; music.stems = null;
+  try {
+    if (m.def.stems && m.def.stems.length) music.stems = await Promise.all(m.def.stems.map(s => decode(s.src)));
+    else music.buffer = await decode(await songUrl(key));
+  } catch (e) { console.warn("[gill] music not available", e && e.message); }
+}
+function startMusic(m) {
+  const ac = audioCtx();
+  stopMusic();
+  if (!ac || (!music.buffer && !music.stems)) return;
+  const t0 = ac.currentTime + 0.1;
+  const n = m.quads.length;
+  for (let i = 0; i < n; i++) {
+    const src = ac.createBufferSource();
+    src.buffer = music.stems ? music.stems[i] : music.buffer;
+    src.loop = true;
+    let node = src;
+    if (!music.stems) for (const [type, f] of BANDS[i % BANDS.length]) {
+      const fl = ac.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = 0.7;
+      node.connect(fl); node = fl;
+    }
+    const g = ac.createGain(); g.gain.value = m.quads[i].done ? 1 : 0;
+    node.connect(g); g.connect(music.master);
+    src.start(t0);
+    music.sources.push(src); music.parts.push(g);
+  }
+  // Before any part is in, the song is heard faintly, as if through a wall.
+  const hs = ac.createBufferSource(); hs.buffer = music.stems ? music.stems[0] : music.buffer; hs.loop = true;
+  const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 320;
+  const hg = ac.createGain(); hg.gain.value = 0.22;
+  hs.connect(lp); lp.connect(hg); hg.connect(music.master); hs.start(t0);
+  music.sources.push(hs); music.hint = hg;
+  setHint();
+}
+function setHint() {
+  if (!music.hint || !mission) return;
+  const doneCount = mission.quads.filter(q => q.done).length;
+  music.hint.gain.setTargetAtTime(0.22 * (1 - doneCount / mission.quads.length), music.ac.currentTime, 0.4);
+}
+function partIn(i) {
+  const g = music.parts[i];
+  if (g) { g.gain.cancelScheduledValues(music.ac.currentTime); g.gain.setTargetAtTime(1, music.ac.currentTime + 0.05, 0.25); }
+  setHint();
+  sfxUnlock();
+}
+function setMuted(m) { music.muted = m; if (music.master) music.master.gain.value = m ? 0 : 0.9; }
+// A short rising chime for a part coming in.
+function sfxUnlock() {
+  const ac = music.ac; if (!ac) return;
+  [523, 784, 1047].forEach((f, i) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = "triangle"; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, ac.currentTime + i * 0.07);
+    g.gain.exponentialRampToValueAtTime(0.12, ac.currentTime + i * 0.07 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + i * 0.07 + 0.5);
+    o.connect(g); g.connect(ac.destination); o.start(ac.currentTime + i * 0.07); o.stop(ac.currentTime + i * 0.07 + 0.55);
   });
-  const data = await res.json().catch(() => ({}));
-  const t = data && data.tracks && data.tracks[trackId];
-  if (!res.ok || !t || !t.url) throw new Error("no url");
-  music.urls[trackId] = t.url;
-  return t.url;
 }
-async function playZoneMusic(z) {
-  if (!z || music.zoneId === z.id) return;
-  music.zoneId = z.id;
-  let url;
-  try { url = await songUrl(z.trackId); } catch (e) { return; }
-  if (music.zoneId !== z.id) return;
-  const next = music.front === music.a ? music.b : music.a, prev = music.front;
-  next.src = url; next.volume = 0; next.currentTime = 0;
-  if (!music.muted && state !== "paused") next.play().catch(() => {});
-  music.front = next;
-  const t0 = performance.now();
-  const fade = () => {
-    const k = Math.min(1, (performance.now() - t0) / 1500);
-    next.volume = music.vol * k;
-    if (prev) prev.volume = music.vol * (1 - k);
-    if (k < 1) requestAnimationFrame(fade); else if (prev) prev.pause();
-  };
-  fade();
-}
-function setMusicPaused(p) {
-  if (!music.front) return;
-  if (p || music.muted) music.front.pause(); else music.front.play().catch(() => {});
+function sfxHit(strong) {
+  const ac = music.ac; if (!ac) return;
+  const len = 0.12, b = ac.createBuffer(1, ac.sampleRate * len, ac.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+  const s = ac.createBufferSource(); s.buffer = b;
+  const f = ac.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = strong ? 900 : 1600;
+  const g = ac.createGain(); g.gain.value = strong ? 0.5 : 0.32;
+  s.connect(f); f.connect(g); g.connect(ac.destination); s.start();
 }
 
-/* ---------- cutscenes ---------- */
-let csLines = [], csIndex = 0, csDone = null, csPrevState = "play";
-function playCutscene(name) {
-  const lines = S.cutscenes[name];
-  if (!lines || !lines.length) return Promise.resolve();
+/* ---------- cards: mission intros, placeholder cutscenes ---------- */
+let cardDone = null;
+function showCard({ kicker, title, lines, goal, button }) {
   return new Promise(resolve => {
-    csLines = lines; csIndex = 0; csDone = resolve; csPrevState = state === "cutscene" ? "play" : state;
-    state = "cutscene";
-    $("cutscene").classList.remove("hidden");
+    state = "card";
+    $("cardKicker").textContent = kicker || "";
+    $("cardTitle").textContent = title || "";
+    $("cardLines").innerHTML = (lines || []).map(l => {
+      const sp = S.speakers[l.who] || S.speakers[""];
+      return `<p>${l.who ? `<b style="color:${sp.colour}">${l.who}</b> ` : ""}${l.say}</p>`;
+    }).join("");
+    $("cardLines").classList.toggle("hidden", !(lines && lines.length));
+    $("cardPlaceholder").classList.toggle("hidden", !(lines && lines.length));
+    $("cardGoal").textContent = goal || "";
+    $("cardGoal").classList.toggle("hidden", !goal);
+    $("cardBtn").textContent = button || "Start";
+    $("card").classList.remove("hidden");
     $("touch").classList.add("hidden");
-    showLine();
+    cardDone = resolve;
   });
 }
-function showLine() {
-  const l = csLines[csIndex], sp = S.speakers[l.who] || S.speakers[""];
-  $("csWho").textContent = l.who; $("csWho").style.color = sp.colour;
-  $("csSay").textContent = l.say;
-}
-function advanceCutscene() {
-  if (state !== "cutscene") return;
-  csIndex++;
-  if (csIndex < csLines.length) return showLine();
-  endCutscene();
-}
-function endCutscene() {
-  $("cutscene").classList.add("hidden");
+function cardContinue() {
+  if (state !== "card") return;
+  $("card").classList.add("hidden");
   if (phone) $("touch").classList.remove("hidden");
-  state = csPrevState === "title" ? "play" : csPrevState;
+  state = "play";
   lastT = performance.now();
-  const d = csDone; csDone = null; d && d();
+  const d = cardDone; cardDone = null; d && d();
 }
-$("cutscene").addEventListener("pointerdown", e => { if (e.target.id !== "csSkip") advanceCutscene(); });
-$("csSkip").addEventListener("pointerdown", e => { e.stopPropagation(); endCutscene(); });
+$("card").addEventListener("click", cardContinue);   // a tap anywhere on the card carries on
 
-/* ---------- spawning per zone ---------- */
-async function spawnZone(z) {
-  if (spawnedZones.has(z.id)) return;
-  spawnedZones.add(z.id);
-  const r = rng(z.id.charCodeAt(2) * 7919 + 17);
-  const c = zoneCenter(z);
-  const names = Object.keys(ENEMIES);
-  const count = z.final ? 4 : z.focus === "fight" ? 4 : z.focus === "sneak" ? 3 : z.focus === "race" ? 1 : 2;
+/* ---------- game-time events (follow the game clock, pause with it) ---------- */
+const timers = [];
+function later(secs, fn) { timers.push({ t: secs, fn }); }
+function runTimers(dt) {
+  for (let i = timers.length - 1; i >= 0; i--) if ((timers[i].t -= dt) <= 0) { const f = timers[i].fn; timers.splice(i, 1); f(); }
+}
+
+/* ---------- game state ---------- */
+let state = "title";            // title | card | play | paused | score
+let koda = null, zora = null, mission = null, currentQuad = null, race = null, escape = null;
+const enemies = [], npcs = [];
+let health = 5, invuln = 0, attackLock = 0, comboStep = 0, lunge = null, air = null;
+
+/* ---------- missions ---------- */
+const orbGeo = new THREE.IcosahedronGeometry(0.45, 1);
+function makeOrb(colour) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: colour, emissive: colour, emissiveIntensity: 2, metalness: 0.2, roughness: 0.3 });
+  const gem = new THREE.Mesh(orbGeo, mat); gem.position.y = 1.2; gem.castShadow = true;
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 9, 20, 1, true),
+    new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }));
+  beam.position.y = 4.5;
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 1, 32), new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04;
+  g.add(gem, beam, ring);
+  g.userData.gem = gem;
+  scene.add(g);
+  return g;
+}
+const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
+function ringAt(x, z, r) {
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(new THREE.RingGeometry(r - 0.35, r, 48), ringMat);
+  m.rotation.x = -Math.PI / 2; m.position.y = 0.05;
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.9, r * 0.9, 6, 32, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xffc85a, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }));
+  beam.position.y = 3;
+  g.add(m, beam); g.position.set(x, 0, z);
+  scene.add(g);
+  return g;
+}
+function clearMission() {
+  timers.length = 0;
+  for (const e of enemies) scene.remove(e.a.root);
+  enemies.length = 0;
+  for (const n of npcs) scene.remove(n.a.root);
+  npcs.length = 0;
+  if (mission) for (const qd of mission.quads) { if (qd.orb) scene.remove(qd.orb); if (qd.ring) scene.remove(qd.ring); }
+  if (zora) { scene.remove(zora.root); zora = null; }
+  if (escape && escape.mesh) scene.remove(escape.mesh);
+  race = null; escape = null; $("race").textContent = "";
+  for (const id in pads) { pads[id].mat.emissive.setHex(0x000000); }
+}
+async function startMission(i, { showIntro = true } = {}) {
+  clearMission();
+  const def = S.missions[i];
+  const names = def.stems && def.stems.length ? def.stems.map(s => s.name) : S.defaultParts;
+  mission = {
+    index: i, def, t: 0,
+    quads: def.quads ? def.quads : def.quadrants.map((id, k) => ({ q: Q(id), partName: names[k % names.length], done: false, seen: false, spawned: false, orb: null })),
+    stats: { kos: 0, takedowns: 0, seenCount: 0, hurt: 0 }, order: [], finished: false
+  };
+  mission.quads.forEach((qd, k) => { qd.k = k; pads[qd.q.id].mat.emissive.setHex(PART_COLOURS[k]).multiplyScalar(0.08); });
+  health = 5; drawHearts(); drawMixer();
+  lunge = null; air = null; attackLock = 0; invuln = 0; comboStep = 0; race = null; currentQuad = null;
+  $("hud").classList.remove("hidden");
+  if (phone) $("touch").classList.remove("hidden");
+  // Start at the south edge of the mission's first quadrant.
+  const c = zoneCenter(mission.quads[0].q);
+  const spot = freeSpot(c.x, c.y + ZONE / 2 - 3);
+  koda.pos.set(spot.x, 0, spot.z); koda.face(Math.PI, 1); koda.play("idle");
+  updateCamera(0, true);
+  const loading = loadMissionMusic(mission);
+  if (showIntro) {
+    const cs = def.cutscene && S.cutscenes[def.cutscene];
+    await showCard({ kicker: `MISSION ${i + 1} OF ${S.missions.length}`, title: def.song, lines: cs, goal: def.goal + " Each lit quadrant holds one part of the song: unlock them in any order to build your own mix.", button: "Start the mission" });
+  }
+  await loading;
+  if (mission && mission.index === i) startMusic(mission);
+  tip("start");
+  refreshObjective();
+}
+
+/* What each quadrant asks for, set up the first time Koda comes near it. */
+async function spawnQuad(qd) {
+  if (qd.spawned) return;
+  qd.spawned = true;
+  const m = mission, q = qd.q, r = rng(q.id.charCodeAt(2) * 7919 + m.index * 131 + 17);
+  const c = zoneCenter(q), o = zoneOrigin(q);
+  const tougher = Math.floor(m.index / 4);
+  const count = q.focus === "fight" ? 3 + tougher : q.focus === "sneak" ? 3 + tougher : q.focus === "race" ? 1 : 2;
+  const names = Object.keys(ENEMIES).filter(n => n !== "gilded");
   for (let i = 0; i < count; i++) {
-    const kind = z.focus === "fight" && i === 0 ? "gilded" : names[Math.floor(r() * names.length)];
-    const ang = (i / count) * Math.PI * 2 + r();
-    const rad = 9 + r() * 8;
+    const kind = q.focus === "fight" && i === 0 && m.index >= 2 ? "gilded" : names[Math.floor(r() * names.length)];
+    const ang = (i / count) * Math.PI * 2 + r(), rad = 8 + r() * 8;
     const route = [];
     for (let k = 0; k < 4; k++) {
       const a2 = ang + k * Math.PI / 2;
-      route.push(new THREE.Vector3(c.x + Math.cos(a2) * rad, 0, c.y + Math.sin(a2) * rad));
+      const s = freeSpot(c.x + Math.cos(a2) * rad, c.y + Math.sin(a2) * rad, 0.6, r);
+      route.push(new THREE.Vector3(s.x, 0, s.z));
     }
     makeActor(kind + ".glb", ENEMIES[kind]).then(a => {
-      a.pos.copy(route[0]);
-      scene.add(a.root);
-      a.play("walk");
-      enemies.push({ a, zone: z.id, route, leg: 1, state: "patrol", meter: 0, hp: kind === "gilded" ? 5 : 3,
-        cool: 0, hitT: 0, lastSeen: new THREE.Vector3(), searchT: 0, speed: 2 + r() * 0.5 });
-      if (state === "play") refreshObjective();
+      if (mission !== m) return;
+      a.pos.copy(route[0]); scene.add(a.root); a.play("walk");
+      enemies.push({ a, qd, route, leg: 1, state: "patrol", meter: 0, hp: kind === "gilded" ? 5 : 3,
+        cool: 0.5, hitT: 0, lastSeen: new THREE.Vector3(), searchT: 0, speed: 2 + r() * 0.5, kind });
+      refreshObjective();
     }).catch(() => {});
   }
-  // People of the city in the calmer zones.
-  if (z.focus === "explore") {
+  if (q.focus === "explore") {
     for (let i = 0; i < 2; i++) {
       const who = TOWNSFOLK[Math.floor(r() * TOWNSFOLK.length)];
       makeActor("townsfolk/" + who + ".glb", 1.65).then(a => {
-        a.pos.set(c.x - 6 + r() * 12, 0, c.y - 6 + r() * 12);
-        a.face(r() * Math.PI * 2, 1);
+        if (mission !== m) return;
+        const s = freeSpot(c.x - 6 + r() * 12, c.y - 6 + r() * 12, 0.8, r);
+        a.pos.set(s.x, 0, s.z); a.face(r() * Math.PI * 2, 1);
         scene.add(a.root); a.play("idle");
         npcs.push({ a, line: S.npcLines[Math.floor(r() * S.npcLines.length)] });
       }).catch(() => {});
     }
   }
-  // The clue (fight and race zones earn theirs).
-  if (z.clue && !save.clues.includes(z.id) && z.focus !== "fight" && z.focus !== "race") {
-    const o = zoneOrigin(z);
-    let x, zz, tries = 0;
-    do { x = o.x + 8 + r() * (ZONE - 16); zz = o.y + 8 + r() * (ZONE - 16); tries++; } while (blocked(x, zz, 1.2) && tries < 40);
-    addClue(z, x, zz);
+  const colour = PART_COLOURS[qd.k];
+  if (q.focus === "explore" || q.focus === "sneak") {
+    const s = freeSpot(o.x + 10 + r() * (ZONE - 20), o.y + 10 + r() * (ZONE - 20), 1.2, r);
+    qd.orb = makeOrb(colour); qd.orb.position.set(s.x, 0, s.z);
   }
-  if (z.focus === "race" && !z.final && !save.clues.includes(z.id)) setupRace(z);
+  if (q.focus === "race") {
+    // The ring at the edge nearest Koda, the part across the quadrant.
+    const fromSouth = koda.pos.z > c.y;
+    const start = freeSpot(c.x, fromSouth ? o.y + ZONE - 5 : o.y + 5, 1.2);
+    const end = freeSpot(c.x + (r() - 0.5) * 20, fromSouth ? o.y + 6 : o.y + ZONE - 6, 1.2);
+    qd.ring = ringAt(start.x, start.z, 1.8);
+    qd.raceEnd = end;
+  }
 }
+const quadEnemiesLeft = qd => enemies.filter(e => e.qd === qd && e.state !== "ko").length;
 
-/* ---------- clues ---------- */
-const clueGeo = new THREE.OctahedronGeometry(0.42);
-const clueMat = new THREE.MeshStandardMaterial({ color: 0xffd27a, emissive: 0xf2a73c, emissiveIntensity: 1.8, metalness: 0.3, roughness: 0.25 });
-const ringGeo = new THREE.RingGeometry(0.7, 0.95, 32);
-const ringMat = new THREE.MeshBasicMaterial({ color: 0xffc85a, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
-function addClue(z, x, zz) {
-  if (clues.some(c => c.zone === z.id)) return;
-  const g = new THREE.Group();
-  const gem = new THREE.Mesh(clueGeo, clueMat); gem.position.y = 1.1; gem.castShadow = true;
-  const ring = new THREE.Mesh(ringGeo, ringMat); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03;
-  g.add(gem, ring); g.position.set(x, 0, zz);
-  scene.add(g);
-  clues.push({ zone: z.id, g, gem });
-}
-async function takeClue(c) {
-  scene.remove(c.g);
-  clues.splice(clues.indexOf(c), 1);
-  if (!save.clues.includes(c.zone)) save.clues.push(c.zone);
-  writeSave(); drawClues();
-  const z = S.zones.find(q => q.id === c.zone);
-  toast("Clue: " + z.clue, 5);
-  const n = save.clues.length;
-  if (n === 1) await playCutscene("firstClue");
-  else if (n === Math.ceil(S.cluesToFinal / 2)) await playCutscene("vision");
-  if (n === S.cluesToFinal) { await playCutscene("finalOpen"); openFinal(); }
+function unlockPart(qd) {
+  if (qd.done) return;
+  qd.done = true;
+  if (qd.orb) { scene.remove(qd.orb); qd.orb = null; }
+  if (qd.ring) { scene.remove(qd.ring); qd.ring = null; }
+  mission.order.push(qd.partName);
+  pads[qd.q.id].mat.emissive.setHex(0x000000);
+  partIn(qd.k);
+  drawMixer();
+  const unseen = !qd.seen;
+  toast(`${qd.partName} joins the mix${unseen ? ". Unseen!" : "."}`, 3);
   refreshObjective();
+  if (mission.quads.every(x => x.done)) songComplete();
 }
-const finalOpen = () => save.clues.length >= S.cluesToFinal;
-
-/* ---------- races ---------- */
-const markerMat = new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
-function ringAt(x, z, r) {
-  const m = new THREE.Mesh(new THREE.RingGeometry(r - 0.35, r, 48), markerMat);
-  m.rotation.x = -Math.PI / 2; m.position.set(x, 0.05, z);
-  const beam = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.9, r * 0.9, 6, 32, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0xffc85a, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }));
-  beam.position.set(x, 3, z);
-  scene.add(m, beam);
-  return [m, beam];
-}
-const raceSpots = {};
-function setupRace(z) {
-  const o = zoneOrigin(z);
-  const start = new THREE.Vector2(o.x + ZONE / 2, o.y + 4);
-  const end = new THREE.Vector2(o.x + ZONE / 2, o.y + ZONE - 4);
-  raceSpots[z.id] = { z, start, end, startMesh: ringAt(start.x, start.y, 1.8), endMesh: null };
-}
-function updateRaces(dt) {
-  if (race) {
-    race.t -= dt;
-    $("race").textContent = Math.max(0, race.t).toFixed(1);
-    if (Math.hypot(koda.pos.x - race.spot.end.x, koda.pos.z - race.spot.end.y) < 2.2) {
-      const z = race.spot.z;
-      race.spot.endMesh.forEach(m => scene.remove(m));
-      race = null; $("race").textContent = "";
-      toast(S.zoneLines.race, 3);
-      addClue(z, koda.pos.x, koda.pos.z + 1.5);
-      refreshObjective();
-    } else if (race.t <= 0) {
-      race.spot.endMesh.forEach(m => scene.remove(m));
-      race.spot.startMesh.forEach(m => m.visible = true);
-      race = null; $("race").textContent = "";
-      toast("Too slow. Back to the ring and run it again.", 3);
-      refreshObjective();
-    }
+async function songComplete() {
+  const m = mission;
+  if (m.def.final) {
+    // The last song is whole: Zora is in the Old Tower.
+    const c = zoneCenter(Q("q11"));
+    try {
+      zora = await makeActor("zora.glb", 1.58);
+      const s = freeSpot(c.x, c.y);
+      zora.pos.set(s.x, 0, s.z); scene.add(zora.root);
+      zora.play(zora.has("stun") ? "stun" : "idle");
+      zora.waiting = true;
+    } catch (e) { return finishMission(); }
+    toast("The song is whole. Zora is in the Old Tower!", 4);
+    refreshObjective();
     return;
   }
-  for (const id in raceSpots) {
-    const s = raceSpots[id];
-    if (save.clues.includes(id) || clues.some(c => c.zone === id)) continue;
-    if (Math.hypot(koda.pos.x - s.start.x, koda.pos.z - s.start.y) < 1.8) {
-      s.startMesh.forEach(m => m.visible = false);
-      s.endMesh = ringAt(s.end.x, s.end.y, 2.2);
-      race = { spot: s, t: (s.z.race && s.z.race.seconds) || 40 };
-      toast("Run!", 1.5);
-      refreshObjective();
-    }
-  }
+  toast(`${m.def.song} is complete.`, 3);
+  later(3.5, () => { if (mission === m) finishMission(); });
 }
 
-/* ---------- the final zone ---------- */
-async function openFinal() {
-  const z = S.zones.find(q => q.final);
-  await spawnZone(z);
-  if (zora) return;
-  const c = zoneCenter(z);
-  try {
-    zora = await makeActor("zora.glb", 1.58);
-    zora.pos.set(c.x, 0, c.y); scene.add(zora.root);
-    zora.play(zora.has("stun") ? "stun" : "idle");
-    zora.waiting = true;
-  } catch (e) { /* the story still finishes without her model */ }
-  refreshObjective();
+/* ---------- score ---------- */
+function scoreFor(m) {
+  const parts = m.quads.filter(q => q.done).length * 1000;
+  const time = Math.max(0, Math.round(3000 - m.t * 8));
+  const stealth = m.quads.filter(q => q.done && !q.seen).length * 400;
+  const takedowns = m.stats.takedowns * 200, kos = m.stats.kos * 100, hurt = -m.stats.hurt * 150;
+  const total = Math.max(0, parts + time + stealth + takedowns + kos + hurt);
+  const grade = total >= 7500 ? "S" : total >= 6000 ? "A" : total >= 4500 ? "B" : "C";
+  return { rows: [["Parts unlocked", parts], ["Time bonus", time], ["Unseen quadrants", stealth], ["Takedowns", takedowns], ["Guards put down", kos], ["Hits taken", hurt]], total, grade };
 }
-function updateFinal(dt) {
+function finishMission() {
+  const m = mission;
+  if (!m || m.finished) return;
+  m.finished = true;
+  state = "score";
+  const sc = scoreFor(m);
+  const prev = save.best[m.index];
+  const isBest = !prev || sc.total > prev.total;
+  if (isBest) save.best[m.index] = { total: sc.total, grade: sc.grade, order: m.order };
+  save.unlocked = Math.max(save.unlocked, Math.min(S.missions.length - 1, m.index + 1));
+  if (m.def.final) save.finished = true;
+  writeSave();
+  $("scoreTitle").textContent = `Mission ${m.index + 1}: ${m.def.song}`;
+  $("scoreGrade").textContent = sc.grade;
+  $("scoreRows").innerHTML = sc.rows.map(([k, v]) => `<div><span>${k}</span><b>${v >= 0 ? "" : "-"}${Math.abs(v)}</b></div>`).join("") +
+    `<div class="total"><span>Total${isBest ? " · new best" : ""}</span><b>${sc.total}</b></div>`;
+  $("scoreMix").textContent = "Your mix: " + m.order.join(" → ");
+  const last = m.index >= S.missions.length - 1;
+  $("nextBtn").textContent = last ? "Back to the title" : `Next: ${S.missions[m.index + 1].song}`;
+  $("score").classList.remove("hidden");
+  $("hud").classList.add("hidden");
+  $("touch").classList.add("hidden");
+}
+$("nextBtn").addEventListener("click", () => {
+  $("score").classList.add("hidden");
+  const m = mission;
+  if (!m || m.index >= S.missions.length - 1) return toTitle();
+  state = "play";
+  startMission(m.index + 1);
+});
+$("replayBtn").addEventListener("click", () => {
+  $("score").classList.add("hidden");
+  state = "play";
+  startMission(mission.index, { showIntro: false });
+});
+
+/* ---------- the final escape ---------- */
+function updateZora(dt) {
   if (!zora) return;
   zora.update(dt);
   if (zora.waiting) {
-    if (Math.hypot(koda.pos.x - zora.pos.x, koda.pos.z - zora.pos.z) < 2.2) {
+    if (dist2(koda.pos, zora.pos) < 2.2) {
       zora.waiting = false;
-      playCutscene("found").then(() => {
-        // Out the far side of the city, every warden after you.
-        escape = { t: 60, exit: new THREE.Vector2(WORLD_W + ROAD - 3, WORLD_H / 2) };
-        escape.mesh = ringAt(escape.exit.x, escape.exit.y, 3);
+      showCard({ kicker: "CUTSCENE", title: "Zora", lines: S.cutscenes.found, button: "Run" }).then(() => {
+        const ex = new THREE.Vector2(WORLD_W + ROAD - 3, zoneCenter(Q("q12")).y);
+        escape = { t: 60, exit: ex, mesh: ringAt(ex.x, ex.y, 3) };
         for (const e of enemies) if (e.state !== "ko") alertEnemy(e);
         refreshObjective();
       });
     }
     return;
   }
-  // Zora follows a step behind.
   const dx = koda.pos.x - zora.pos.x, dz = koda.pos.z - zora.pos.z, d = Math.hypot(dx, dz);
   if (d > 1.8) {
-    const sp = Math.min(d - 1.8, 6.4 * dt);
+    const sp = Math.min(d - 1.8, 7 * dt);
     moveWithCollision(zora.pos, dx / d * sp, dz / d * sp, 0.4);
     zora.play(d > 4 ? "sprint" : "run");
     zora.face(Math.atan2(dx, dz), 0.25);
@@ -781,21 +961,40 @@ function updateFinal(dt) {
     escape.t -= dt;
     $("race").textContent = Math.max(0, escape.t).toFixed(1);
     if (Math.hypot(koda.pos.x - escape.exit.x, koda.pos.z - escape.exit.y) < 3.2) {
-      escape.mesh.forEach(m => scene.remove(m));
-      escape = null; $("race").textContent = "";
-      save.finished = true; writeSave();
-      playCutscene("ending").then(() => toTitle(true));
+      scene.remove(escape.mesh); escape = null; $("race").textContent = "";
+      showCard({ kicker: "CUTSCENE", title: "Home", lines: S.cutscenes.ending, button: "See your score" }).then(finishMission);
     } else if (escape.t <= 0) {
-      escape.t = 60;
+      escape.t = 45;
       toast("They're closing in. Keep going!", 2.5);
     }
   }
 }
 
 /* ---------- Koda ---------- */
+const CONTACT = 1.05;      // how close a hit lands: fists meet faces
 function updateKoda(dt) {
   readInput();
   invuln = Math.max(0, invuln - dt);
+  // In the air: a simple jump arc. You can steer while airborne.
+  if (air) {
+    air.vy -= 22 * dt; koda.pos.y += air.vy * dt;
+    if (input.mag) moveWithCollision(koda.pos, input.x * air.speed * dt, input.z * air.speed * dt, 0.45);
+    if (koda.pos.y <= 0) {
+      koda.pos.y = 0;
+      if (air.kick) landKick();
+      air = null; attackLock = Math.max(attackLock, 0.12);
+    }
+    koda.update(dt);
+    return;
+  }
+  // A strike pulls him in to contact range with the guard he is hitting.
+  if (lunge) {
+    lunge.t -= dt;
+    const k = Math.min(1, dt / Math.max(0.01, lunge.t + dt));
+    const nx = koda.pos.x + (lunge.x - koda.pos.x) * k, nz = koda.pos.z + (lunge.z - koda.pos.z) * k;
+    moveWithCollision(koda.pos, nx - koda.pos.x, nz - koda.pos.z, 0.45);
+    if (lunge.t <= 0) lunge = null;
+  }
   if (attackLock > 0) { attackLock -= dt; koda.update(dt); return; }
   const sneaking = input.sneak;
   const sprint = !sneaking && input.mag > 0.93;
@@ -808,100 +1007,168 @@ function updateKoda(dt) {
   koda.moving = speed > 0; koda.sprinting = sprint; koda.sneaking = sneaking;
   koda.update(dt);
 }
-function forward(a) { return new THREE.Vector2(Math.sin(a.yaw), Math.cos(a.yaw)); }
+function jump() {
+  if (!koda || air || attackLock > 0) return;
+  const speed = input.mag ? (input.mag > 0.93 ? 7.5 : 5) : 0;
+  air = { vy: 7.2, speed, kick: false };
+  koda.play("jump", { once: true, speed: 1.3 });
+  tip("jump");
+}
+// The guard to strike: the nearest one in reach, favouring the one he faces.
+function strikeTarget(reach) {
+  let best = null, bs = Infinity;
+  const f = forward(koda);
+  for (const e of enemies) {
+    if (e.state === "ko") continue;
+    const dx = e.a.pos.x - koda.pos.x, dz = e.a.pos.z - koda.pos.z, d = Math.hypot(dx, dz);
+    if (d > reach) continue;
+    const facing = (dx * f.x + dz * f.y) / (d || 1);
+    const s = d - facing * 1.2;
+    if (s < bs) { bs = s; best = e; }
+  }
+  return best;
+}
 function attack() {
   if (!koda || attackLock > 0) return;
-  const move = comboStep++ % 2 ? "kick" : "punch";
-  attackLock = Math.min(0.55, koda.play(move, { once: true, speed: 1.35 }) || 0.45);
-  setTimeout(() => {
+  if (air) {
+    if (air.kick) return;
+    air.kick = true; air.vy = Math.max(air.vy, 3);
+    koda.play(koda.has("flykick") ? "flykick" : "kick", { once: true, speed: 1.4 });
+    const t = strikeTarget(4);
+    if (t) { koda.faceTo(t.a.pos.x, t.a.pos.z); air.speed = 6; input.x = Math.sin(koda.yaw); input.z = Math.cos(koda.yaw); }
+    return;
+  }
+  const t = strikeTarget(3.2);
+  if (t) {
+    // Turn to him and close in, so the blow lands where it is aimed.
+    koda.faceTo(t.a.pos.x, t.a.pos.z);
+    const dx = t.a.pos.x - koda.pos.x, dz = t.a.pos.z - koda.pos.z, d = Math.hypot(dx, dz) || 1;
+    if (d > CONTACT) lunge = { x: t.a.pos.x - dx / d * CONTACT, z: t.a.pos.z - dz / d * CONTACT, t: 0.14 };
+  }
+  const move = comboStep++ % 3 === 2 ? "kick" : "punch";
+  attackLock = Math.min(0.5, koda.play(move, { once: true, speed: 1.5 }) || 0.42);
+  later(0.17, () => {
     const f = forward(koda);
     for (const e of enemies) {
       if (e.state === "ko") continue;
       const dx = e.a.pos.x - koda.pos.x, dz = e.a.pos.z - koda.pos.z, d = Math.hypot(dx, dz);
-      if (d < 1.9 && (dx * f.x + dz * f.y) / (d || 1) > 0.35) hitEnemy(e, 1);
+      if (d < 1.6 && (dx * f.x + dz * f.y) / (d || 1) > 0.3) hitEnemy(e, move === "kick" ? 2 : 1, dx / (d || 1), dz / (d || 1));
     }
-  }, 180);
+  });
+}
+function landKick() {
+  for (const e of enemies) {
+    if (e.state === "ko") continue;
+    const dx = e.a.pos.x - koda.pos.x, dz = e.a.pos.z - koda.pos.z, d = Math.hypot(dx, dz);
+    if (d < 1.9) hitEnemy(e, 2, dx / (d || 1), dz / (d || 1));
+  }
 }
 function action() {
-  if (!koda || attackLock > 0) return;
+  if (!koda || attackLock > 0 || air) return;
   // A takedown: from behind, unseen.
   for (const e of enemies) {
     if (e.state === "ko" || e.state === "alert") continue;
     const dx = koda.pos.x - e.a.pos.x, dz = koda.pos.z - e.a.pos.z, d = Math.hypot(dx, dz);
     const ef = forward(e.a);
-    if (d < 1.9 && (dx * ef.x + dz * ef.y) / (d || 1) < -0.3) {
-      koda.face(Math.atan2(-dx, -dz), 1);
-      attackLock = Math.min(1.4, koda.play("takedown", { once: true, speed: 1.2 }) || 1);
-      setTimeout(() => knockOut(e), 450);
+    if (d < 2 && (dx * ef.x + dz * ef.y) / (d || 1) < -0.2) {
+      koda.faceTo(e.a.pos.x, e.a.pos.z);
+      lunge = { x: e.a.pos.x - ef.x * 0.7, z: e.a.pos.z - ef.y * 0.7, t: 0.15 };
+      attackLock = Math.min(1.3, koda.play("takedown", { once: true, speed: 1.25 }) || 1);
+      mission.stats.takedowns++;
+      later(0.42, () => { knockOut(e); sfxHit(true); });
       return;
     }
   }
-  for (const c of clues) {
-    if (Math.hypot(koda.pos.x - c.g.position.x, koda.pos.z - c.g.position.z) < 2) return takeClue(c);
-  }
   for (const n of npcs) {
-    if (Math.hypot(koda.pos.x - n.a.pos.x, koda.pos.z - n.a.pos.z) < 2.6) {
-      n.a.face(Math.atan2(koda.pos.x - n.a.pos.x, koda.pos.z - n.a.pos.z), 1);
+    if (dist2(koda.pos, n.a.pos) < 2.6) {
+      n.a.faceTo(koda.pos.x, koda.pos.z);
       return toast("\"" + n.line + "\"", 4);
     }
   }
 }
-function hurtKoda(n) {
-  if (invuln > 0 || state !== "play") return;
-  health -= n; invuln = 1.1; drawHearts();
-  koda.play("hurt", { once: true }); attackLock = 0.35;
+function hurtKoda(n, fromX, fromZ) {
+  if (invuln > 0 || state !== "play" || air) return;
+  health -= n; invuln = 1.0; drawHearts();
+  mission.stats.hurt += n;
+  sfxHit(true);
+  const dx = koda.pos.x - fromX, dz = koda.pos.z - fromZ, d = Math.hypot(dx, dz) || 1;
+  moveWithCollision(koda.pos, dx / d * 0.45, dz / d * 0.45, 0.45);
+  koda.faceTo(fromX, fromZ);
+  koda.play("hurt", { once: true }); attackLock = 0.3;
   if (health <= 0) respawn();
 }
 function respawn() {
-  const z = currentZone || S.zones[0];
-  const c = zoneCenter(z);
-  koda.pos.set(c.x, 0, c.y - ZONE / 2 + 3);
+  const qd = mission.quads.find(q => !q.done) || mission.quads[0];
+  const c = zoneCenter(qd.q);
+  const s = freeSpot(c.x, c.y + ZONE / 2 - 3);
+  koda.pos.set(s.x, 0, s.z);
   health = 5; drawHearts();
   for (const e of enemies) if (e.state !== "ko") { e.state = "patrol"; e.meter = 0; }
-  if (race) { race.t = 0; }
+  if (race) failRace();
   toast("Back on your feet. Go quieter this time.", 3);
 }
 
 /* ---------- enemies ---------- */
-function alertEnemy(e) { if (e.state === "ko") return; e.state = "alert"; e.meter = 1; e.a.play(e.a.has("alert") ? "alert" : "run", { once: true }); e.cool = 0.6; }
-function hitEnemy(e, dmg) {
+function alertEnemy(e) {
+  if (e.state === "ko" || e.state === "alert") return;
+  e.state = "alert"; e.meter = 1; e.cool = 0.5;
+  e.a.play(e.a.has("alert") ? "alert" : "run", { once: true });
+  if (e.qd && !e.qd.done) {
+    if (!e.qd.seen) mission.stats.seenCount++;
+    e.qd.seen = true;
+    // Seen in a sneak quadrant: the part moves somewhere else.
+    if (e.qd.q.focus === "sneak" && e.qd.orb && !e.qd.moved) {
+      e.qd.moved = true;
+      const o = zoneOrigin(e.qd.q);
+      const s = freeSpot(o.x + 10 + Math.random() * (ZONE - 20), o.y + 10 + Math.random() * (ZONE - 20));
+      e.qd.orb.position.set(s.x, 0, s.z);
+      toast(`They saw you. ${e.qd.partName} has moved.`, 3);
+    }
+  }
+  tip("seen");
+}
+function hitEnemy(e, dmg, nx, nz) {
   e.hp -= dmg;
+  sfxHit(dmg > 1);
+  // Knocked back a step, and turned to face his attacker.
+  moveWithCollision(e.a.pos, nx * 0.5, nz * 0.5, 0.45);
+  e.a.faceTo(koda.pos.x, koda.pos.z);
   if (e.hp <= 0) return knockOut(e);
-  e.a.play("hit", { once: true }); e.hitT = 0.4;
+  e.a.play("hit", { once: true }); e.hitT = 0.4; e.cool = Math.max(e.cool, 0.6);
   if (e.state !== "alert") alertEnemy(e);
 }
 function knockOut(e) {
   if (e.state === "ko") return;
   e.state = "ko"; e.a.play("ko", { once: true });
-  const z = S.zones.find(q => q.id === e.zone);
-  if (z && z.focus === "fight" && zoneEnemiesLeft(z) === 0 && !save.clues.includes(z.id)) {
-    toast(S.zoneLines.fight, 3);
-    const c = zoneCenter(z);
-    addClue(z, c.x, c.y);
+  mission.stats.kos++;
+  const qd = e.qd;
+  if (qd && qd.q.focus === "fight" && !qd.done && quadEnemiesLeft(qd) === 0) {
+    const s = freeSpot(e.a.pos.x, e.a.pos.z, 1);
+    qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(s.x, 0, s.z);
+    toast(`The last guard is down. Grab ${qd.partName}!`, 3);
   }
   refreshObjective();
 }
-const zoneEnemiesLeft = z => enemies.filter(e => e.zone === z.id && e.state !== "ko").length;
 
-let anySeen = false, anySus = false;
+let anySeen = false, anySus = false, swingGap = 0;   // guards take turns to swing
 function updateEnemies(dt) {
-  anySeen = false; anySus = false;
+  anySeen = false; anySus = false; swingGap = Math.max(0, swingGap - dt);
   for (const e of enemies) {
     const a = e.a;
-    const d = Math.hypot(koda.pos.x - a.pos.x, koda.pos.z - a.pos.z);
+    const d = dist2(koda.pos, a.pos);
     a.root.visible = d < 60;
     if (d > 55) continue;
     a.update(dt);
     if (e.state === "ko") continue;
     e.cool = Math.max(0, e.cool - dt); e.hitT = Math.max(0, e.hitT - dt);
     if (e.hitT > 0) continue;
+    if (d < 14 && e.state === "patrol") tip("guard");
 
-    // Can it see Koda?
     const f = forward(a), dx = koda.pos.x - a.pos.x, dz = koda.pos.z - a.pos.z;
     const range = koda.sneaking ? 6.5 : 12;
     const inCone = d < range && (dx * f.x + dz * f.y) / (d || 1) > 0.42;
-    const heard = koda.sprinting && d < 5.5;
-    const sees = (inCone || heard || d < 1.4) && sightClear(a.pos.x, a.pos.z, koda.pos.x, koda.pos.z);
+    const heard = (koda.sprinting || air) && d < 5.5;
+    const sees = (inCone || heard || d < 1.3) && sightClear(a.pos.x, a.pos.z, koda.pos.x, koda.pos.z);
 
     if (e.state !== "alert") {
       if (sees) {
@@ -912,8 +1179,7 @@ function updateEnemies(dt) {
         if (e.meter >= 1) alertEnemy(e);
       } else {
         e.meter = Math.max(0, e.meter - dt * 0.35);
-        if (e.state === "suspicious" && e.meter <= 0) { e.state = "patrol"; a.play("walk"); }
-        if (e.state === "suspicious") a.play("walk");
+        if (e.state === "suspicious" && e.meter <= 0) e.state = "patrol";
       }
       if (e.state === "patrol" || (e.state === "suspicious" && !sees)) {
         const tgt = e.state === "patrol" ? e.route[e.leg] : e.lastSeen;
@@ -929,54 +1195,191 @@ function updateEnemies(dt) {
       continue;
     }
 
-    // Alerted: chase and fight.
+    // Alerted: chase, square up, and swing only when face to face.
     anySeen = true;
     if (sees) { e.lastSeen.copy(koda.pos); e.searchT = 6; } else e.searchT -= dt;
     if (e.searchT <= 0) { e.state = "suspicious"; e.meter = 0.6; a.play("walk"); continue; }
-    if (e.cool > 0) continue;
-    if (d > 1.45) {
+    if (d > 1.7) {
       const tx = e.lastSeen.x - a.pos.x, tz = e.lastSeen.z - a.pos.z, td = Math.hypot(tx, tz) || 1;
-      moveWithCollision(a.pos, tx / td * 5.4 * dt, tz / td * 5.4 * dt, 0.45);
+      if (td > 0.3) moveWithCollision(a.pos, tx / td * 5.2 * dt, tz / td * 5.2 * dt, 0.45);
       a.face(Math.atan2(tx, tz), Math.min(1, dt * 8));
-      a.play("run");
-    } else {
-      a.face(Math.atan2(dx, dz), 1);
-      a.play("punch", { once: true }); e.cool = 1.25;
-      setTimeout(() => {
-        if (e.state === "alert" && Math.hypot(koda.pos.x - a.pos.x, koda.pos.z - a.pos.z) < 1.9) hurtKoda(1);
-      }, 320);
+      if (e.cool <= 0.2) a.play("run");
+      continue;
     }
+    // In range: always face him, hold contact distance.
+    a.face(Math.atan2(dx, dz), Math.min(1, dt * 12));
+    if (d > CONTACT + 0.1) moveWithCollision(a.pos, dx / d * 2.5 * dt, dz / d * 2.5 * dt, 0.45);
+    if (e.cool <= 0 && swingGap > 0) e.cool = 0.25;
+    if (e.cool > 0) { if (a.current && /run|walk/.test(a.current.getClip().name)) a.play(a.has("fight_idle") ? "fight_idle" : "walk"); continue; }
+    a.play("punch", { once: true, speed: 1.1 }); e.cool = 1.35;
+    swingGap = mission.index < 3 ? 1.1 : mission.index < 8 ? 0.8 : 0.55;
+    later(0.36, () => {
+      if (e.state !== "alert") return;
+      const ddx = koda.pos.x - a.pos.x, ddz = koda.pos.z - a.pos.z, dd = Math.hypot(ddx, ddz);
+      const ef = forward(a);
+      if (dd < 1.6 && (ddx * ef.x + ddz * ef.y) / (dd || 1) > 0.5) hurtKoda(1, a.pos.x, a.pos.z);
+    });
+  }
+  // Guards don't stand inside each other.
+  for (let i = 0; i < enemies.length; i++) for (let j = i + 1; j < enemies.length; j++) {
+    const p = enemies[i].a.pos, q = enemies[j].a.pos;
+    if (enemies[i].state === "ko" || enemies[j].state === "ko") continue;
+    const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
+    if (d > 0 && d < 0.9) { const push = (0.9 - d) / 2; p.x -= dx / d * push; p.z -= dz / d * push; q.x += dx / d * push; q.z += dz / d * push; }
   }
   const al = $("alert");
   al.className = "alert" + (anySeen ? " seen" : anySus ? " sus" : "");
   al.textContent = anySeen ? "SEEN" : anySus ? "?" : "";
 }
 
-/* ---------- NPCs ---------- */
 function updateNpcs(dt) {
   for (const n of npcs) {
-    const d = Math.hypot(koda.pos.x - n.a.pos.x, koda.pos.z - n.a.pos.z);
+    const d = dist2(koda.pos, n.a.pos);
     n.a.root.visible = d < 60;
     if (d < 45) n.a.update(dt);
   }
 }
 
-/* ---------- zones ---------- */
-function updateZone() {
-  const z = zoneAt(koda.pos.x, koda.pos.z);
-  if (z && z !== currentZone) {
-    currentZone = z;
-    $("zoneName").textContent = "ZONE " + String(S.zones.indexOf(z) + 1).padStart(2, "0");
-    $("zoneSong").textContent = z.song;
-    playZoneMusic(z);
-    if (z.final && !finalOpen()) toast("Something's here. Not yet. Keep finding clues.", 3);
+/* ---------- quadrants, parts and races ---------- */
+function failRace() {
+  if (!race) return;
+  const qd = race.qd;
+  if (qd.orb) { scene.remove(qd.orb); qd.orb = null; }
+  qd.ring.visible = true;
+  race = null; $("race").textContent = "";
+}
+function updateQuads(dt, now) {
+  const q = zoneAt(koda.pos.x, koda.pos.z);
+  if (q !== currentQuad) {
+    currentQuad = q;
+    const qd = q && mission.quads.find(x => x.q === q);
+    $("zoneName").textContent = q ? q.name.toUpperCase() : "THE STREETS";
+    $("zoneSong").textContent = qd ? (qd.done ? `${qd.partName} ✓` : `Holds: ${qd.partName}`) : mission.def.song;
+    if (qd && !qd.done) tip(q.focus);
     refreshObjective();
   }
-  // Load the zones around Koda ahead of time.
-  for (const q of S.zones) {
-    const c = zoneCenter(q);
-    if (Math.hypot(c.x - koda.pos.x, c.y - koda.pos.z) < ZONE * 1.25) spawnZone(q);
+  for (const qd of mission.quads) {
+    if (!qd.done) { const c = zoneCenter(qd.q); if (Math.hypot(c.x - koda.pos.x, c.y - koda.pos.z) < ZONE * 1.1) spawnQuad(qd); }
+    if (qd.orb) {
+      const g = qd.orb.userData.gem; g.rotation.y += dt * 1.6; g.position.y = 1.2 + Math.sin(now / 380) * 0.15;
+      if (!qd.done && dist2(koda.pos, qd.orb.position) < 1.5) unlockPart(qd);
+    }
+    // Races: step in the ring and the part appears across the quadrant, against the clock.
+    if (qd.ring && qd.ring.visible && !race && dist2(koda.pos, qd.ring.position) < 1.9) {
+      qd.ring.visible = false;
+      qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(qd.raceEnd.x, 0, qd.raceEnd.z);
+      race = { qd, t: 22 + Math.max(0, 6 - mission.index) };
+      toast("Run!", 1.5);
+      refreshObjective();
+    }
   }
+  if (race) {
+    race.t -= dt;
+    $("race").textContent = Math.max(0, race.t).toFixed(1);
+    if (race.qd.done) { race = null; $("race").textContent = ""; }
+    else if (race.t <= 0) { failRace(); toast("Too slow. Back to the ring and run it again.", 3); refreshObjective(); }
+  }
+}
+
+/* ---------- where to go next ---------- */
+const guide = (() => {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 1.6); shape.lineTo(0.55, 0.7); shape.lineTo(0.2, 0.7); shape.lineTo(0.2, 0); shape.lineTo(-0.2, 0); shape.lineTo(-0.2, 0.7); shape.lineTo(-0.55, 0.7); shape.closePath();
+  const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+  m.rotation.x = Math.PI / 2;
+  const g = new THREE.Group(); g.add(m); g.visible = false; scene.add(g);
+  return g;
+})();
+function objectiveTarget() {
+  if (escape) return { x: escape.exit.x, z: escape.exit.y };
+  if (zora && zora.waiting) return { x: zora.pos.x, z: zora.pos.z };
+  if (race && race.qd.orb) return { x: race.qd.orb.position.x, z: race.qd.orb.position.z };
+  const here = currentQuad && mission.quads.find(x => x.q === currentQuad && !x.done);
+  const targetIn = qd => {
+    if (qd.orb) return { x: qd.orb.position.x, z: qd.orb.position.z };
+    if (qd.ring && qd.ring.visible) return { x: qd.ring.position.x, z: qd.ring.position.z };
+    if (qd.q.focus === "fight") { const e = enemies.find(x => x.qd === qd && x.state !== "ko"); if (e) return { x: e.a.pos.x, z: e.a.pos.z }; }
+    return null;
+  };
+  if (here) { const t = targetIn(here); if (t) return t; }
+  let best = null, bd = Infinity;
+  for (const qd of mission.quads) {
+    if (qd.done) continue;
+    const c = zoneCenter(qd.q), d = Math.hypot(c.x - koda.pos.x, c.y - koda.pos.z);
+    if (d < bd) { bd = d; best = { x: c.x, z: c.y }; }
+  }
+  return best;
+}
+
+/* ---------- finding a way round buildings (for the guide arrow) ---------- */
+const NAV = { cell: 1, ox: -ROAD + 1, oz: -ROAD + 1, w: 0, h: 0, grid: null };
+function buildNav() {
+  NAV.w = Math.ceil((WORLD_W + 2 * ROAD - 2) / NAV.cell); NAV.h = Math.ceil((WORLD_H + 2 * ROAD - 2) / NAV.cell);
+  NAV.grid = new Uint8Array(NAV.w * NAV.h);
+  for (let j = 0; j < NAV.h; j++) for (let i = 0; i < NAV.w; i++)
+    NAV.grid[j * NAV.w + i] = blocked(NAV.ox + (i + 0.5) * NAV.cell, NAV.oz + (j + 0.5) * NAV.cell, 0.8) ? 1 : 0;
+}
+const navCell = (x, z) => [clamp(Math.floor((x - NAV.ox) / NAV.cell), 0, NAV.w - 1), clamp(Math.floor((z - NAV.oz) / NAV.cell), 0, NAV.h - 1)];
+function nearestOpen(i, j) {
+  if (!NAV.grid[j * NAV.w + i]) return [i, j];
+  for (let r = 1; r < 12; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
+    const a = i + di, b = j + dj;
+    if (a >= 0 && b >= 0 && a < NAV.w && b < NAV.h && !NAV.grid[b * NAV.w + a]) return [a, b];
+  }
+  return [i, j];
+}
+// A line a body can walk along: clear at both shoulders, not just the middle.
+function wideClear(ax, az, bx, bz, r = 0.6) {
+  const dx = bx - ax, dz = bz - az, d = Math.hypot(dx, dz) || 1, px = -dz / d * r, pz = dx / d * r;
+  return sightClear(ax, az, bx, bz) && sightClear(ax + px, az + pz, bx + px, bz + pz) && sightClear(ax - px, az - pz, bx - px, bz - pz);
+}
+// The next point to head for on the way from (x, z) to (tx, tz).
+function pathNext(x, z, tx, tz) {
+  if (!NAV.grid || wideClear(x, z, tx, tz)) return { x: tx, z: tz };
+  const [si, sj] = nearestOpen(...navCell(x, z)), [ti, tj] = nearestOpen(...navCell(tx, tz));
+  const W = NAV.w, N = W * NAV.h, start = sj * W + si, goal = tj * W + ti;
+  const came = new Int32Array(N).fill(-1), g = new Float32Array(N).fill(Infinity);
+  const heap = [[0, start]]; g[start] = 0; came[start] = start;
+  const push = (f, n) => { heap.push([f, n]); let c = heap.length - 1; while (c > 0) { const pr = (c - 1) >> 1; if (heap[pr][0] <= heap[c][0]) break; [heap[pr], heap[c]] = [heap[c], heap[pr]]; c = pr; } };
+  const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let c = 0; for (;;) { const l = 2 * c + 1, r = l + 1; let m = c; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === c) break; [heap[m], heap[c]] = [heap[c], heap[m]]; c = m; } } return top; };
+  let found = false, guard = 0;
+  while (heap.length && guard++ < 60000) {
+    const [, n] = pop();
+    if (n === goal) { found = true; break; }
+    const ni = n % W, nj = (n / W) | 0;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      if (!di && !dj) continue;
+      const a = ni + di, b = nj + dj;
+      if (a < 0 || b < 0 || a >= W || b >= NAV.h) continue;
+      const m = b * W + a;
+      if (NAV.grid[m] || (di && dj && (NAV.grid[nj * W + a] || NAV.grid[b * W + ni]))) continue;
+      const ng = g[n] + (di && dj ? 1.414 : 1);
+      if (ng < g[m]) { g[m] = ng; came[m] = n; push(ng + Math.hypot(ti - a, tj - b), m); }
+    }
+  }
+  if (!found) return { x: tx, z: tz };
+  // Walk back from the goal; return the furthest point still in plain sight.
+  const path = [];
+  for (let n = goal; n !== start; n = came[n]) path.push(n);
+  path.reverse();
+  let pick = path[0];
+  for (const n of path) {
+    const px = NAV.ox + ((n % W) + 0.5) * NAV.cell, pz = NAV.oz + (((n / W) | 0) + 0.5) * NAV.cell;
+    if (wideClear(x, z, px, pz)) pick = n; else break;
+  }
+  return { x: NAV.ox + ((pick % W) + 0.5) * NAV.cell, z: NAV.oz + (((pick / W) | 0) + 0.5) * NAV.cell };
+}
+let guideStep = null, guideT = 0;
+function updateGuide(now, dt) {
+  const goal = objectiveTarget();
+  if ((guideT -= dt) <= 0 || !guideStep) { guideStep = goal && pathNext(koda.pos.x, koda.pos.z, goal.x, goal.z); guideT = 0.4; }
+  const t = goal && guideStep;
+  const d = goal ? Math.hypot(goal.x - koda.pos.x, goal.z - koda.pos.z) : 0;
+  guide.visible = !!t && d > 3 && Math.hypot(t.x - koda.pos.x, t.z - koda.pos.z) > 0.3;
+  if (!guide.visible) return;
+  guide.position.set(koda.pos.x, 0.06, koda.pos.z);
+  guide.rotation.y = Math.atan2(t.x - koda.pos.x, t.z - koda.pos.z);
+  guide.children[0].position.set(0, 0, 1.4 + Math.sin(now / 260) * 0.15);
 }
 
 /* ---------- minimap ---------- */
@@ -984,77 +1387,19 @@ const mm = $("minimap").getContext("2d");
 function drawMinimap() {
   const W = 160, H = 120, k = Math.min(W / (WORLD_W + 8), H / (WORLD_H + 8)), ox = (W - WORLD_W * k) / 2, oz = (H - WORLD_H * k) / 2;
   mm.clearRect(0, 0, W, H);
-  for (const z of S.zones) {
-    const o = zoneOrigin(z);
-    const got = save.clues.includes(z.id);
-    mm.fillStyle = z === currentZone ? "rgba(242,181,68,.45)" : got ? "rgba(120,200,140,.3)" : "rgba(255,255,255,.1)";
+  for (const q of S.quadrants) {
+    const o = zoneOrigin(q);
+    const qd = mission && mission.quads.find(x => x.q === q);
+    const col = qd ? "#" + PART_COLOURS[qd.k].toString(16).padStart(6, "0") : null;
+    mm.fillStyle = qd ? (qd.done ? "rgba(255,255,255,.18)" : col + "88") : "rgba(255,255,255,.06)";
     mm.fillRect(ox + o.x * k, oz + o.y * k, ZONE * k, ZONE * k);
+    if (q === currentQuad) { mm.strokeStyle = "#fff"; mm.lineWidth = 1.5; mm.strokeRect(ox + o.x * k + 1, oz + o.y * k + 1, ZONE * k - 2, ZONE * k - 2); }
+    if (qd && qd.done) { mm.fillStyle = "#7fe39a"; mm.font = "bold 12px sans-serif"; mm.textAlign = "center"; mm.fillText("✓", ox + (o.x + ZONE / 2) * k, oz + (o.y + ZONE / 2) * k + 4); }
   }
-  if (finalOpen() && !save.finished) {
-    const c = zoneCenter(S.zones.find(q => q.final));
-    mm.fillStyle = "#d58cff"; mm.beginPath(); mm.arc(ox + c.x * k, oz + c.y * k, 3.5, 0, 7); mm.fill();
-  }
+  if (zora && zora.waiting) { mm.fillStyle = "#d58cff"; mm.beginPath(); mm.arc(ox + zora.pos.x * k, oz + zora.pos.z * k, 3.5, 0, 7); mm.fill(); }
   if (escape) { mm.fillStyle = "#ffd27a"; mm.beginPath(); mm.arc(ox + escape.exit.x * k, oz + escape.exit.y * k, 3.5, 0, 7); mm.fill(); }
   for (const e of enemies) if (e.state === "alert") { mm.fillStyle = "#ff5a46"; mm.fillRect(ox + e.a.pos.x * k - 1, oz + e.a.pos.z * k - 1, 2.5, 2.5); }
   mm.fillStyle = "#fff"; mm.beginPath(); mm.arc(ox + koda.pos.x * k, oz + koda.pos.z * k, 3, 0, 7); mm.fill();
-}
-
-/* ---------- where to go next ----------
-   An arrow on the ground at Koda's feet, pointing at what the objective is
-   about: the clue in this zone, the race ring, Zora, or the way out. */
-const guide = (() => {
-  const shape = new THREE.Shape();
-  shape.moveTo(0, 1.6); shape.lineTo(0.55, 0.7); shape.lineTo(0.2, 0.7); shape.lineTo(0.2, 0); shape.lineTo(-0.2, 0); shape.lineTo(-0.2, 0.7); shape.lineTo(-0.55, 0.7); shape.closePath();
-  const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
-  m.rotation.x = Math.PI / 2;   // lies flat, pointing along the group's +Z (the way it is turned)
-  const g = new THREE.Group(); g.add(m); g.visible = false; scene.add(g);
-  return g;
-})();
-function objectiveTarget() {
-  if (escape) return { x: escape.exit.x, z: escape.exit.y };
-  if (zora && zora.waiting) return { x: zora.pos.x, z: zora.pos.z };
-  if (race) return { x: race.spot.end.x, z: race.spot.end.y };
-  const here = currentZone;
-  if (here) {
-    const c = clues.find(q => q.zone === here.id);
-    if (c) return { x: c.g.position.x, z: c.g.position.z };
-    const rs = raceSpots[here.id];
-    if (rs && !save.clues.includes(here.id)) return { x: rs.start.x, z: rs.start.y };
-    if (here.focus === "fight" && !save.clues.includes(here.id)) {
-      const e = enemies.find(q => q.zone === here.id && q.state !== "ko");
-      if (e) return { x: e.a.pos.x, z: e.a.pos.z };
-    }
-  }
-  // Otherwise the nearest zone that still has a clue to give.
-  let best = null, bd = Infinity;
-  for (const z of S.zones) {
-    if (z.final || save.clues.includes(z.id)) continue;
-    const c = zoneCenter(z), d = Math.hypot(c.x - koda.pos.x, c.y - koda.pos.z);
-    if (d < bd) { bd = d; best = { x: c.x, z: c.y }; }
-  }
-  return best;
-}
-function updateGuide(now) {
-  const t = objectiveTarget();
-  const d = t ? Math.hypot(t.x - koda.pos.x, t.z - koda.pos.z) : 0;
-  guide.visible = !!t && d > 3;
-  if (!guide.visible) return;
-  guide.position.set(koda.pos.x, 0.06, koda.pos.z);
-  guide.rotation.y = Math.atan2(t.x - koda.pos.x, t.z - koda.pos.z);
-  // the arrow sits a step out from his feet and breathes a little
-  guide.children[0].position.set(0, 0, 1.4 + Math.sin(now / 260) * 0.15);
-}
-
-/* ---------- debug readout (?debug=1) ---------- */
-const debugOn = /[?&]debug=1/.test(location.search);
-const dbgEl = debugOn ? Object.assign(document.body.appendChild(document.createElement("div")), { style: "position:fixed;left:8px;bottom:8px;z-index:50;font:600 12px monospace;color:#7fe39a;background:rgba(0,0,0,.7);padding:6px 8px;border-radius:6px;pointer-events:none" }) : null;
-const dbg = { t: 0, n: 0, worst: 0 };
-function drawDebug(now, real) {
-  dbg.t += real; dbg.n++; dbg.worst = Math.max(dbg.worst, real);
-  if (dbg.t >= 1) {
-    dbgEl.textContent = `${dbg.n} fps · worst ${Math.round(dbg.worst * 1000)} ms · ${innerWidth}x${innerHeight} @${renderer.getPixelRatio().toFixed(2)} · ${renderer.info.render.calls} draws`;
-    dbg.t = 0; dbg.n = 0; dbg.worst = 0;
-  }
 }
 
 /* ---------- camera ---------- */
@@ -1069,82 +1414,80 @@ function updateCamera(dt, snap) {
   sun.target.position.set(koda.pos.x, 0, koda.pos.z);
 }
 
+/* ---------- debug readout (?debug=1) ---------- */
+const debugOn = /[?&]debug=1/.test(location.search);
+const dbgEl = debugOn ? Object.assign(document.body.appendChild(document.createElement("div")), { style: "position:fixed;left:8px;bottom:8px;z-index:50;font:600 12px monospace;color:#7fe39a;background:rgba(0,0,0,.7);padding:6px 8px;border-radius:6px;pointer-events:none" }) : null;
+const dbg = { t: 0, n: 0, worst: 0 };
+function drawDebug(real) {
+  dbg.t += real; dbg.n++; dbg.worst = Math.max(dbg.worst, real);
+  if (dbg.t >= 1) {
+    dbgEl.textContent = `${dbg.n} fps · worst ${Math.round(dbg.worst * 1000)} ms · ${innerWidth}x${innerHeight} @${renderer.getPixelRatio().toFixed(2)} · ${renderer.info.render.calls} draws`;
+    dbg.t = 0; dbg.n = 0; dbg.worst = 0;
+  }
+}
+
 /* ---------- the loop ---------- */
 let lastT = performance.now(), mmT = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   const real = Math.min(0.1, (now - lastT) / 1000); lastT = now;
   pollPad();
-  const dt = Math.min(0.05, real);
-  if (debugOn) drawDebug(now, real);
-  if (state === "play" && koda) {
-    // A slow frame is worked out in two steps, so the game keeps real time instead of slowing down.
+  if (debugOn) drawDebug(real);
+  if (state === "play" && koda && mission && !window.GILL_HOLD) {
     if (real > 0.05) { tick(real / 2, now); tick(real / 2, now); } else tick(real, now);
-  } else if (koda && state === "cutscene") {
-    koda.update(dt); if (zora) zora.update(dt);
+  } else if (koda && (state === "card" || state === "score")) {
+    koda.update(real); if (zora) zora.update(real);
   }
-  renderer.render(scene, camera);
+  if (!window.GILL_NORENDER) renderer.render(scene, camera);
 }
 function tick(dt, now) {
-  {
-    updateKoda(dt);
-    updateEnemies(dt);
-    updateNpcs(dt);
-    updateZone();
-    updateRaces(dt);
-    updateFinal(dt);
-    for (const c of clues) { c.gem.rotation.y += dt * 1.6; c.gem.position.y = 1.1 + Math.sin(now / 400) * 0.12;
-      if (Math.hypot(koda.pos.x - c.g.position.x, koda.pos.z - c.g.position.z) < 1.4) { takeClue(c); break; } }
-    updateOcclusion();
-    updateGuide(now);
-    if ((mmT -= dt) <= 0) { drawMinimap(); mmT = 0.1; }
-    if (toastT > 0 && (toastT -= dt) <= 0) $("toast").classList.remove("show");
-    updateCamera(dt);
-  }
+  mission.t += dt;
+  runTimers(dt);
+  updateKoda(dt);
+  updateEnemies(dt);
+  updateNpcs(dt);
+  updateQuads(dt, now);
+  updateZora(dt);
+  updateOcclusion();
+  updateGuide(now, dt);
+  if ((mmT -= dt) <= 0) { drawMinimap(); mmT = 0.1; }
+  if (toastT > 0 && (toastT -= dt) <= 0) $("toast").classList.remove("show");
+  if (tipT > 0 && (tipT -= dt) <= 0) nextTip();
+  $("timer").textContent = Math.floor(mission.t / 60) + ":" + String(Math.floor(mission.t % 60)).padStart(2, "0");
+  updateCamera(dt);
 }
 
 /* ---------- screens ---------- */
-function pause() { if (state !== "play") return; state = "paused"; $("pause").classList.remove("hidden"); setMusicPaused(true); }
-function resume() { $("pause").classList.add("hidden"); state = "play"; lastT = performance.now(); setMusicPaused(false); }
+function pause() { if (state !== "play") return; state = "paused"; $("pause").classList.remove("hidden"); if (music.ac) music.ac.suspend(); }
+function resume() { $("pause").classList.add("hidden"); state = "play"; lastT = performance.now(); if (music.ac) music.ac.resume(); }
 $("pauseBtn").addEventListener("click", pause);
 $("resumeBtn").addEventListener("click", resume);
-$("muteBtn").addEventListener("click", () => {
-  music.muted = !music.muted; $("muteBtn").textContent = "Music: " + (music.muted ? "off" : "on");
-});
-$("quitBtn").addEventListener("click", () => { $("pause").classList.add("hidden"); toTitle(false); });
+$("muteBtn").addEventListener("click", () => { setMuted(!music.muted); $("muteBtn").textContent = "Music: " + (music.muted ? "off" : "on"); });
+$("quitBtn").addEventListener("click", () => { $("pause").classList.add("hidden"); toTitle(); });
 
-function toTitle(won) {
+function toTitle() {
   state = "title";
-  setMusicPaused(true);
-  $("hud").classList.add("hidden"); $("touch").classList.add("hidden");
+  stopMusic();
+  $("hud").classList.add("hidden"); $("touch").classList.add("hidden"); $("score").classList.add("hidden");
   $("title").classList.remove("hidden");
-  $("playBtn").textContent = save.clues.length || save.finished ? "Continue" : "Play";
-  $("newBtn").classList.toggle("hidden", !(save.clues.length || save.finished));
-  if (won) $("loading").textContent = "You brought her home. The story continues soon.";
+  const next = save.unlocked;
+  $("playBtn").textContent = next > 0 ? `Continue: Mission ${next + 1}` : "Play";
+  $("missionList").innerHTML = S.missions.map((m, i) => {
+    const b = save.best[i];
+    const open = i <= save.unlocked;
+    return `<button class="mission${open ? "" : " locked"}" data-i="${i}" ${open ? "" : "disabled"}><span>${i + 1}</span><b>${m.song}</b><em>${b ? b.grade : open ? "" : "locked"}</em></button>`;
+  }).join("");
+  $("missionList").querySelectorAll("button.mission:not(.locked)").forEach(btn => btn.addEventListener("click", () => begin(+btn.dataset.i)));
 }
-
-async function startGame(fresh) {
-  if (fresh) { save = { clues: [], done: [], finished: false }; writeSave(); location.reload(); return; }
+function begin(i) {
+  audioCtx();               // sound has to start from a tap
   $("title").classList.add("hidden");
   $("hud").classList.remove("hidden");
   if (phone) $("touch").classList.remove("hidden");
-  drawHearts(); drawClues();
   state = "play";
-  // Start in the first zone, at its open south side.
-  const first = S.zones[0], c = zoneCenter(first);
-  if (!koda.placed) { koda.pos.set(c.x, 0, c.y + ZONE / 2 - 4); koda.face(Math.PI, 1); koda.placed = true; }
-  updateCamera(0, true);
-  updateZone();
-  if (!save.clues.length && !save.seenOpening) {
-    save.seenOpening = true; writeSave();
-    await playCutscene("opening");
-  }
-  if (finalOpen() && !save.finished) openFinal();
-  if (music.front && !music.muted) music.front.play().catch(() => {});
-  refreshObjective();
+  startMission(i);
 }
-$("playBtn").addEventListener("click", () => startGame(false));
-$("newBtn").addEventListener("click", () => startGame(true));
+$("playBtn").addEventListener("click", () => begin(save.unlocked));
 
 /* ---------- boot ---------- */
 (async function boot() {
@@ -1155,8 +1498,8 @@ $("newBtn").addEventListener("click", () => startGame(true));
     koda = await makeActor("koda.glb", 1.62);
     scene.add(koda.root);
     koda.play("idle");
-    const c = zoneCenter(S.zones[0]);
-    koda.pos.set(c.x, 0, c.y + ZONE / 2 - 4); koda.face(Math.PI, 1); koda.placed = true;
+    const c = zoneCenter(S.quadrants[0]);
+    koda.pos.set(c.x, 0, c.y + ZONE / 2 - 4); koda.face(Math.PI, 1);
     updateCamera(0, true);
   } catch (e) {
     $("loading").textContent = "Koda couldn't load. Check your connection and reload.";
@@ -1164,10 +1507,11 @@ $("newBtn").addEventListener("click", () => startGame(true));
     return;
   }
   await buildCity(p => { $("loading").textContent = "Building the city… " + Math.round(p * 100) + "%"; });
+  buildNav();
   $("loading").textContent = "";
   $("playBtn").disabled = false;
-  toTitle(false);
-  // Expose a little for testing from the console.
-  window.GILL = { guide, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, enemies, clues, npcs, get state() { return state; }, save: () => save, blockers, keys, input,
+  toTitle();
+  window.GILL = { guide, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
+    enemies, npcs, get state() { return state; }, save: () => save, blockers, keys, input, cardContinue, pathNext, stick, attack, jump, action, objectiveTarget, get health() { return health; }, get music() { return music; },
     sim(seconds) { let t = performance.now(); for (let i = 0; i < seconds * 30; i++) { t += 33; tick(1 / 30, t); } } };
 })();

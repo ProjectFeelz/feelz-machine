@@ -1003,7 +1003,7 @@ function mudPattern() {
   if (!mudPat) mudPat = ctx.createPattern(mudArt, "repeat");
   return mudPat;
 }
-function mudFill(x0, y0, w, h, alpha) {
+function mudFill(x0, y0, w, h, alpha, fillPath) {
   const pat = mudPattern();
   if (!pat) return false;
   // squashed to the ground's angle, sliding with the world
@@ -1011,7 +1011,13 @@ function mudFill(x0, y0, w, h, alpha) {
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.fillStyle = pat;
-  ctx.fillRect(x0, y0, w, h);
+  // fillPath: paint the shape already in the context instead of a rectangle.
+  // A puddle is an oval that sits wholly inside the rectangle it used to fill
+  // through a clip, so the pixels are the same ones. The difference is that a
+  // clip builds a mask and holds it for every draw after it, and a path fill
+  // does not. save and restore do not touch the current path, so the shape
+  // the caller built is still there.
+  if (fillPath) ctx.fill(); else ctx.fillRect(x0, y0, w, h);
   ctx.restore();
   return true;
 }
@@ -1048,10 +1054,11 @@ function drawMud() {
     if (!onScreen(mu.x, mu.w)) continue;
     const x = sx(mu.x), y = sy(0);
     ctx.save();
-    // a wide lens of sludge lying on the street
-    ctx.beginPath(); ctx.ellipse(x + mu.w / 2, y + 3, mu.w / 2 + 10, 9, 0, 0, Math.PI * 2); ctx.clip();
-    if (!mudFill(x - 12, y - 8, mu.w + 24, 24, 1)) { ctx.fillStyle = "#3a2a1b"; ctx.fillRect(x - 12, y - 8, mu.w + 24, 24); }
-    ctx.fillStyle = "rgba(40, 28, 16, 0.35)"; ctx.fillRect(x - 12, y - 8, mu.w + 24, 24);
+    // a wide lens of sludge lying on the street, painted as the oval it is
+    // rather than as a rectangle seen through an oval clip
+    ctx.beginPath(); ctx.ellipse(x + mu.w / 2, y + 3, mu.w / 2 + 10, 9, 0, 0, Math.PI * 2);
+    if (!mudFill(x - 12, y - 8, mu.w + 24, 24, 1, true)) { ctx.fillStyle = "#3a2a1b"; ctx.fill(); }
+    ctx.fillStyle = "rgba(40, 28, 16, 0.35)"; ctx.fill();
     ctx.restore();
     // a wet shine along its top, and rings where the rain lands
     ctx.strokeStyle = "rgba(220, 200, 160, 0.25)"; ctx.lineWidth = 1;

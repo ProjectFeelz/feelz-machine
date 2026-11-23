@@ -1,6 +1,7 @@
 import { coverUrl } from '../utils/coverUrl';
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Download, Share2, X, Loader, Link, Check, Film } from 'lucide-react';
+import { Download, Share2, X, Loader, Link, Check, Film, QrCode } from 'lucide-react';
+import QrCodeSheet from './QrCodeSheet';
 import { supabase } from '../supabaseClient';
 import { parseLyrics, activeLineIndex } from '../utils/lyrics';
 import { resolveStreamSrc, playableFallback } from '../utils/streamUrl';
@@ -243,6 +244,7 @@ function drawFMLogo(ctx, x, y, size) {
  *   onClose  - close handler
  */
 export default function ShareCard({ track, artist, shareUrl, onClose }) {
+  const [showQr, setShowQr] = useState(false);
   const [sharing, setSharing]       = useState(false);
   const [copied, setCopied]         = useState(false);
   const [recording, setRecording]     = useState(false);
@@ -1273,7 +1275,19 @@ export default function ShareCard({ track, artist, shareUrl, onClose }) {
               className="flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-2xl bg-white/[0.06] hover:bg-white/[0.1] transition disabled:opacity-30 text-xs font-semibold text-white">
               <Share2 className="w-3.5 h-3.5" /><span>Send link</span>
             </button>
+            <button onClick={() => setShowQr(true)}
+              className="flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] transition text-xs font-semibold text-white/80">
+              <QrCode className="w-3.5 h-3.5" /><span>QR code</span>
+            </button>
           </div>
+          {showQr && (
+            <QrCodeSheet
+              url={linkUrl || shareUrl || window.location.href}
+              title={track?.title || artist?.artist_name}
+              subtitle={track ? `by ${track.artist_name || artist?.artist_name || ''}`.trim() : 'on Feelz Machine'}
+              onClose={() => setShowQr(false)}
+            />
+          )}
         </div>
       </div>
     </div>

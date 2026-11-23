@@ -33,8 +33,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   padding: 7px 16px; font-size: 13px; font-weight: 600; max-width: 46vw; text-align: center; border-radius: 14px; }
 .hud-right { position: absolute; top: calc(10px + var(--sat)); right: calc(12px + var(--sar)); display: flex; gap: 8px; align-items: center; pointer-events: auto; }
 .hearts { padding: 6px 12px; font-size: 15px; letter-spacing: 2px; color: var(--danger); }
-.clues { padding: 6px 12px; font-weight: 800; color: var(--gold); }
-.clues small { color: var(--muted); font-weight: 600; margin-left: 1px; }
+.timer { padding: 6px 12px; font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; }
 .icon-btn { width: 36px; height: 36px; font-weight: 900; font-size: 12px; background: var(--glass); border: 1px solid var(--line); border-radius: 50%; }
 .alert { position: absolute; top: calc(58px + var(--sat)); left: 50%; transform: translateX(-50%); font-weight: 900;
   letter-spacing: .14em; font-size: 13px; padding: 5px 14px; border-radius: 999px; opacity: 0; transition: opacity .2s; }
@@ -64,6 +63,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
   background: radial-gradient(circle at 50% 35%, var(--gold-hi), var(--gold) 60%, #b07a18); color: #1b1203; font-size: 15px; border: 0; }
 #btnSneak { grid-column: 1; grid-row: 1; }
 #btnAction { grid-column: 1; grid-row: 2; }
+#btnJump { grid-column: 2; grid-row: 1; }
+.tbtn.big { grid-row: 2; grid-column: 2; }
+.buttons { grid-template-columns: auto auto; }
 
 /* ---------- screens ---------- */
 .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px;
@@ -85,19 +87,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .how { margin-top: 10px; color: var(--muted); font-size: 13px; text-align: left; }
 .how summary { cursor: pointer; text-align: center; }
 
-/* ---------- cutscene ---------- */
-#cutscene { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; justify-content: center;
-  background: linear-gradient(180deg, rgba(0, 0, 0, .55), rgba(0, 0, 0, .2) 40%, rgba(0, 0, 0, .75)); }
-.cs-bars::before, .cs-bars::after { content: ""; position: fixed; left: 0; right: 0; height: 9vh; background: #000; }
-.cs-bars::before { top: 0; } .cs-bars::after { bottom: 0; }
-.cs-box { position: relative; z-index: 1; width: min(760px, 92vw); margin-bottom: calc(12vh + var(--sab)); padding: 16px 22px;
-  border-radius: 18px; background: rgba(10, 9, 14, .86); border: 1px solid var(--line); }
-.cs-who { margin: 0 0 4px; font-weight: 900; letter-spacing: .12em; font-size: 13px; text-transform: uppercase; }
-.cs-say { margin: 0; font-size: clamp(17px, 2.6vw, 22px); line-height: 1.4; font-weight: 600; }
-.cs-hint { margin: 10px 0 0; font-size: 11px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
-.cs-skip { position: fixed; z-index: 2; top: calc(10vh + 8px); right: calc(16px + var(--sar)); padding: 8px 16px; border-radius: 999px;
-  background: rgba(255, 255, 255, .08); border: 1px solid var(--line); font-weight: 700; }
-
 @media (max-height: 420px) {
   .stick { width: 112px; height: 112px; }
   .tbtn { width: 60px; height: 60px; }
@@ -111,4 +100,73 @@ button { font: inherit; color: inherit; cursor: pointer; }
   0% { transform: translateX(-50%) scale(1.25); background: rgba(242, 181, 68, .9); color: #1b1203; }
   40% { transform: translateX(-50%) scale(1.12); background: rgba(242, 181, 68, .9); color: #1b1203; }
   100% { transform: translateX(-50%) scale(1); }
+}
+
+/* ---------- the mix: one channel per part of the song ---------- */
+.mixer { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(14px + var(--sab)); display: flex; gap: 6px;
+  padding: 6px 8px; border-radius: 14px; background: var(--glass); border: 1px solid var(--line); }
+.mixer:empty { display: none; }
+.mixer .ch { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 62px; opacity: .45; }
+.mixer .ch.on { opacity: 1; }
+.mixer .bar { width: 10px; height: 26px; border-radius: 5px; background: rgba(255, 255, 255, .1); position: relative; overflow: hidden; }
+.mixer .bar i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--c); transition: height .6s; }
+.mixer .ch.on .bar i { height: 100%; animation: level 0.5s ease-in-out infinite alternate; }
+@keyframes level { from { height: 70%; } to { height: 100%; } }
+.mixer b { font-size: 10px; font-weight: 800; letter-spacing: .04em; color: var(--c); white-space: nowrap; }
+@media (pointer: coarse) { .mixer { bottom: calc(8px + var(--sab)); gap: 2px; padding: 4px 6px; } .mixer .ch { width: 46px; } .mixer b { font-size: 9px; } .mixer .bar { height: 18px; } }
+.tip { position: absolute; left: calc(12px + var(--sal)); top: calc(66px + var(--sat)); max-width: min(320px, 44vw); padding: 10px 14px;
+  border-radius: 14px; background: rgba(12, 11, 16, .9); border: 1px solid rgba(127, 227, 154, .45); font-size: 13px; line-height: 1.4;
+  opacity: 0; transition: opacity .3s; }
+.tip.show { opacity: 1; }
+.tip::before { content: "TIP  "; color: #7fe39a; font-weight: 900; font-size: 11px; letter-spacing: .1em; }
+
+/* ---------- mission list ---------- */
+.missions { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin: 16px auto 0; max-width: 480px; }
+.mission { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; background: rgba(255, 255, 255, .05);
+  border: 1px solid var(--line); text-align: left; font-size: 12px; }
+.mission span { color: var(--gold); font-weight: 900; width: 16px; }
+.mission b { flex: 1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mission em { font-style: normal; font-weight: 900; color: var(--gold-hi); font-size: 11px; }
+.mission.locked { opacity: .35; cursor: default; }
+.mission.locked em { color: var(--muted); font-weight: 600; }
+
+/* ---------- card ---------- */
+.card { background: rgba(10, 9, 14, .9); border: 1px solid var(--line); border-radius: 22px; padding: 24px 26px; width: min(560px, 94vw); }
+.card .placeholder { font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.card .lines { text-align: left; margin: 0 0 14px; }
+.card .lines p { margin: 0 0 8px; font-size: 16px; line-height: 1.45; }
+.card .lines b { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; margin-right: 6px; }
+.card .goal { margin: 0 0 18px; padding: 10px 14px; border-radius: 12px; background: rgba(242, 181, 68, .1); border: 1px solid rgba(242, 181, 68, .35);
+  font-size: 14px; line-height: 1.45; text-align: left; }
+.card .hint { margin: 10px 0 0; font-size: 11px; color: var(--muted); letter-spacing: .06em; }
+
+/* ---------- score ---------- */
+.grade { font-size: 84px; font-weight: 900; line-height: 1; margin: 4px 0 12px; color: var(--gold-hi); text-shadow: 0 4px 30px rgba(242, 181, 68, .5); }
+.rows { width: min(360px, 90vw); margin: 0 auto 10px; text-align: left; }
+.rows div { display: flex; justify-content: space-between; padding: 5px 2px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.rows div span { color: var(--muted); }
+.rows .total { border: 0; font-size: 18px; padding-top: 10px; }
+.rows .total span { color: var(--text); font-weight: 800; }
+.mix { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+@media (max-height: 520px) { .grade { font-size: 52px; } .rows div { padding: 3px 2px; font-size: 13px; } .card { padding: 16px 18px; } }
+
+/* Short screens (phones on their side): everything fits, and scrolls if it must. */
+.screen { overflow-y: auto; align-items: safe center; }
+@media (max-height: 520px) {
+  .title-card h1 { font-size: 48px; }
+  .sub { font-size: 14px; margin-bottom: 6px; }
+  .blurb { font-size: 12px; margin-bottom: 10px; }
+  .kicker { margin-bottom: 4px; }
+  .primary { padding: 10px 30px; font-size: 15px; }
+  .ghost { padding: 9px 22px; }
+  .missions { margin-top: 10px; }
+  .mission { padding: 5px 8px; }
+  .card h2, .title-card h2 { font-size: 24px; margin-bottom: 6px; }
+  .card .lines p { font-size: 13px; margin-bottom: 4px; }
+  .card .goal { font-size: 12px; padding: 7px 10px; margin-bottom: 10px; }
+  .card .hint, .card .placeholder { display: none; }
+  .card { padding: 12px 16px; }
+  .card .kicker { font-size: 10px; }
+  .tip { top: calc(56px + var(--sat)); font-size: 12px; padding: 7px 10px; max-width: 40vw; }
+  .title-buttons.col { gap: 8px; }
 }

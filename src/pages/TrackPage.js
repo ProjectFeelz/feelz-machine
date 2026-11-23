@@ -11,9 +11,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlayer } from '../contexts/PlayerContext';
 import { downloadTrack, downloadErrorMessage } from '../utils/downloadTrack';
 import TrackActionSheet from '../components/TrackActionSheet';
+import QrCodeSheet from '../components/QrCodeSheet';
 import {
   ArrowLeft, Play, Pause, Music, Loader, Download,
-  Heart, Share2, Check, MoreHorizontal, Disc, ExternalLink
+  Heart, Share2, Check, MoreHorizontal, Disc, ExternalLink, QrCode
 } from 'lucide-react';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { fetchTrackCredits } from '../components/TrackCredits';
@@ -59,6 +60,7 @@ export default function TrackPage() {
   const [loading, setLoading]       = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied]         = useState(false);
+  const [showQr, setShowQr]         = useState(false);
   const [showActionSheet, setShowActionSheet] = useState(false);
   // Which view the sheet opens on. 'purchase' when something has already
   // established that this track has to be bought, so the person lands on the
@@ -450,6 +452,10 @@ export default function TrackPage() {
             <ArrowLeft className="w-5 h-5 text-white" />
           </button>
           <div className="flex items-center space-x-2">
+            <button onClick={() => setShowQr(true)} aria-label="QR code"
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-md">
+              <QrCode className="w-4 h-4 text-white" />
+            </button>
             <button onClick={handleShare}
               className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-md">
               {copied
@@ -800,6 +806,15 @@ export default function TrackPage() {
           artist={artist}
           initialView={actionSheetView}
           onClose={() => { setShowActionSheet(false); setActionSheetView('main'); }}
+        />
+      )}
+
+      {showQr && (
+        <QrCodeSheet
+          url={track?.short_code ? `${BASE_URL}/t/${track.short_code}` : `${BASE_URL}/track/${slug}`}
+          title={track?.title}
+          subtitle={artist?.artist_name ? `by ${artist.artist_name}` : ''}
+          onClose={() => setShowQr(false)}
         />
       )}
     </div>

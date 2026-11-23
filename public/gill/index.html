@@ -16,16 +16,18 @@
 
   <!-- HUD -->
   <div id="hud" class="hidden">
-    <div class="hud-zone"><span id="zoneName">ZONE</span><span id="zoneSong">Song</span></div>
-    <div class="hud-objective" id="objective">Find out where they took her.</div>
+    <div class="hud-zone"><span id="zoneName">THE STREETS</span><span id="zoneSong"></span></div>
+    <div class="hud-objective" id="objective"></div>
     <div class="hud-right">
       <div class="hearts" id="hearts"></div>
-      <div class="clues"><span id="clueCount">0</span><small>/<span id="clueTotal">8</span> clues</small></div>
+      <div class="timer" id="timer">0:00</div>
       <button class="icon-btn" id="pauseBtn" aria-label="Pause">II</button>
     </div>
     <div class="alert" id="alert" aria-live="polite"></div>
     <div class="race" id="race"></div>
     <canvas id="minimap" width="160" height="120" aria-hidden="true"></canvas>
+    <div class="mixer" id="mixer" aria-label="The parts of the song you have unlocked"></div>
+    <div class="tip" id="tip"></div>
     <div class="toast" id="toast"></div>
   </div>
 
@@ -35,7 +37,8 @@
     <div class="buttons">
       <button class="tbtn" id="btnSneak" aria-label="Sneak">SNEAK</button>
       <button class="tbtn" id="btnAction" aria-label="Action">ACTION</button>
-      <button class="tbtn big" id="btnAttack" aria-label="Attack">HIT</button>
+      <button class="tbtn" id="btnJump" aria-label="Jump">JUMP</button>
+      <button class="tbtn big" id="btnAttack" aria-label="Hit">HIT</button>
     </div>
   </div>
 
@@ -45,17 +48,17 @@
       <p class="kicker">A FEELZ MACHINE GAME · BIG FEELZ</p>
       <h1>G.I.L.L.</h1>
       <p class="sub">Good Intentions Last Longest</p>
-      <p class="blurb">Zora was taken when the Veil fell. Search the city, stay out of sight, fight when you have to, and bring her home.</p>
+      <p class="blurb">Zora was taken when the Veil fell. Every mission is a song. Each lit quadrant of the city holds one part of it: unlock them in the order you choose and you mix the track. Finish the album and bring her home.</p>
       <div class="title-buttons">
         <button class="primary" id="playBtn">Play</button>
-        <button class="ghost hidden" id="newBtn">New game</button>
       </div>
       <p class="loading" id="loading">Loading the city…</p>
+      <div class="missions" id="missionList"></div>
       <details class="how">
         <summary>How to play</summary>
-        <p><b>Phone:</b> left thumb moves (push far to sprint). SNEAK to crouch, HIT to fight, ACTION to talk, pick up and take down from behind.</p>
-        <p><b>Keyboard:</b> WASD or arrows to move, Shift to sprint, C to sneak, J or Space to hit, E for action, Esc to pause.</p>
-        <p><b>Controller:</b> left stick or d-pad to move, RT to sprint, A to hit, X for action, B to sneak, Start to pause.</p>
+        <p><b>Phone:</b> left thumb moves (push far to sprint). JUMP, HIT (jump then HIT for a flying kick), SNEAK to crouch, ACTION to talk and to take a guard down from behind.</p>
+        <p><b>Keyboard:</b> WASD or arrows to move, Shift to sprint, Space to jump, J to hit, E for action, C to sneak, Esc to pause.</p>
+        <p><b>Controller:</b> left stick or d-pad to move, RT to sprint, A to jump, X to hit, Y for action, B to sneak, Start to pause.</p>
       </details>
     </div>
   </div>
@@ -72,19 +75,33 @@
     </div>
   </div>
 
-  <!-- Cutscene -->
-  <div id="cutscene" class="hidden" role="dialog" aria-live="polite">
-    <div class="cs-bars"></div>
-    <div class="cs-box">
-      <p class="cs-who" id="csWho"></p>
-      <p class="cs-say" id="csSay"></p>
-      <p class="cs-hint">Tap to continue</p>
+  <!-- Mission and cutscene card: one card, then play -->
+  <div id="card" class="screen hidden" role="dialog" aria-live="polite">
+    <div class="title-card card">
+      <p class="kicker" id="cardKicker"></p>
+      <h2 id="cardTitle"></h2>
+      <p class="placeholder" id="cardPlaceholder">Cutscene (placeholder)</p>
+      <div class="lines" id="cardLines"></div>
+      <p class="goal" id="cardGoal"></p>
+      <button class="primary" id="cardBtn">Start</button>
+      <p class="hint">Press A, Space or tap to carry on</p>
     </div>
-    <button class="cs-skip" id="csSkip">Skip</button>
   </div>
 
-  <audio id="musicA" preload="none" loop></audio>
-  <audio id="musicB" preload="none" loop></audio>
+  <!-- Score -->
+  <div id="score" class="screen hidden">
+    <div class="title-card">
+      <p class="kicker">MISSION COMPLETE</p>
+      <h2 id="scoreTitle"></h2>
+      <div class="grade" id="scoreGrade"></div>
+      <div class="rows" id="scoreRows"></div>
+      <p class="mix" id="scoreMix"></p>
+      <div class="title-buttons col">
+        <button class="primary" id="nextBtn">Next</button>
+        <button class="ghost" id="replayBtn">Play it again</button>
+      </div>
+    </div>
+  </div>
 
   <script src="story.js"></script>
   <script type="module" src="game.js"></script>

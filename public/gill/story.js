@@ -1,16 +1,28 @@
 "use strict";
 
 /* ---------------------------------------------------------------------------
-   G.I.L.L. STORY DATA
+   G.I.L.L. STORY AND MISSION DATA
 
-   Everything a player reads or hears lives here, so the story can be rewritten
-   without touching the game. Mirrors the G.I.L.L. Story Bible doc.
+   Everything a player reads lives here, so the story and the missions can be
+   rewritten without touching the game. Mirrors the G.I.L.L. Story Bible doc.
 
-   ZONES     one per song on Good Intentions Last Longest. `grid` is where the
-             zone sits on the city map (column, row). `focus` picks what the
-             zone asks of you: "explore", "sneak", "fight" or "race".
-   CUTSCENES each a list of lines. A line is { who, say }. `who` must be a
-             name in SPEAKERS. Voice files can be added later as `voice`.
+   MISSIONS  one per song on Good Intentions Last Longest, played in order.
+             Each mission lights up a group of quadrants in the city. Every
+             quadrant holds one PART of the song. Finish a quadrant's task and
+             its part joins the mix, so the order you play them in is the order
+             the song builds up: you produce it.
+
+   PARTS     Until the real stems are ready, the song is split into four parts
+             by sound (low end, body, melody, shine). To use real stems, give a
+             mission `stems: [{ name: "Drums", src: "url" }, ...]`, one per
+             quadrant, all the same length.
+
+   QUADRANTS the 12 blocks of the city. `grid` is (column, row) on the map.
+             `focus` is the kind of task the quadrant gives:
+               explore  find the part somewhere in the quadrant
+               sneak    reach the part without being seen
+               fight    clear the guards, the part drops when they're down
+               race     step in the ring, reach the part before the clock runs out
 --------------------------------------------------------------------------- */
 
 window.GILL_STORY = {
@@ -26,36 +38,57 @@ window.GILL_STORY = {
     "":        { colour: "#cfcfcf" }
   },
 
-  zones: [
-    { id: "z01", song: "Hold Me Down",    trackId: "87704d25-a756-4810-a3b2-e9463d8eb97b", grid: [0, 0], focus: "explore", tint: 0x6b5a48,
-      clue: "Her bracelet, snapped, in the dust where the Veil fell." },
-    { id: "z02", song: "Selina",          trackId: "b1be1034-20f0-4829-a12d-23200e805d69", grid: [1, 0], focus: "sneak",   tint: 0x5a5f6e,
-      clue: "A patrol route chalked on a wall. They move her at night." },
-    { id: "z03", song: "Put It On Me",    trackId: "476e10c7-8465-4c14-9345-81be91aafa8a", grid: [2, 0], focus: "explore", tint: 0x6e5a5a,
-      clue: "A ticket stub with a dock number on it." },
-    { id: "z04", song: "Free ride",       trackId: "9becf0b9-dd08-4c2b-afac-503f9462c3f0", grid: [3, 0], focus: "race",    tint: 0x5e6b4f,
-      clue: "Tyre marks heading for the river.", race: { seconds: 40 } },
-    { id: "z05", song: "Where You Dey",   trackId: "de00fb92-df32-40cc-9b64-23818efedc68", grid: [3, 1], focus: "explore", tint: 0x4f5e6b,
-      clue: "Her voice on a cassette: \"Where you dey, Koda?\"" },
-    { id: "z06", song: "Baddest",         trackId: "871cfb08-a17b-46ed-a1f8-624810a66087", grid: [2, 1], focus: "fight",   tint: 0x6b4848,
-      clue: "A warden's badge. The Handler signed his orders." },
-    { id: "z07", song: "To My Angels",    trackId: "8811396e-9f2d-47ac-970f-e9c645348f8d", grid: [1, 1], focus: "explore", tint: 0x5f5a6e,
-      clue: "A neighbour's note: \"We saw them take her east.\"" },
-    { id: "z08", song: "Not at All",      trackId: "ba0c4b70-7da8-475f-9fa8-a3a83e1979b4", grid: [0, 1], focus: "sneak",   tint: 0x4f4f5e,
-      clue: "A key on a red cord, stolen from a sleeping guard." },
-    { id: "z09", song: "Can't Copy You",  trackId: "f82186d2-8a76-4377-b7d8-e50837459d9c", grid: [0, 2], focus: "fight",   tint: 0x6e6248,
-      clue: "Her drawing of the two of you, folded small." },
-    { id: "z10", song: "That Juice",      trackId: "70dc6426-0b9a-4209-85f5-1ce7016a8774", grid: [1, 2], focus: "race",    tint: 0x48606b,
-      clue: "A map of the tunnels under the city.", race: { seconds: 35 } },
-    { id: "z11", song: "Thinking of You", trackId: "effed5a5-cc3a-431f-943e-8546863df254", grid: [2, 2], focus: "sneak",   tint: 0x5a486e,
-      clue: "Her scarf, caught on the gate of the old tower." },
-    { id: "z12", song: "Run",             trackId: "7305e3c4-d143-44c1-9c87-d8fc54564942", grid: [3, 2], focus: "race",    tint: 0x6b3f3f,
-      clue: null, final: true }
+  quadrants: [
+    { id: "q01", name: "The Yard",      grid: [0, 0], focus: "explore", tint: 0x6b5a48 },
+    { id: "q02", name: "Chalk Street",  grid: [1, 0], focus: "sneak",   tint: 0x5a5f6e },
+    { id: "q03", name: "Ticket Row",    grid: [2, 0], focus: "explore", tint: 0x6e5a5a },
+    { id: "q04", name: "The Strip",     grid: [3, 0], focus: "race",    tint: 0x5e6b4f },
+    { id: "q05", name: "Tape Corner",   grid: [3, 1], focus: "sneak",   tint: 0x4f5e6b },
+    { id: "q06", name: "Warden Square", grid: [2, 1], focus: "fight",   tint: 0x6b4848 },
+    { id: "q07", name: "Angel Court",   grid: [1, 1], focus: "explore", tint: 0x5f5a6e },
+    { id: "q08", name: "Guard House",   grid: [0, 1], focus: "fight",   tint: 0x4f4f5e },
+    { id: "q09", name: "Paper Lane",    grid: [0, 2], focus: "sneak",   tint: 0x6e6248 },
+    { id: "q10", name: "The Tunnels",   grid: [1, 2], focus: "race",    tint: 0x48606b },
+    { id: "q11", name: "Old Tower",     grid: [2, 2], focus: "fight",   tint: 0x5a486e },
+    { id: "q12", name: "East Gate",     grid: [3, 2], focus: "explore", tint: 0x6b3f3f }
   ],
 
-  // How many clues open the way to Zora (the last zone).
-  cluesToFinal: 8,
+  // The placeholder parts, until a mission has real stems.
+  defaultParts: ["Low end", "Body", "Melody", "Shine"],
 
+  missions: [
+    { song: "Hold Me Down",    trackId: "87704d25-a756-4810-a3b2-e9463d8eb97b", quadrants: ["q01", "q02", "q07", "q08"],
+      cutscene: "opening",
+      goal: "Zora is gone. Search the first four quadrants and bring the song back together." },
+    { song: "Selina",          trackId: "b1be1034-20f0-4829-a12d-23200e805d69", quadrants: ["q03", "q04", "q05", "q06"],
+      goal: "Somebody chalked her route on a wall. Follow it east." },
+    { song: "Put It On Me",    trackId: "476e10c7-8465-4c14-9345-81be91aafa8a", quadrants: ["q09", "q10", "q11", "q12"],
+      goal: "A ticket stub with a dock number. Work the south side." },
+    { song: "Free ride",       trackId: "9becf0b9-dd08-4c2b-afac-503f9462c3f0", quadrants: ["q02", "q03", "q06", "q07"],
+      goal: "Tyre marks heading for the river. Move fast." },
+    { song: "Where You Dey",   trackId: "de00fb92-df32-40cc-9b64-23818efedc68", quadrants: ["q04", "q05", "q11", "q12"],
+      cutscene: "vision",
+      goal: "Her voice on a cassette. Find where it was recorded." },
+    { song: "Baddest",         trackId: "871cfb08-a17b-46ed-a1f8-624810a66087", quadrants: ["q06", "q08", "q09", "q11"],
+      goal: "The wardens know you're coming. Hit them where they stand." },
+    { song: "To My Angels",    trackId: "8811396e-9f2d-47ac-970f-e9c645348f8d", quadrants: ["q01", "q07", "q09", "q10"],
+      cutscene: "neighbours",
+      goal: "The neighbours saw them take her. Ask around, stay quiet." },
+    { song: "Not at All",      trackId: "ba0c4b70-7da8-475f-9fa8-a3a83e1979b4", quadrants: ["q02", "q05", "q08", "q12"],
+      goal: "A key on a red cord, on a sleeping guard. Take it without waking anyone." },
+    { song: "Can't Copy You",  trackId: "f82186d2-8a76-4377-b7d8-e50837459d9c", quadrants: ["q03", "q06", "q10", "q11"],
+      goal: "Her drawing of the two of you. Somebody's been copying her steps." },
+    { song: "That Juice",      trackId: "70dc6426-0b9a-4209-85f5-1ce7016a8774", quadrants: ["q04", "q09", "q10", "q12"],
+      goal: "A map of the tunnels. Race the guards through them." },
+    { song: "Thinking of You", trackId: "effed5a5-cc3a-431f-943e-8546863df254", quadrants: ["q05", "q07", "q11", "q12"],
+      cutscene: "tower",
+      goal: "Her scarf on the gate of the old tower. She's close." },
+    { song: "Run",             trackId: "7305e3c4-d143-44c1-9c87-d8fc54564942", quadrants: ["q09", "q10", "q11", "q12"],
+      cutscene: "finalOpen", final: true,
+      goal: "Bring the last song together and get Zora out." }
+  ],
+
+  // Placeholder scenes. Each one shows as a single card until it is recorded.
   cutscenes: {
     opening: [
       { who: "Zora", say: "Koda, don't let go." },
@@ -63,15 +96,17 @@ window.GILL_STORY = {
       { who: "", say: "The Veil breaks. When the light clears, she is gone." },
       { who: "Koda", say: "They took her. Somebody in this city knows where." }
     ],
-    firstClue: [
-      { who: "Neighbour", say: "You're the one looking for the girl. Be careful who you ask." },
-      { who: "Koda", say: "I'll ask everybody." }
-    ],
     vision: [
       { who: "Zora", say: "Follow the music. I'm still here." }
     ],
+    neighbours: [
+      { who: "Neighbour", say: "You're the one looking for the girl. Be careful who you ask." },
+      { who: "Koda", say: "I'll ask everybody." }
+    ],
+    tower: [
+      { who: "Koda", say: "The tower. She's there, I can feel it." }
+    ],
     finalOpen: [
-      { who: "Koda", say: "That's everything. The tower, east side. She's there." },
       { who: "Handler", say: "You don't stop, do you." },
       { who: "Koda", say: "Not until she's home." }
     ],
@@ -95,10 +130,15 @@ window.GILL_STORY = {
     "Wardens change shift when the song changes. Use it."
   ],
 
-  // Shown when a zone's own task is done. Placeholder words.
-  zoneLines: {
-    race:  "Made it. Keep moving.",
-    fight: "That's the last of them.",
-    sneak: "In and out. Nobody saw a thing."
+  // One-line tips, each shown once, the first time it matters.
+  tips: {
+    start:    "Each lit quadrant holds a part of the song. Go in, do its task, and the part joins the mix.",
+    guard:    "Guards see in front of them. SNEAK keeps you quiet. Get behind one and press ACTION for a takedown.",
+    seen:     "You've been seen. Fight with HIT, or run and break their line of sight.",
+    explore:  "Find the glowing part somewhere in this quadrant.",
+    sneak:    "Reach the part without being seen. If they spot you, the part moves.",
+    fight:    "Put every guard here down. The part drops when the last one falls.",
+    race:     "Step into the gold ring, then reach the part before the clock runs out.",
+    jump:     "JUMP, then HIT in the air for a flying kick."
   }
 };
