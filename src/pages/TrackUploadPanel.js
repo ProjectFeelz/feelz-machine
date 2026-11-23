@@ -2172,6 +2172,22 @@ export default function TrackUploadPanel() {
                 relationship:     schoolSessionsForm.guardianRelationship.trim() || null,
                 consented:        true,
               });
+              // The parent hears about it from us, not only from the entrant.
+              // A guardian contact that is an email address gets a link to
+              // confirm the entry. A phone number does not, and nothing fails.
+              try {
+                const { data: { session: gSession } } = await supabase.auth.getSession();
+                await fetch('/.netlify/functions/sessions-guardian-email', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${gSession?.access_token || ''}`,
+                  },
+                  body: JSON.stringify({ entry_id: entryRow.id }),
+                });
+              } catch (gErr) {
+                console.warn('Guardian consent email failed (non-fatal):', gErr?.message);
+              }
             }
 
             if (schoolSessionsForm.isGroup && entryRow?.id && schoolSessionsForm.groupMembers.length > 0) {

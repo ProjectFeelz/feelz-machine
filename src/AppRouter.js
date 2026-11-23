@@ -110,6 +110,7 @@ const SchoolSessionsPage = React.lazy(() => import('./pages/SchoolSessionsPage')
 const SchoolSessionsVotePage = React.lazy(() => import('./pages/SchoolSessionsVotePage'));
 const SchoolSessionsEntryPage = React.lazy(() => import('./pages/SchoolSessionsEntryPage'));
 const SessionsPrizeConsentPage = React.lazy(() => import('./pages/SessionsPrizeConsentPage'));
+const SessionsEntryConsentPage = React.lazy(() => import('./pages/SessionsEntryConsentPage'));
 const SchoolSessionsTermsPage = React.lazy(() => import('./pages/SchoolSessionsTermsPage'));
 const SchoolSessionsJudgePanel = React.lazy(() => import('./pages/SchoolSessionsJudgePanel'));
 const AdminSchoolSessions = React.lazy(() => import('./pages/AdminSchoolSessions'));
@@ -589,6 +590,7 @@ export default function AppRouter() {
                     winner box. But it still needs a route, or the link we send
                     a parent 404s and a minor's prize cannot be signed for. */}
                 <Route path="/sessions/prize-consent/:token" element={<SessionsPrizeConsentPage />} />
+                <Route path="/sessions/entry-consent/:token" element={<SessionsEntryConsentPage />} />
                 <Route path="/sessions/judge" element={<SchoolSessionsJudgePanel />} />
 
                 <Route path="/schoolsessions" element={
