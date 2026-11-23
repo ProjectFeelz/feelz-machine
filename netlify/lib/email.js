@@ -36,6 +36,8 @@
  * happens to be sending.
  */
 
+const { mobileSafeEmail } = require('./emailMobile');
+
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
 // Resend accepts up to 50 addresses per request on the batch endpoint, but a
@@ -94,7 +96,7 @@ async function sendOne({ to, subject, html, text, headers }) {
           from: fromAddress(),
           to: [to],
           subject,
-          html,
+          html: mobileSafeEmail(html),
           ...(text ? { text } : {}),
           ...(replyToAddress() ? { reply_to: replyToAddress() } : {}),
           ...(headers ? { headers } : {}),

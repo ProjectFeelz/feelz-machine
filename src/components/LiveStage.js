@@ -67,7 +67,7 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
   const hideTimer = useRef(null);
   const playedOnce = useRef(false);
 
-  const [phase, setPhase]     = useState('loading'); // loading | playing | paused | ended | error
+  const [phase, setPhase]     = useState('loading'); // loading | playing | paused | tap | ended | error
   const [muted, setMuted]     = useState(true);
   const [volume, setVolume]   = useState(80);
   const [errorCode, setErrorCode] = useState(null);
@@ -95,6 +95,16 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
     let cancelled = false;
     setPhase('loading');
     setErrorCode(null);
+    playedOnce.current = false;
+
+    // A phone that blocks autoplay (battery saver, data saver, some browsers)
+    // never starts the video and never says so. After a few seconds without
+    // playback, hand the video itself to the viewer: YouTube's own play button
+    // takes the tap, which every phone accepts.
+    const stall = setTimeout(() => {
+      if (cancelled || playedOnce.current || replay) return;
+      setPhase(ph => (ph === 'loading' ? (playerRef.current ? 'tap' : 'error') : ph));
+    }, 8000);
 
     loadYouTubeApi().then((YT) => {
       if (cancelled || !mountRef.current) return;
@@ -150,6 +160,7 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
 
     return () => {
       cancelled = true;
+      clearTimeout(stall);
       try { playerRef.current?.destroy(); } catch { /* already gone */ }
       playerRef.current = null;
     };
@@ -229,12 +240,24 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
       onMouseMove={phase === 'playing' ? wake : undefined}
       onTouchStart={phase === 'playing' ? wake : undefined}
     >
-      {/* The YouTube player. Taps never reach it. */}
-      <div ref={mountRef} className="fm-live-frame absolute left-0 right-0" aria-hidden="true" />
+      {/* The YouTube player. Taps never reach it, except while it is
+          waiting for one to start. */}
+      <div ref={mountRef} className={`fm-live-frame absolute left-0 right-0 ${phase === 'tap' ? 'fm-live-tap' : ''}`} aria-hidden={phase === 'tap' ? undefined : 'true'} />
 
       {/* Tap anywhere on the video to show the controls. */}
-      <button type="button" aria-label="Show controls" onClick={wake}
-        className="absolute inset-0 w-full h-full cursor-default" style={{ background: 'transparent' }} />
+      {phase !== 'tap' && (
+        <button type="button" aria-label="Show controls" onClick={wake}
+          className="absolute inset-0 w-full h-full cursor-default" style={{ background: 'transparent' }} />
+      )}
+
+      {/* Waiting for a tap on the video itself. */}
+      {phase === 'tap' && (
+        <div className="absolute left-0 right-0 bottom-4 flex justify-center pointer-events-none">
+          <span className="px-3 py-1.5 rounded-full bg-black/80 text-xs font-semibold text-white">
+            Tap the video to start
+          </span>
+        </div>
+      )}
 
       {/* Loading */}
       {phase === 'loading' && (
@@ -373,6 +396,8 @@ export default function LiveStage({ videoId, title, hostName, hostImage, isHost 
            taps: every control is ours. */
         .fm-live-frame { top: -64px; bottom: -64px; }
         .fm-live-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; border: 0; }
+        .fm-live-tap { top: 0; bottom: 0; }
+        .fm-live-tap iframe { pointer-events: auto; }
         .fm-live-ring { background: conic-gradient(from 0deg, #ec4899, #8b5cf6, #22d3ee, #f59e0b, #ec4899); animation: fm-live-spin 3s linear infinite; }
         .fm-live-gradient-text { background: linear-gradient(90deg, #f472b6, #a78bfa, #67e8f9); -webkit-background-clip: text; background-clip: text; color: transparent; }
         .fm-live-sound { animation: fm-live-bob 1.6s ease-in-out infinite; }

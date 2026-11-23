@@ -156,6 +156,16 @@ export function useStreak(user) {
             metadata: { streak_days: newStreak, milestone: true },
           });
         }
+      } else if (newStreak >= 5 && newStreak % 5 === 0) {
+        // The streak is no longer on the top bar, so it is reported here: every
+        // fifth day, between the milestones above.
+        await supabase.from('notifications').insert({
+          user_id:  user.id,
+          type:     'streak',
+          title:    `${newStreak}-day streak 🔥`,
+          message:  `${newStreak} days in a row on Feelz Machine. Keep it going.`,
+          metadata: { streak_days: newStreak, milestone: false },
+        });
       }
     } catch (err) {
       console.error('Streak check error:', err);

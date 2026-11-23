@@ -465,16 +465,14 @@ export default function CreateMenuModal({ artist, user, onClose, primaryColor = 
                 // Whatever is running right now first, then making music,
                 // then the money, then fans, profile, account, and help last.
                 // Extra features sit in their own bands so the top stays short.
-                ...(((sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading) || liveNow.live || liveNow.soon)
-                  ? [{ heading: 'Happening now', icon: Trophy, tint: MENU_TINTS.now, items: [
-                      ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
-                        ? [{ id: 'sessions', icon: Trophy, label: 'Enter Sessions', sub: 'The cover competition, open to everyone' }]
-                        : []),
-                      ...(liveNow.live || liveNow.soon
-                        ? [{ id: 'live_streams', icon: Radio, label: 'Live streams', sub: liveStreamsLine(liveNow) }]
-                        : []),
-                    ] }]
-                  : []),
+                // Watch live is always here, so the Live page can be found on
+                // a phone when nobody is streaming.
+                { heading: 'Happening now', icon: Trophy, tint: MENU_TINTS.now, items: [
+                    ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
+                      ? [{ id: 'sessions', icon: Trophy, label: 'Enter Sessions', sub: 'The cover competition, open to everyone' }]
+                      : []),
+                    { id: 'live_streams', icon: Radio, label: 'Watch live', sub: liveStreamsLine(liveNow) || 'Streams, replays and what is coming up' },
+                  ] },
                 {
                   heading: 'Create',
                   icon: Music,

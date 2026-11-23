@@ -10,7 +10,7 @@ import {
   Edit, Search, X, Zap, Disc, AlertCircle, Youtube, HelpCircle, GripVertical,
 } from 'lucide-react';
 import CollaboratorSearch from '../components/CollaboratorSearch';
-import SchoolSessionsEntry, { schoolSessionsFormValid, SCHOOL_SESSIONS_BLANK_FORM } from '../components/SchoolSessionsEntry';
+import SchoolSessionsEntry, { schoolSessionsFormValid, schoolSessionsMissing, SCHOOL_SESSIONS_BLANK_FORM } from '../components/SchoolSessionsEntry';
 import useSchoolSessions from '../hooks/useSchoolSessions';
 import LyricsThemePicker from '../components/LyricsThemePicker';
 import TierGate from '../components/TierGate';
@@ -1939,7 +1939,11 @@ export default function TrackUploadPanel() {
     }
 
     if (!schoolSessionsFormValid(schoolSessionsEnabled, schoolSessionsForm)) {
-      showMessage('error', 'Please fill in the entrant name, email, TikTok handle and video link, school, the YouTube confirmation, agreement to the Sessions terms, and (if under 18) guardian consent for the Sessions entry.');
+      // Name the one thing that is missing. A list of every field sent people
+      // round the form over and over without finding it.
+      const missing = schoolSessionsMissing(schoolSessionsEnabled, schoolSessionsForm) || 'check the Sessions entry details';
+      step('sessions_entry_incomplete', null, { missing });
+      showMessage('error', `Almost there. For your Sessions entry, ${missing}.`);
       return;
     }
 

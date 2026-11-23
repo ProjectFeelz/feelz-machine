@@ -41,21 +41,18 @@ export default function ListenerCreateMenu({ onClose }) {
   // running right now first, then making playlists and your people, then your
   // listening and earning, profile and account, and help last.
   const groups = [
-    ...(((sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading) || liveNow.live || liveNow.soon)
-      ? [{ heading: 'Happening now', icon: Trophy, tint: MENU_TINTS.now, items: [
-          ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
-            ? [{
-                id: 'sessions', icon: Trophy, label: 'Sessions',
-                sub: 'The cover competition. Listen, vote, or enter it yourself',
-                onClick: go('/sessions', 'sessions'),
-              }]
-            : []),
-          // Under Sessions, only while something is live or starting soon.
-          ...(liveNow.live || liveNow.soon
-            ? [{ id: 'live_streams', icon: Radio, label: 'Live streams', sub: liveStreamsLine(liveNow), onClick: go('/live', 'live_streams') }]
-            : []),
-        ] }]
-      : []),
+    // Watch live is always here, so the Live page can be found on a phone
+    // when nobody is streaming.
+    { heading: 'Happening now', icon: Trophy, tint: MENU_TINTS.now, items: [
+        ...(sessionsGate.enabled && sessionsGate.allowed && !sessionsGate.loading
+          ? [{
+              id: 'sessions', icon: Trophy, label: 'Sessions',
+              sub: 'The cover competition. Listen, vote, or enter it yourself',
+              onClick: go('/sessions', 'sessions'),
+            }]
+          : []),
+        { id: 'live_streams', icon: Radio, label: 'Watch live', sub: liveStreamsLine(liveNow) || 'Streams, replays and what is coming up', onClick: go('/live', 'live_streams') },
+      ] },
     {
       heading: 'Create',
       icon: ListMusic,

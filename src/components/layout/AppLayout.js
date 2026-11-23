@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Outlet, useNavigate, useLocation, useNavigationType } from 'react-router-dom';
 import MobileNav from './MobileNav';
 import WindowControlsOverlay from './WindowControlsOverlay';
@@ -12,7 +12,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { myAvatar } from '../../utils/me';
 import { useAppThemeInit } from '../../hooks/useAppTheme';
 import { ListenerThemeProvider } from '../../contexts/ListenerThemeContext';
-import { Bell, Flame, UserCircle, Compass } from 'lucide-react';
+import { Bell, UserCircle, Radio } from 'lucide-react';
 import useLiveStreams from '../../hooks/useLiveStreams';
 import useNotifications from '../../contexts/useNotifications';
 import { OfflineBanner } from '../../hooks/useOffline';
@@ -97,14 +97,24 @@ function SplashScreen() {
 }
 
 // ── LIVE chip ────────────────────────────────────────────────────────────────
-// Top left of the phone's top bar on every page while somebody is live (red,
-// pulsing, with the host's picture) or about to go live (amber). One tap opens
-// the stream, or Feelz Live when there are several. Nothing shows otherwise.
+// Top left of the phone's top bar on every page: red and pulsing with the
+// host's picture while somebody is live, amber when a stream is about to
+// start, and a quiet LIVE button to the Live page the rest of the time, so
+// streams and replays can always be found on a phone.
 function LiveChip() {
   const { live, soon, first } = useLiveStreams({ withFirst: true });
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  if ((!live && !soon) || pathname === '/live' || pathname.startsWith('/session/')) return <span />;
+  if (pathname === '/live' || pathname.startsWith('/session/')) return <span />;
+  if (!live && !soon) {
+    return (
+      <button onClick={() => navigate('/live')} aria-label="Live streams and replays"
+        className="pointer-events-auto flex items-center gap-1.5 h-8 px-2.5 rounded-full border bg-white/[0.06] border-white/15">
+        <Radio className="w-3.5 h-3.5 text-white/70" />
+        <span className="text-[11px] font-black tracking-wide text-white/80">LIVE</span>
+      </button>
+    );
+  }
   const isLive = live > 0;
   const host = first?.artists;
   const go = () => navigate(first && (isLive ? live === 1 : soon === 1) ? `/session/${first.id}` : '/live');
@@ -134,7 +144,6 @@ function LiveChip() {
 // ── Bell button ───────────────────────────────────────────────────────────────
 function MobileBellButton() {
   const { unreadCount } = useNotifications();
-  const { streak, discoveryStreak } = useContext(StreakContext);
   const { user, artist, listener, isArtist } = useAuth();
   const navigate = useNavigate();
 
@@ -151,20 +160,8 @@ function MobileBellButton() {
     >
       <LiveChip />
       <div className="flex items-center space-x-1.5 pointer-events-auto">
-        {/* Streak flame */}
-        {streak > 1 && (
-          <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-orange-500/15 border border-orange-500/25">
-            <Flame className="w-3 h-3 text-orange-400" />
-            <span className="text-xs font-bold text-orange-400">{streak}</span>
-          </div>
-        )}
-        {/* Discovery streak */}
-        {discoveryStreak > 1 && (
-          <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-blue-500/15 border border-blue-500/25">
-            <Compass className="w-3 h-3 text-blue-400" />
-            <span className="text-xs font-bold text-blue-400">{discoveryStreak}</span>
-          </div>
-        )}
+        {/* Streaks are not shown here any more, to keep the bar clear for
+            the LIVE button. They are reported in notifications instead. */}
 
         {/* Notifications bell */}
         <button

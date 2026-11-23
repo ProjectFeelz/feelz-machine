@@ -8,7 +8,7 @@ import { usePlayer } from '../contexts/PlayerContext';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Search, Flame, TrendingUp, Play, Pause, Music, Crown,
-  Loader, Disc3, Star, Sparkles, Clock, Users, Newspaper, ListMusic,
+  Loader, Disc3, Star, Sparkles, Clock, Users, Newspaper, ListMusic, Radio,
 } from 'lucide-react';
 import VerifiedBadge from '../components/VerifiedBadge';
 // Ask Supabase for the size we actually draw. See utils/coverUrl.
@@ -714,6 +714,9 @@ export default function BrowsePage() {
     // here rather than handled with a special case at the click.
     { key: 'whatsnew',  label: "What's New", icon: Newspaper, opens: true },
     { key: 'tracks',    label: 'Tracks',    icon: Music },
+    // Not a tab either: opens the Live page, so streams, replays and what is
+    // coming up can be found on a phone when nobody is live.
+    { key: 'live',      label: 'Livestreams', icon: Radio, go: '/live' },
     { key: 'albums',    label: 'Albums',    icon: Disc3 },
     { key: 'playlists', label: 'Playlists', icon: ListMusic },
     { key: 'new',       label: 'New',       icon: Sparkles },
@@ -791,9 +794,9 @@ export default function BrowsePage() {
 
         {/* Tab bar */}
         <div role="tablist" className="flex space-x-1 overflow-x-auto scrollbar-hide bg-white/[0.03] rounded-xl p-1">
-          {tabs.map(({ key, label, icon: Icon, opens }) => (
-            <button key={key} role="tab" aria-selected={!opens && activeTab === key}
-              onClick={() => (opens ? setNewsOpen(true) : setActiveTab(key))}
+          {tabs.map(({ key, label, icon: Icon, opens, go }) => (
+            <button key={key} role="tab" aria-selected={!opens && !go && activeTab === key}
+              onClick={() => (opens ? setNewsOpen(true) : go ? navigate(go) : setActiveTab(key))}
               className={`flex-shrink-0 flex items-center space-x-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition ${
                 !opens && activeTab === key ? 'bg-white text-black' : 'text-white/35 hover:text-white/60'
               }`}>
@@ -1457,4 +1460,4 @@ function AlbumTile({ album, navigate }) {
       </p>
     </button>
   );
-}
+}

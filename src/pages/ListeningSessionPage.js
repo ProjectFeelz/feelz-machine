@@ -927,6 +927,13 @@ export default function ListeningSessionPage() {
   const [queue, setQueue]             = useState([]);
   const [messages, setMessages]       = useState([]);
   const [loading, setLoading]         = useState(true);
+  // Shown on the loading screen when the stream takes too long to open.
+  const [slowLoad, setSlowLoad]       = useState(false);
+  useEffect(() => {
+    if (!loading) return undefined;
+    const t = setTimeout(() => setSlowLoad(true), 12000);
+    return () => clearTimeout(t);
+  }, [loading]);
   const [chatInput, setChatInput]     = useState('');
   const [sending, setSending]         = useState(false);
   const [reactions, setReactions]     = useState([]);
@@ -1146,7 +1153,8 @@ export default function ListeningSessionPage() {
   useEffect(() => {
     if (!sessionId) return;
     loadPolls();
-    loadSession();
+    // A load that fails or never answers must not leave a spinner up forever.
+    loadSession().catch((err) => { console.error('[session] load failed', err); setSlowLoad(true); });
     loadMessages();
 
     // Track listener count
@@ -1332,19 +1340,20 @@ export default function ListeningSessionPage() {
 
 
 
-  // Follow the chat while you are at the bottom. Scroll up to read and it
-  // stays put, with a button to jump back down.
+  // Newest message at the top. Follow the chat while you are at the top;
+  // scroll down to read older messages and it stays put, with a button to
+  // jump back up to the latest.
   const chatScrollRef = useRef(null);
   const atBottomRef   = useRef(true);
   const [unseen, setUnseen] = useState(0);
   const onChatScroll = () => {
     const el = chatScrollRef.current;
     if (!el) return;
-    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    atBottomRef.current = el.scrollTop < 80;
     if (atBottomRef.current) setUnseen(0);
   };
   const jumpToLatest = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    chatScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     atBottomRef.current = true;
     setUnseen(0);
   };
@@ -1352,7 +1361,7 @@ export default function ListeningSessionPage() {
   useEffect(() => {
     const added = messages.length - lastCountRef.current;
     lastCountRef.current = messages.length;
-    if (atBottomRef.current) chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    if (atBottomRef.current) chatScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     else if (added > 0) setUnseen(n => n + added);
   }, [messages]);
 
@@ -1699,8 +1708,17 @@ export default function ListeningSessionPage() {
   const replayBaseRef = useRef(0);
 
   if (loading) return (
-    <div className="min-h-screen bg-black flex items-center justify-center">
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4 px-6 text-center">
       <Loader className="w-6 h-6 animate-spin text-white/30" />
+      {slowLoad && (
+        <>
+          <p className="text-sm text-white/60">Still connecting to the stream.</p>
+          <button onClick={() => window.location.reload()}
+            className="px-4 py-2 rounded-full bg-white text-black text-sm font-bold">
+            Try again
+          </button>
+        </>
+      )}
     </div>
   );
 
@@ -2435,7 +2453,8 @@ export default function ListeningSessionPage() {
           <div className="relative flex-1 min-h-0">
           <div ref={chatScrollRef} onScroll={onChatScroll} className="absolute inset-0 overflow-y-auto">
             <div className="py-2">
-              {shownMessages.filter(m => m.is_tip).slice(-3).map((msg, i) => (
+              <div ref={chatEndRef} />
+              {shownMessages.filter(m => m.is_tip).slice(-3).reverse().map((msg, i) => (
                 <ChatMessage key={(msg.id || i) + '-tip'} msg={msg} hostUserId={host.user_id} isModUser={modIds.has(msg.user_id)} myName={myName} onTap={user ? setSheetMsg : null}
                   reactions={reactionsByMsg[msg.id]} onReact={canReact ? toggleMsgReaction : null} />
               ))}
@@ -2444,17 +2463,16 @@ export default function ListeningSessionPage() {
                   {isReplay ? (replayCut === null || !replayT ? 'Press play and the chat comes in as it happened.' : 'The chat picks up as the stream goes on.') : 'Say hi. You are first.'}
                 </p>
               )}
-              {shownMessages.filter(m => !m.is_tip).map((msg, i) => (
+              {shownMessages.filter(m => !m.is_tip).reverse().map((msg, i) => (
                 <ChatMessage key={msg.id || i} msg={msg} hostUserId={host.user_id} isModUser={modIds.has(msg.user_id)} myName={myName} onTap={user ? setSheetMsg : null}
                   reactions={reactionsByMsg[msg.id]} onReact={canReact ? toggleMsgReaction : null} />
               ))}
-              <div ref={chatEndRef} />
             </div>
           </div>
           {unseen > 0 && (
             <button onClick={jumpToLatest}
-              className="absolute left-1/2 -translate-x-1/2 bottom-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white text-black text-xs font-black shadow-lg">
-              <ArrowDown className="w-3.5 h-3.5" /> {unseen} new
+              className="absolute left-1/2 -translate-x-1/2 top-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white text-black text-xs font-black shadow-lg">
+              <ArrowDown className="w-3.5 h-3.5 rotate-180" /> {unseen} new
             </button>
           )}
           {notice && (

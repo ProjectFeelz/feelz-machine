@@ -31,6 +31,7 @@ const BLANK_FORM = {
   songId: '',
   isGroup: false,
   groupMembers: [''],
+  candidateCardNo: '',
   verificationCode: '',
   entrantFullName: '',
   entrantEmail: '',
@@ -100,6 +101,28 @@ export function schoolSessionsFormValid(enabled, form) {
     if (!form.guardianName.trim() || !form.guardianContact.trim() || !form.guardianConsented) return false;
   }
   return true;
+}
+
+// The first thing still missing, said the way the form labels it, or null
+// when the entry is complete. Same rules as schoolSessionsFormValid, so an
+// entrant is told exactly which field to fix instead of the whole list.
+export function schoolSessionsMissing(enabled, form) {
+  if (!enabled) return null;
+  if (!form.songId) return 'pick the song you are writing to';
+  if (!form.entrantFullName.trim()) return "fill in the entrant's full name";
+  if (!/^\S+@\S+\.\S+$/.test(form.entrantEmail.trim())) return "fill in the entrant's email address in full, like name@gmail.com";
+  if (!form.tiktokHandle.trim()) return 'fill in your TikTok handle';
+  if (!form.tiktokVideoUrl.trim()) return 'paste the link to your TikTok video';
+  if (!form.tiktokTaggedConfirmed) return `tick the box to confirm you tagged @${OFFICIAL_TIKTOK_HANDLE} in your TikTok post`;
+  if (!form.youtubeSubscribedConfirmed) return 'tick the box to confirm you are subscribed on YouTube';
+  if (form.isGroup && form.groupMembers.filter(m => m.trim()).length === 0) return 'add at least one group member';
+  if (form.isMinor) {
+    if (!form.guardianName.trim()) return "fill in your parent or guardian's name";
+    if (!form.guardianContact.trim()) return "fill in your parent or guardian's phone or email";
+    if (!form.guardianConsented) return "tick the box to confirm you have your parent or guardian's permission";
+  }
+  if (!form.termsAccepted) return 'tick the box to agree to the Sessions terms';
+  return null;
 }
 
 export { BLANK_FORM as SCHOOL_SESSIONS_BLANK_FORM };
@@ -340,6 +363,13 @@ export default function SchoolSessionsEntry({ enabled, setEnabled, form, setForm
               </button>
             </div>
           )}
+
+          <div>
+            <Label>Candidate card number <span className="text-white/20">(optional)</span></Label>
+            <Input value={form.candidateCardNo}
+              onChange={e => set('candidateCardNo', e.target.value)}
+              placeholder="No. from your entry card, if you have one" />
+          </div>
 
           <div className="flex items-center space-x-2.5 pt-1">
             <Toggle value={form.isMinor} onChange={() => set('isMinor', !form.isMinor)} />
