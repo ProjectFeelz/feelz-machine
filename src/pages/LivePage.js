@@ -84,12 +84,12 @@ function ShowCard({ s, kind, onOpen, reminded, onRemind }) {
     <div className="group w-[calc(50vw-22px)] sm:w-[300px] lg:w-[320px] 2xl:w-[360px] flex-shrink-0 snap-start">
       <button onClick={onOpen} className="relative block w-full aspect-video rounded-xl sm:rounded-2xl overflow-hidden bg-white/[0.05] ring-1 ring-white/[0.07] group-hover:ring-pink-400/50 transition">
         <Art s={s} className="group-hover:scale-105 transition-transform duration-500" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/20" />
+        <div className="absolute inset-0 hidden sm:block bg-gradient-to-t from-black/60 via-transparent to-transparent" />
         <div className="absolute top-2 left-2"><Badge s={s} kind={kind} /></div>
         {s.platform && (
           <span className="absolute top-2 right-2 hidden sm:inline px-2 py-0.5 rounded-md bg-gradient-to-r from-pink-500 to-violet-500 text-[9px] font-black tracking-wider text-white">FEELZ SHOW</span>
         )}
-        <div className="absolute bottom-2 left-2 right-2 flex items-center gap-1.5">
+        <div className="absolute bottom-2 left-2 right-2 hidden sm:flex items-center gap-1.5">
           {s.reviews > 0 && (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/70 text-[10px] font-bold text-white"><Music className="w-3 h-3" /> {s.reviews} reviewed</span>
           )}
@@ -108,7 +108,7 @@ function ShowCard({ s, kind, onOpen, reminded, onRemind }) {
             : <div className="w-full h-full flex items-center justify-center text-xs font-black">{(s.artist?.artist_name || '?')[0]}</div>}
         </div>
         <div className="min-w-0 flex-1">
-          <button onClick={onOpen} className="block text-left text-[13px] sm:text-sm font-bold text-white leading-snug line-clamp-2 hover:text-pink-200 transition">{s.title || 'Live stream'}</button>
+          <button onClick={onOpen} className="w-full text-left text-[13px] sm:text-sm font-bold text-white leading-snug line-clamp-1 sm:line-clamp-2 hover:text-pink-200 transition">{s.title || 'Live stream'}</button>
           <p className="text-[11px] sm:text-xs text-white/50 truncate mt-0.5">
             {s.artist?.artist_name}
             {kind === 'replay' ? ` · ${ago(s.started_at || s.ended_at)}` : kind === 'soon' ? ` · ${when(s.scheduled_at)}` : ''}
@@ -130,13 +130,13 @@ function Shelf({ title, icon: Icon, tint, items, kind, kindOf, onOpen, reminders
   if (!items.length) return null;
   const scroll = (dir) => ref.current?.scrollBy({ left: dir * (ref.current.clientWidth * 0.85), behavior: 'smooth' });
   return (
-    <section className="mb-9">
+    <section className="mb-7 md:mb-9">
       <div className="flex items-end justify-between mb-3 px-4 md:px-0">
         <div className="flex items-center gap-2.5">
-          <span className={`w-8 h-8 rounded-xl flex items-center justify-center bg-gradient-to-br ${tint}`}><Icon className="w-4 h-4 text-white" /></span>
+          <span className={`w-7 h-7 md:w-8 md:h-8 rounded-lg md:rounded-xl flex items-center justify-center bg-gradient-to-br ${tint}`}><Icon className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" /></span>
           <div>
-            <h2 className="text-lg md:text-xl font-black text-white leading-none">{title}</h2>
-            {note && <p className="text-xs text-white/45 mt-1">{note}</p>}
+            <h2 className="text-base md:text-xl font-black text-white leading-none">{title}</h2>
+            {note && <p className="hidden md:block text-xs text-white/45 mt-1">{note}</p>}
           </div>
         </div>
         <div className="hidden md:flex gap-1.5">
@@ -154,44 +154,47 @@ function Shelf({ title, icon: Icon, tint, items, kind, kindOf, onOpen, reminders
   );
 }
 
+// The featured show. The thumbnail is shown whole, at its own shape, with nothing
+// written over it: the words sit beside it on a computer and under it on a phone.
 function Hero({ s, kind, onOpen, reminded, onRemind }) {
   return (
-    <div className="relative mx-4 md:mx-0 mb-10 rounded-[28px] overflow-hidden ring-1 ring-white/10 fm-hero-glow">
-      <div className="relative aspect-[4/4.2] sm:aspect-video lg:aspect-[21/9]">
-        <Art s={s} big className="absolute inset-0 fm-hero-zoom" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/30 to-transparent hidden sm:block" />
-        <div className="absolute inset-0 fm-hero-grain pointer-events-none" />
-
-        <div className="absolute left-0 right-0 bottom-0 p-5 sm:p-8 lg:p-10 max-w-2xl">
-          <div className="flex items-center gap-2 mb-3">
-            <Badge s={s} kind={kind} />
-            {s.platform && <span className="px-2 py-0.5 rounded-md bg-gradient-to-r from-pink-500 to-violet-500 text-[10px] font-black tracking-wider text-white">FEELZ MACHINE SHOW</span>}
+    <div className="mx-4 md:mx-0 mb-8 md:mb-10 rounded-3xl overflow-hidden ring-1 ring-white/10 bg-white/[0.03] fm-hero-glow md:grid md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <button onClick={onOpen} aria-label={kind === 'live' ? 'Watch live' : 'Watch'}
+        className="group relative block w-full aspect-video overflow-hidden bg-black">
+        <Art s={s} big className="absolute inset-0 group-hover:scale-[1.03] transition-transform duration-500" />
+        <div className="absolute top-2.5 left-2.5"><Badge s={s} kind={kind} /></div>
+        <span className="absolute inset-0 flex items-center justify-center">
+          <span className="w-14 h-14 rounded-full bg-white/90 flex items-center justify-center shadow-xl opacity-90 group-hover:scale-110 transition">
+            <Play className="w-6 h-6 text-black fill-black ml-0.5" />
+          </span>
+        </span>
+      </button>
+      <div className="p-4 md:p-6 lg:p-8 flex flex-col justify-center min-w-0">
+        {(s.platform || kind === 'soon') && (
+          <div className="flex items-center gap-2 mb-2">
+            {s.platform && <span className="px-2 py-0.5 rounded-md bg-gradient-to-r from-pink-500 to-violet-500 text-[10px] font-black tracking-wider text-white">FEELZ SHOW</span>}
             {kind === 'soon' && <span className="text-xs font-bold text-white/70">{when(s.scheduled_at)}</span>}
           </div>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black leading-[0.95] tracking-tight text-white drop-shadow-lg">
-            {s.title || 'Live on Feelz'}
-          </h2>
-          <div className="mt-3 flex items-center gap-2.5 flex-wrap">
-            <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-white/30 bg-white/10">
-              {s.artist?.profile_image_url && <img src={s.artist.profile_image_url} alt="" className="w-full h-full object-cover" />}
-            </div>
-            <p className="text-sm font-bold text-white/90">{s.artist?.artist_name}</p>
-            {s.reviews > 0 && <p className="text-sm text-white/60">· {s.reviews} tracks reviewed</p>}
-            {s.reminders > 0 && kind === 'soon' && <p className="text-sm text-white/60">· {s.reminders} coming</p>}
+        )}
+        <h2 onClick={onOpen} className="cursor-pointer text-base md:text-2xl lg:text-3xl font-black leading-tight text-white line-clamp-2">{s.title || 'Live on Feelz'}</h2>
+        <div className="mt-2 flex items-center gap-2 min-w-0">
+          <div className="w-6 h-6 md:w-7 md:h-7 rounded-full overflow-hidden bg-white/10 flex-shrink-0">
+            {s.artist?.profile_image_url && <img src={s.artist.profile_image_url} alt="" className="w-full h-full object-cover" />}
           </div>
-          <div className="mt-5 flex flex-wrap gap-2.5">
-            <button onClick={onOpen}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-white text-black text-sm font-black hover:scale-[1.03] active:scale-95 transition shadow-xl">
-              <Play className="w-4 h-4 fill-black" /> {kind === 'live' ? 'Watch live' : kind === 'soon' ? 'Open the show' : 'Watch the replay'}
+          <p className="text-[13px] md:text-sm font-bold text-white/80 truncate">{s.artist?.artist_name}</p>
+          {s.reviews > 0 && <p className="hidden md:block text-sm text-white/50 flex-shrink-0">· {s.reviews} reviewed</p>}
+        </div>
+        <div className="mt-3 md:mt-5 flex flex-wrap gap-2">
+          <button onClick={onOpen}
+            className="hidden md:inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white text-black text-sm font-black hover:scale-[1.03] active:scale-95 transition">
+            <Play className="w-4 h-4 fill-black" /> {kind === 'live' ? 'Watch live' : kind === 'soon' ? 'Open the show' : 'Watch the replay'}
+          </button>
+          {kind === 'soon' && (
+            <button onClick={() => onRemind(s)}
+              className="inline-flex items-center gap-2 px-4 py-2 md:px-5 md:py-2.5 rounded-full bg-white/15 text-white text-sm font-black hover:bg-white/25 transition">
+              {reminded ? <BellRing className="w-4 h-4" /> : <Bell className="w-4 h-4" />} {reminded ? 'Reminder set' : 'Remind me'}
             </button>
-            {kind === 'soon' && (
-              <button onClick={() => onRemind(s)}
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-white/15 backdrop-blur text-white text-sm font-black hover:bg-white/25 transition">
-                {reminded ? <BellRing className="w-4 h-4" /> : <Bell className="w-4 h-4" />} {reminded ? 'Reminder set' : 'Remind me'}
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </div>
     </div>
@@ -322,13 +325,13 @@ export default function LivePage() {
       </Helmet>
 
       {/* Title bar */}
-      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 mb-5 px-4 md:px-0">
+      <div className="flex flex-wrap items-center md:items-end justify-between gap-x-4 gap-y-3 mb-4 md:mb-5 px-4 md:px-0">
         <div>
-          <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tight leading-none">
+          <h1 className="text-3xl md:text-5xl font-black italic uppercase tracking-tight leading-none">
             <span className="text-white">Feelz</span>{' '}
             <span className="bg-gradient-to-r from-pink-400 via-violet-400 to-cyan-300 bg-clip-text text-transparent">Live</span>
           </h1>
-          <p className="text-sm text-white/55 mt-2">Shows, live track reviews and listening parties. Catch them live or watch the replay.</p>
+          <p className="hidden md:block text-sm text-white/55 mt-2">Shows, live track reviews and listening parties. Catch them live or watch the replay.</p>
         </div>
         {artist && (
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -346,10 +349,10 @@ export default function LivePage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-2 overflow-x-auto no-scrollbar mb-6 px-4 md:px-0">
+      <div className="flex gap-2 overflow-x-auto no-scrollbar mb-4 md:mb-6 px-4 md:px-0">
         {FILTERS.map(f => (
           <button key={f.id} onClick={() => setFilter(f.id)}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition ${filter === f.id ? 'bg-white text-black' : 'bg-white/[0.07] text-white/75 hover:bg-white/[0.12]'}`}>
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 rounded-full text-[13px] md:text-sm font-bold whitespace-nowrap transition ${filter === f.id ? 'bg-white text-black' : 'bg-white/[0.07] text-white/75 hover:bg-white/[0.12]'}`}>
             <f.icon className="w-4 h-4" /> {f.label}
           </button>
         ))}
