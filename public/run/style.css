@@ -1425,3 +1425,10 @@ input, textarea, select { -webkit-user-select: text; user-select: text; touch-ac
 /* Scrollbars are hidden everywhere; wheel, swipe, keys and controller still scroll */
 html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
 html::-webkit-scrollbar, body::-webkit-scrollbar, *::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+/* Smooth mode (html.fr-smooth, see engine/core.js): no blur behind the glass and no filters,
+   which a phone has to work out again every frame the picture moves. Solid tints stand in. */
+html.fr-smooth * { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; filter: none !important; }
+html.fr-smooth .hud-left, html.fr-smooth .hud-right, html.fr-smooth .hud-center { background: rgba(10, 10, 14, .78) !important; }
+html.fr-smooth .touch-button { background: rgba(22, 22, 28, .6) !important; }
+html.fr-smooth .overlay-card, html.fr-smooth .player-card { background: rgba(14, 13, 18, .94) !important; }

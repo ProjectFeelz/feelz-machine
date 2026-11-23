@@ -252,9 +252,10 @@ function drawDebugHud(now, dt) {
     "screen " + innerWidth + "x" + innerHeight + " @" + (window.devicePixelRatio || 1) + " · " + String(dbg.gpu).slice(0, 40)
   ];
   ctx.save();
-  ctx.fillStyle = "rgba(0, 0, 0, 0.7)"; ctx.fillRect(8, H - 74, 720, 66);
+  // Above the touch buttons, so a phone shows all of it.
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)"; ctx.fillRect(8, 112, 720, 86);
   ctx.fillStyle = "#7fe39a"; ctx.font = "600 14px monospace"; ctx.textAlign = "left";
-  lines.forEach((l, i) => ctx.fillText(l, 16, H - 52 + i * 19));
+  lines.concat(SMOOTH ? ["smooth mode on"] : []).forEach((l, i) => ctx.fillText(l, 16, 134 + i * 19));
   ctx.restore();
 }
 
@@ -264,10 +265,13 @@ function gameLoop(now) {
     return;
   }
   if (!frameDue(now, "run", 10)) { requestAnimationFrame(gameLoop); return; }
-  const dt = Math.max(0, Math.min(0.05, (now - lastTime) / 1000));
+  // Smooth mode lets a slow frame count for up to twice as much, worked out in two steps, so a phone
+  // that draws few frames still keeps up with the song.
+  const dt = Math.max(0, Math.min(SMOOTH ? 0.1 : 0.05, (now - lastTime) / 1000));
   lastTime = now;
   frameTime += dt;
-  update(dt);
+  if (dt > 0.05) { update(dt / 2); update(dt / 2); }
+  else update(dt);
   // A drawing error never stops the run: the next frame still comes.
   try { render(); } catch (e) { if (!gameLoop.warned) { gameLoop.warned = true; console.warn("[render]", e); } }
   if (DEBUG_HUD) drawDebugHud(now, dt);

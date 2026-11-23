@@ -8,6 +8,18 @@ const W = canvas.width;
 
 const H = canvas.height;
 
+// Smooth mode, for phones that cannot keep up. Off unless asked for: ?smooth=1 on the address, or
+// the switch saved on this device. Without it nothing below changes how the game looks or runs.
+const SMOOTH = (() => {
+  try {
+    const q = new URLSearchParams(location.search).get("smooth");
+    if (q === "1") return true;
+    if (q === "0") return false;
+    return localStorage.getItem("feelzrun.smooth") === "1";
+  } catch (e) { return false; }
+})();
+if (SMOOTH) document.documentElement.classList.add("fr-smooth");
+
 const PX = 68;                      // pixels per metre
 
 const K = PX / 68;
