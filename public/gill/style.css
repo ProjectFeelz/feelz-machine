@@ -17,6 +17,8 @@ html, body { margin: 0; height: 100%; background: var(--ink); color: var(--text)
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; touch-action: none;
   user-select: none; -webkit-user-select: none; }
 button { font: inherit; color: inherit; cursor: pointer; }
+#stage, #hud, #touch, #touch *, .marker { touch-action: none; }
+.screen { touch-action: pan-y; }
 .hidden { display: none !important; }
 
 #stage { position: fixed; inset: 0; }
@@ -174,3 +176,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .timer.low { color: #ff5a46; animation: low 1s steps(2) infinite; }
 @keyframes low { 50% { opacity: .55; } }
 .rows .fail { margin: 6px 0 4px; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.5; }
+
+/* ---------- the marker over the objective ---------- */
+.marker { position: fixed; left: 0; top: 0; z-index: 5; pointer-events: none; display: flex; flex-direction: column; align-items: center;
+  will-change: transform; margin-left: 0; }
+.marker .text { transform: translateX(-50%); position: absolute; left: 0; bottom: 14px; white-space: nowrap; padding: 5px 11px; border-radius: 999px;
+  background: rgba(242, 181, 68, .95); color: #1b1203; font-weight: 900; font-size: 12px; letter-spacing: .06em; box-shadow: 0 4px 16px rgba(0, 0, 0, .45); }
+.marker .pin { position: absolute; left: -6px; bottom: 2px; width: 12px; height: 12px; background: rgba(242, 181, 68, .95); transform: rotate(45deg); border-radius: 2px; }
+.marker .arrow { display: none; position: absolute; left: -12px; top: -12px; width: 24px; height: 24px; text-align: center; line-height: 24px;
+  color: var(--gold-hi); font-size: 20px; text-shadow: 0 2px 8px #000; }
+.marker.edge .arrow { display: block; }
+.marker.edge .pin { display: none; }
+.marker.edge .text { bottom: 18px; font-size: 11px; }

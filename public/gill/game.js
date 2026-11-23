@@ -219,11 +219,79 @@ async function buildCity(onProgress) {
   await Promise.all([worker(), worker(), worker(), worker()]);
 }
 
+/* ---------- street obstacles: things to jump over, hide behind and run around ----------
+   Low ones (barriers, crates, benches) can be jumped. Guards can't jump, so going over
+   one is a way to lose them. Tall ones (dumpsters, crate stacks) are cover for sneaking. */
+function stripeTexture() {
+  const c = document.createElement("canvas"); c.width = 128; c.height = 32;
+  const g = c.getContext("2d");
+  g.fillStyle = "#9a978f"; g.fillRect(0, 0, 128, 32);
+  g.fillStyle = "#e0b02a"; for (let i = -2; i < 10; i++) { g.beginPath(); g.moveTo(i * 16, 32); g.lineTo(i * 16 + 8, 32); g.lineTo(i * 16 + 20, 18); g.lineTo(i * 16 + 12, 18); g.fill(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function woodTexture() {
+  const c = document.createElement("canvas"); c.width = 64; c.height = 64;
+  const g = c.getContext("2d");
+  g.fillStyle = "#7a5634"; g.fillRect(0, 0, 64, 64);
+  g.strokeStyle = "#4e3520"; g.lineWidth = 4; g.strokeRect(2, 2, 60, 60);
+  g.beginPath(); g.moveTo(4, 4); g.lineTo(60, 60); g.moveTo(60, 4); g.lineTo(4, 60); g.stroke();
+  g.fillStyle = "rgba(0,0,0,.12)"; for (let y = 10; y < 64; y += 12) g.fillRect(0, y, 64, 2);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const PROPS = (() => {
+  const concrete = new THREE.MeshStandardMaterial({ map: stripeTexture(), roughness: 0.9 });
+  const wood = new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: 0.85 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x2f5a45, roughness: 0.6, metalness: 0.4 });
+  const bench = new THREE.MeshStandardMaterial({ color: 0x5b4a3a, roughness: 0.8 });
+  return [
+    { kind: "barrier", w: 2.6, d: 0.6, h: 0.85, mat: concrete, low: true, weight: 4 },
+    { kind: "crate", w: 1.1, d: 1.1, h: 0.95, mat: wood, low: true, weight: 3 },
+    { kind: "bench", w: 2.0, d: 0.7, h: 0.6, mat: bench, low: true, weight: 2 },
+    { kind: "dumpster", w: 2.2, d: 1.3, h: 1.5, mat: metal, low: false, weight: 2 },
+    { kind: "stack", w: 1.2, d: 1.2, h: 2.0, mat: wood, low: false, weight: 1 }
+  ];
+})();
+const propGeo = new THREE.BoxGeometry(1, 1, 1);
+function addProp(type, x, z, rot) {
+  const w = rot ? type.d : type.w, d = rot ? type.w : type.d;
+  if (blocked(x, z, Math.max(w, d) / 2 + 1.2)) return false;
+  const m = new THREE.Mesh(propGeo, type.mat);
+  m.scale.set(w, type.h, d); m.position.set(x, type.h / 2, z);
+  m.castShadow = true; m.receiveShadow = true;
+  scene.add(m);
+  blockers.push({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, top: type.h, low: type.low, mesh: m, mats: [], faded: false, prop: type.kind });
+  return true;
+}
+function buildProps() {
+  const total = PROPS.reduce((a, p) => a + p.weight, 0);
+  for (const q of S.quadrants) {
+    const r = rng(q.id.charCodeAt(2) * 4241 + 99);
+    const o = zoneOrigin(q);
+    const pick = () => { let n = r() * total; for (const p of PROPS) if ((n -= p.weight) < 0) return p; return PROPS[0]; };
+    // Scattered through the open middle of the quadrant.
+    let placed = 0;
+    for (let tries = 0; tries < 80 && placed < 14; tries++) {
+      if (addProp(pick(), o.x + 12 + r() * (ZONE - 24), o.y + 12 + r() * (ZONE - 24), r() < 0.5)) placed++;
+    }
+  }
+  // Barrier lines across the streets, with gaps, so the roads aren't straight runs.
+  const bar = PROPS[0];
+  for (let c = 0; c < COLS; c++) for (let rw = 0; rw < ROWS - 1; rw++) {
+    const z = (rw + 1) * (ZONE + ROAD) - ROAD / 2, x0 = c * (ZONE + ROAD);
+    for (let k = 0; k < 4; k++) if ((c + rw + k) % 3 !== 0) addProp(bar, x0 + 10 + k * 12, z, true);
+  }
+  for (let c = 0; c < COLS - 1; c++) for (let rw = 0; rw < ROWS; rw++) {
+    const x = (c + 1) * (ZONE + ROAD) - ROAD / 2, z0 = rw * (ZONE + ROAD);
+    for (let k = 0; k < 4; k++) if ((c + rw + k) % 3 !== 1) addProp(bar, x, z0 + 10 + k * 12, false);
+  }
+}
+
 /* Fade any building standing between the camera and Koda. */
 function updateOcclusion() {
   if (!koda) return;
   const kx = koda.pos.x, kz = koda.pos.z;
   for (const b of blockers) {
+    if (b.low) continue;
     const hides = b.minZ > kz - 1 && b.minZ < kz + 12 && kx > b.minX - 2 && kx < b.maxX + 2;
     if (hides !== b.faded) {
       b.faded = hides;
@@ -233,19 +301,25 @@ function updateOcclusion() {
 }
 
 /* ---------- collision ---------- */
-function blocked(x, z, r) {
-  for (const b of blockers) if (x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r) return b;
+// `y` is how high off the ground the body is: high enough and a low obstacle is cleared.
+function blocked(x, z, r, y = 0) {
+  for (const b of blockers) {
+    if (b.low && y >= b.top - 0.35) continue;
+    if (x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r) return b;
+  }
   return null;
 }
 function moveWithCollision(pos, dx, dz, r) {
-  if (!blocked(pos.x + dx, pos.z, r)) pos.x += dx;
-  if (!blocked(pos.x, pos.z + dz, r)) pos.z += dz;
+  if (!blocked(pos.x + dx, pos.z, r, pos.y)) pos.x += dx;
+  if (!blocked(pos.x, pos.z + dz, r, pos.y)) pos.z += dz;
   pos.x = clamp(pos.x, -ROAD + 1, WORLD_W + ROAD - 1);
   pos.z = clamp(pos.z, -ROAD + 1, WORLD_H + ROAD - 1);
 }
-function sightClear(ax, az, bx, bz) {
+// Eyes see over low obstacles; feet don't walk through them (`walking`).
+function sightClear(ax, az, bx, bz, walking = false) {
   const dx = bx - ax, dz = bz - az;
   for (const b of blockers) {
+    if (b.low && !walking) continue;
     let t0 = 0, t1 = 1;
     for (const [p, d, mn, mx] of [[ax, dx, b.minX, b.maxX], [az, dz, b.minZ, b.maxZ]]) {
       if (Math.abs(d) < 1e-6) { if (p < mn || p > mx) { t0 = 2; break; } continue; }
@@ -1012,9 +1086,19 @@ function updateKoda(dt) {
   // In the air: a simple jump arc. You can steer while airborne.
   if (air) {
     air.vy -= 22 * dt; koda.pos.y += air.vy * dt;
-    if (input.mag) moveWithCollision(koda.pos, input.x * air.speed * dt, input.z * air.speed * dt, 0.45);
+    if (air.vault) { const f = forward(koda); moveWithCollision(koda.pos, f.x * air.speed * dt, f.y * air.speed * dt, 0.45); }
+    else if (input.mag) { moveWithCollision(koda.pos, input.x * air.speed * dt, input.z * air.speed * dt, 0.45); koda.face(Math.atan2(input.x, input.z), Math.min(1, dt * 8)); }
     if (koda.pos.y <= 0) {
       koda.pos.y = 0;
+      if (blocked(koda.pos.x, koda.pos.z, 0.45)) {
+        // Came down on top of something low: carry on over it.
+        const f = forward(koda);
+        for (let i = 1; i < 30; i++) {
+          const x = koda.pos.x + f.x * i * 0.1, z = koda.pos.z + f.y * i * 0.1;
+          if (!blocked(x, z, 0.45)) { koda.pos.x = x; koda.pos.z = z; break; }
+        }
+        if (blocked(koda.pos.x, koda.pos.z, 0.45)) { const s2 = freeSpot(koda.pos.x, koda.pos.z, 0.45); koda.pos.x = s2.x; koda.pos.z = s2.z; }
+      }
       if (air.kick) landKick();
       air = null; attackLock = Math.max(attackLock, 0.12);
     }
@@ -1045,7 +1129,12 @@ function jump() {
   if (!koda || air || attackLock > 0) return;
   const speed = input.mag ? (input.mag > 0.93 ? 7.5 : 5) : 0;
   air = { vy: 7.2, speed, kick: false };
-  koda.play("jump", { once: true, speed: 1.3 });
+  // Something low just ahead: vault it rather than a plain jump.
+  const f = forward(koda);
+  let low = null;
+  for (let i = 4; i <= 16 && !low; i += 2) { const b = blocked(koda.pos.x + f.x * i * 0.1, koda.pos.z + f.y * i * 0.1, 0.3); if (b && b.low) low = b; }
+  if (low && koda.has("vault")) { air.speed = Math.max(speed, 5.5); air.vault = true; input.x = f.x; input.z = f.y; koda.play("vault", { once: true, speed: 1.6 }); }
+  else koda.play("jump", { once: true, speed: 1.3 });
   tip("jump");
 }
 // The guard to strike: the nearest one in reach, favouring the one he faces.
@@ -1146,7 +1235,8 @@ function respawn() {
 function alertEnemy(e) {
   if (e.state === "ko" || e.state === "alert") return;
   e.state = "alert"; e.meter = 1; e.cool = 0.5;
-  e.a.play(e.a.has("alert") ? "alert" : "run", { once: true });
+  // He stops for his "there you are" moment, then gives chase. He never slides while posing.
+  e.holdT = e.a.has("alert") ? Math.min(0.7, e.a.play("alert", { once: true, speed: 1.3 })) : 0;
   if (e.qd && !e.qd.done) {
     if (!e.qd.seen) mission.stats.seenCount++;
     e.qd.seen = true;
@@ -1168,7 +1258,7 @@ function hitEnemy(e, dmg, nx, nz) {
   moveWithCollision(e.a.pos, nx * 0.5, nz * 0.5, 0.45);
   e.a.faceTo(koda.pos.x, koda.pos.z);
   if (e.hp <= 0) return knockOut(e);
-  e.a.play("hit", { once: true }); e.hitT = 0.4; e.cool = Math.max(e.cool, 0.6);
+  e.a.play("hit", { once: true }); e.hitT = 0.4; e.holdT = 0; e.cool = Math.max(e.cool, 0.6);
   if (e.state !== "alert") alertEnemy(e);
 }
 function knockOut(e) {
@@ -1217,13 +1307,8 @@ function updateEnemies(dt) {
       }
       if (e.state === "patrol" || (e.state === "suspicious" && !sees)) {
         const tgt = e.state === "patrol" ? e.route[e.leg] : e.lastSeen;
-        const tx = tgt.x - a.pos.x, tz = tgt.z - a.pos.z, td = Math.hypot(tx, tz);
-        if (td < 0.6) { if (e.state === "patrol") e.leg = (e.leg + 1) % e.route.length; }
-        else {
-          moveWithCollision(a.pos, tx / td * e.speed * dt, tz / td * e.speed * dt, 0.45);
-          a.face(Math.atan2(tx, tz), Math.min(1, dt * 5));
-          a.play("walk");
-        }
+        if (steer(e, tgt.x, tgt.z, e.speed, dt)) a.play("walk");
+        else if (e.state === "patrol") { e.leg = (e.leg + 1) % e.route.length; e.wp = null; }
       }
       if (e.meter > 0.15) anySus = true;
       continue;
@@ -1233,19 +1318,20 @@ function updateEnemies(dt) {
     anySeen = true;
     if (sees) { e.lastSeen.copy(koda.pos); e.searchT = 6; } else e.searchT -= dt;
     if (e.searchT <= 0) { e.state = "suspicious"; e.meter = 0.6; a.play("walk"); continue; }
+    // Mid-swing or mid-shout: plant the feet and keep facing him.
+    if ((e.holdT = Math.max(0, (e.holdT || 0) - dt)) > 0) { a.face(Math.atan2(dx, dz), Math.min(1, dt * 10)); continue; }
     if (d > 1.7) {
-      const tx = e.lastSeen.x - a.pos.x, tz = e.lastSeen.z - a.pos.z, td = Math.hypot(tx, tz) || 1;
-      if (td > 0.3) moveWithCollision(a.pos, tx / td * 5.2 * dt, tz / td * 5.2 * dt, 0.45);
-      a.face(Math.atan2(tx, tz), Math.min(1, dt * 8));
-      if (e.cool <= 0.2) a.play("run");
+      if (steer(e, e.lastSeen.x, e.lastSeen.z, 5.2, dt, 8)) a.play("run");
+      else { a.play(a.has("fight_idle") ? "fight_idle" : "walk"); a.face(Math.atan2(dx, dz), Math.min(1, dt * 8)); }
       continue;
     }
     // In range: always face him, hold contact distance.
     a.face(Math.atan2(dx, dz), Math.min(1, dt * 12));
-    if (d > CONTACT + 0.1) moveWithCollision(a.pos, dx / d * 2.5 * dt, dz / d * 2.5 * dt, 0.45);
+    const closing = d > CONTACT + 0.1;
+    if (closing) moveWithCollision(a.pos, dx / d * 2.5 * dt, dz / d * 2.5 * dt, 0.45);
     if (e.cool <= 0 && swingGap > 0) e.cool = 0.25;
-    if (e.cool > 0) { if (a.current && /run|walk/.test(a.current.getClip().name)) a.play(a.has("fight_idle") ? "fight_idle" : "walk"); continue; }
-    a.play("punch", { once: true, speed: 1.1 }); e.cool = 1.35;
+    if (e.cool > 0) { a.play(closing ? "walk" : a.has("fight_idle") ? "fight_idle" : "walk"); continue; }
+    e.holdT = Math.min(0.7, a.play("punch", { once: true, speed: 1.1 }) || 0.6); e.cool = 1.35;
     swingGap = mission.index < 3 ? 1.1 : mission.index < 8 ? 0.8 : 0.55;
     later(0.36, () => {
       if (e.state !== "alert") return;
@@ -1260,6 +1346,16 @@ function updateEnemies(dt) {
     if (enemies[i].state === "ko" || enemies[j].state === "ko") continue;
     const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz);
     if (d > 0 && d < 0.9) { const push = (0.9 - d) / 2; p.x -= dx / d * push; p.z -= dz / d * push; q.x += dx / d * push; q.z += dz / d * push; }
+  }
+  // Koda and the guards are solid to each other.
+  if (!air) for (const e of enemies) {
+    if (e.state === "ko") continue;
+    const p = e.a.pos, dx = koda.pos.x - p.x, dz = koda.pos.z - p.z, d = Math.hypot(dx, dz);
+    if (d > 0.001 && d < 0.85) {
+      const push = 0.85 - d;
+      moveWithCollision(koda.pos, dx / d * push * 0.6, dz / d * push * 0.6, 0.45);
+      moveWithCollision(p, -dx / d * push * 0.4, -dz / d * push * 0.4, 0.45);
+    }
   }
   const al = $("alert");
   al.className = "alert" + (anySeen ? " seen" : anySus ? " sus" : "");
@@ -1365,7 +1461,7 @@ function nearestOpen(i, j) {
 // A line a body can walk along: clear at both shoulders, not just the middle.
 function wideClear(ax, az, bx, bz, r = 0.6) {
   const dx = bx - ax, dz = bz - az, d = Math.hypot(dx, dz) || 1, px = -dz / d * r, pz = dx / d * r;
-  return sightClear(ax, az, bx, bz) && sightClear(ax + px, az + pz, bx + px, bz + pz) && sightClear(ax - px, az - pz, bx - px, bz - pz);
+  return sightClear(ax, az, bx, bz, true) && sightClear(ax + px, az + pz, bx + px, bz + pz, true) && sightClear(ax - px, az - pz, bx - px, bz - pz, true);
 }
 // The next point to head for on the way from (x, z) to (tx, tz).
 function pathNext(x, z, tx, tz) {
@@ -1404,6 +1500,18 @@ function pathNext(x, z, tx, tz) {
   return { x: NAV.ox + ((pick % W) + 0.5) * NAV.cell, z: NAV.oz + (((pick / W) | 0) + 0.5) * NAV.cell };
 }
 let guideStep = null, guideT = 0;
+// Walk a guard toward (tx, tz) the long way round anything in between. Returns false once there.
+function steer(e, tx, tz, speed, dt, turn = 5) {
+  const a = e.a;
+  if (Math.hypot(tx - a.pos.x, tz - a.pos.z) < 0.6) return false;
+  if ((e.wpT = (e.wpT || 0) - dt) <= 0 || !e.wp || Math.hypot(e.wp.x - a.pos.x, e.wp.z - a.pos.z) < 0.5) {
+    e.wp = pathNext(a.pos.x, a.pos.z, tx, tz); e.wpT = 0.5;
+  }
+  const wx = e.wp.x - a.pos.x, wz = e.wp.z - a.pos.z, wd = Math.hypot(wx, wz) || 1;
+  moveWithCollision(a.pos, wx / wd * speed * dt, wz / wd * speed * dt, 0.45);
+  a.face(Math.atan2(wx, wz), Math.min(1, dt * turn));
+  return true;
+}
 function updateGuide(now, dt) {
   const goal = objectiveTarget();
   if ((guideT -= dt) <= 0 || !guideStep) { guideStep = goal && pathNext(koda.pos.x, koda.pos.z, goal.x, goal.z); guideT = 0.4; }
@@ -1414,6 +1522,48 @@ function updateGuide(now, dt) {
   guide.position.set(koda.pos.x, 0.06, koda.pos.z);
   guide.rotation.y = Math.atan2(t.x - koda.pos.x, t.z - koda.pos.z);
   guide.children[0].position.set(0, 0, 1.4 + Math.sin(now / 260) * 0.15);
+}
+
+/* ---------- the marker over what to do next ---------- */
+const markerV = new THREE.Vector3();
+function markerLabel() {
+  if (escape) return "EXIT";
+  if (zora && zora.waiting) return "ZORA";
+  if (race && race.qd.orb) return "RUN!";
+  const here = currentQuad && mission.quads.find(x => x.q === currentQuad && !x.done);
+  if (here) {
+    if (here.orb) return here.q.focus === "sneak" ? "SNEAK TO " + here.partName.toUpperCase() : "GRAB " + here.partName.toUpperCase();
+    if (here.ring && here.ring.visible) return "START THE RACE";
+    if (here.q.focus === "fight") return "BEAT HIM (" + quadEnemiesLeft(here) + " LEFT)";
+  }
+  let best = null, bd = Infinity;
+  for (const qd of mission.quads) {
+    if (qd.done) continue;
+    const c = zoneCenter(qd.q), d = Math.hypot(c.x - koda.pos.x, c.y - koda.pos.z);
+    if (d < bd) { bd = d; best = qd; }
+  }
+  return best ? "GO TO " + best.q.name.toUpperCase() : "";
+}
+function updateMarker() {
+  const el = $("marker"), t = objectiveTarget();
+  if (!t || state !== "play") { el.classList.add("hidden"); return; }
+  const d = Math.hypot(t.x - koda.pos.x, t.z - koda.pos.z);
+  markerV.set(t.x, 2.6, t.z).project(camera);
+  const W = innerWidth, H = innerHeight, m = 46;
+  let x = (markerV.x + 1) / 2 * W, y = (1 - markerV.y) / 2 * H;
+  const behind = markerV.z > 1;
+  const off = behind || x < m || x > W - m || y < 90 || y > H - m;
+  if (behind) { x = W - x; y = H - m; }
+  const half = Math.max(m, ($("markerText").offsetWidth || 120) / 2 + 10);
+  x = clamp(x, half, W - half); y = clamp(y, off ? 150 : 90, H - m);   // clear of the HUD and tips when pinned to the edge
+  el.classList.remove("hidden");
+  el.classList.toggle("edge", off);
+  el.style.transform = `translate(${x}px, ${y}px)`;
+  $("markerText").textContent = markerLabel() + (d > 6 ? ` · ${Math.round(d)}m` : "");
+  if (off) {
+    const ang = Math.atan2(y - H / 2, x - W / 2);
+    $("markerArrow").style.transform = `rotate(${ang}rad)`;
+  }
 }
 
 /* ---------- minimap ---------- */
@@ -1438,12 +1588,30 @@ function drawMinimap() {
 
 /* ---------- camera ---------- */
 const camTarget = new THREE.Vector3();
+let camZoom = 1;
+const camOff = new THREE.Vector3();
+// The guard Koda is fighting, if any: the nearest alerted one close by.
+function fightFoe() {
+  let best = null, bd = 6;
+  for (const e of enemies) {
+    if (e.state !== "alert") continue;
+    const d = dist2(koda.pos, e.a.pos);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
 function updateCamera(dt, snap) {
-  const lead = koda.moving ? 1.6 : 0;
-  camTarget.set(koda.pos.x + Math.sin(koda.yaw) * lead, 0.8, koda.pos.z + Math.cos(koda.yaw) * lead);
-  const want = camTarget.clone().add(CAM_OFFSET);
-  if (snap) camera.position.copy(want); else camera.position.lerp(want, Math.min(1, dt * 4));
-  camera.lookAt(camera.position.clone().sub(CAM_OFFSET));
+  // In a fight the camera moves in on the two of them, and pulls back out once he's down.
+  const foe = state === "play" ? fightFoe() : null;
+  camZoom += ((foe ? 0.5 : 1) - camZoom) * Math.min(1, dt * (foe ? 3 : 1.5));
+  if (snap) camZoom = foe ? 0.5 : 1;
+  const lead = koda.moving && !foe ? 1.6 : 0;
+  if (foe) camTarget.set((koda.pos.x + foe.a.pos.x) / 2, 0.9, (koda.pos.z + foe.a.pos.z) / 2);
+  else camTarget.set(koda.pos.x + Math.sin(koda.yaw) * lead, 0.8, koda.pos.z + Math.cos(koda.yaw) * lead);
+  camOff.copy(CAM_OFFSET).multiplyScalar(camZoom);
+  const want = camTarget.clone().add(camOff);
+  if (snap) camera.position.copy(want); else camera.position.lerp(want, Math.min(1, dt * 5));
+  camera.lookAt(camera.position.clone().sub(camOff));
   sun.position.set(koda.pos.x + 14, 30, koda.pos.z + 8);
   sun.target.position.set(koda.pos.x, 0, koda.pos.z);
 }
@@ -1492,6 +1660,7 @@ function tick(dt, now) {
   updateZora(dt);
   updateOcclusion();
   updateGuide(now, dt);
+  updateMarker();
   if ((mmT -= dt) <= 0) { drawMinimap(); mmT = 0.1; }
   if (toastT > 0 && (toastT -= dt) <= 0) $("toast").classList.remove("show");
   if (tipT > 0 && (tipT -= dt) <= 0) nextTip();
@@ -1504,7 +1673,7 @@ function tick(dt, now) {
 }
 
 /* ---------- screens ---------- */
-function pause() { if (state !== "play") return; state = "paused"; $("pause").classList.remove("hidden"); if (music.ac) music.ac.suspend(); }
+function pause() { if (state !== "play") return; state = "paused"; $("marker").classList.add("hidden"); $("pause").classList.remove("hidden"); if (music.ac) music.ac.suspend(); }
 function resume() { $("pause").classList.add("hidden"); state = "play"; lastT = performance.now(); if (music.ac) music.ac.resume(); }
 $("pauseBtn").addEventListener("click", pause);
 $("resumeBtn").addEventListener("click", resume);
@@ -1525,8 +1694,23 @@ function toTitle() {
   }).join("");
   $("missionList").querySelectorAll("button.mission:not(.locked)").forEach(btn => btn.addEventListener("click", () => begin(+btn.dataset.i)));
 }
+// On phones the game takes the whole screen and turns sideways, so you see more of the city.
+function goLandscape() {
+  if (!phone) return;
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  const lock = () => { try { screen.orientation && screen.orientation.lock && screen.orientation.lock("landscape").catch(() => {}); } catch (e) { /* not supported */ } };
+  if (req && !document.fullscreenElement) { try { const r = req.call(el); if (r && r.then) r.then(lock).catch(() => {}); else lock(); } catch (e) { /* not allowed */ } }
+  else lock();
+}
+// No pinch or double-tap zoom anywhere in the game.
+for (const ev of ["gesturestart", "gesturechange", "dblclick"]) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
+document.addEventListener("touchmove", e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+let lastTouchEnd = 0;
+document.addEventListener("touchend", e => { const t = performance.now(); if (t - lastTouchEnd < 320 && !e.target.closest(".screen")) e.preventDefault(); lastTouchEnd = t; }, { passive: false });
 function begin(i) {
   audioCtx();               // sound has to start from a tap
+  goLandscape();
   $("title").classList.add("hidden");
   $("hud").classList.remove("hidden");
   if (phone) $("touch").classList.remove("hidden");
@@ -1553,11 +1737,12 @@ $("playBtn").addEventListener("click", () => begin(save.unlocked));
     return;
   }
   await buildCity(p => { $("loading").textContent = "Building the city… " + Math.round(p * 100) + "%"; });
+  buildProps();
   buildNav();
   $("loading").textContent = "";
   $("playBtn").disabled = false;
   toTitle();
   window.GILL = { guide, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
-    enemies, npcs, get state() { return state; }, save: () => save, blockers, keys, input, cardContinue, pathNext, stick, attack, jump, action, objectiveTarget, get health() { return health; }, get music() { return music; },
+    enemies, npcs, get state() { return state; }, save: () => save, blockers, keys, input, cardContinue, pathNext, stick, fightFoe, get camZoom() { return camZoom; }, attack, jump, action, objectiveTarget, get health() { return health; }, get music() { return music; },
     sim(seconds) { let t = performance.now(); for (let i = 0; i < seconds * 30; i++) { t += 33; tick(1 / 30, t); } } };
 })();
