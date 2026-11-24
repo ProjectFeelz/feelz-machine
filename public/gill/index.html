@@ -31,6 +31,7 @@
     <div class="alert" id="alert" aria-live="polite"></div>
     <div class="race" id="race"></div>
     <canvas id="minimap" width="160" height="120" aria-hidden="true"></canvas>
+    <canvas id="radar" aria-hidden="true"></canvas>
     <div class="mixer" id="mixer" aria-label="The parts of the song you have unlocked"></div>
     <div class="tip" id="tip"></div>
     <div class="toast" id="toast"></div>
@@ -75,12 +76,21 @@
 
   <!-- Pause -->
   <div id="pause" class="screen hidden">
-    <div class="title-card">
+    <div class="pause-wrap">
+      <div class="map-card">
+        <p class="kicker" id="mapSong"></p>
+        <canvas id="bigmap" aria-label="Map of the city"></canvas>
+        <div class="legend">
+          <span><i class="lg-you"></i>You</span><span><i class="lg-goal"></i>Next</span><span><i class="lg-mud"></i>Mud</span><span><i class="lg-roof"></i>Awnings</span><span><i class="lg-done"></i>Done</span>
+        </div>
+      </div>
+      <div class="title-card">
       <h2>Paused</h2>
       <div class="title-buttons col">
         <button class="primary" id="resumeBtn">Resume</button>
         <button class="ghost" id="muteBtn">Music: on</button>
         <button class="ghost" id="quitBtn">Back to title</button>
+      </div>
       </div>
     </div>
   </div>

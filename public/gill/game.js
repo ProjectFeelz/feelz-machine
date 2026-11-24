@@ -975,7 +975,11 @@ function setupBeat(m) {
   beat.last = -1;
   console.info(`[gill] ${d.song}: ${beat.bpm} BPM, first beat ${beat.offset}s, sections ${beat.sections.join(", ")}${beat.guessed ? " (guessed from the audio)" : ""}`);
 }
-function songTime() { return music.ac && music.started ? Math.max(0, music.ac.currentTime - music.t0) : (mission ? mission.t : 0); }
+function songTime() {
+  // Test recordings step the game slower than real time: follow the game clock there.
+  if (window.GILL_HOLD && mission) return mission.t;
+  return music.ac && music.started ? Math.max(0, music.ac.currentTime - music.t0) : (mission ? mission.t : 0);
+}
 function nearBeat(win = 0.11) {
   if (!beat.bpm) return false;
   const p = (songTime() - beat.offset) / beat.spb;
@@ -1003,7 +1007,7 @@ function onBeat(n) {
   if (n > 0 && n % 32 === 0 && mission && !mission.def.calm) {
     let near = false;
     for (const e of enemies) if (e.state === "patrol" || e.state === "suspicious") { e.shiftT = beat.spb * 8; e.state = "patrol"; e.meter = 0; if (dist2(koda.pos, e.a.pos) < 30) near = true; }
-    if (near) { toast("Shift change. Move now!", beat.spb * 6); tip("shift"); }
+    if (near && !enemies.some(e => e.state === "alert")) { toast("Shift change. Move now!", beat.spb * 6); tip("shift"); }
   }
   // Pads and puzzles play their notes on the beat.
   for (const qd of (mission ? mission.quads : [])) if (qd.onBeat) qd.onBeat(n);
@@ -2670,6 +2674,123 @@ function drawMinimap() {
   mm.fillStyle = "#fff"; mm.beginPath(); mm.arc(ox + koda.pos.x * k, oz + koda.pos.z * k, 3, 0, 7); mm.fill();
 }
 
+/* ---------- the round radar (left): turns with Koda, so ahead is always up ---------- */
+const radarCv = $("radar"), rc = radarCv.getContext("2d");
+let radarYaw = 0;
+const hexCol = n => "#" + n.toString(16).padStart(6, "0");
+function drawRadar(dt) {
+  const dpr = Math.min(2, window.devicePixelRatio || 1), css = radarCv.clientWidth || 140;
+  if (radarCv.width !== Math.round(css * dpr)) { radarCv.width = radarCv.height = Math.round(css * dpr); }
+  const S2 = radarCv.width, R0 = S2 / 2, range = 42, k = (R0 - 4) / range;
+  radarYaw = angleLerp(radarYaw, koda.yaw, Math.min(1, dt * 4));
+  rc.setTransform(1, 0, 0, 1, 0, 0);
+  rc.clearRect(0, 0, S2, S2);
+  rc.save();
+  rc.beginPath(); rc.arc(R0, R0, R0 - 2, 0, 7); rc.clip();
+  rc.fillStyle = "rgba(10,10,14,.78)"; rc.fillRect(0, 0, S2, S2);
+  // World to radar: centred on Koda, turned so his heading points up.
+  rc.translate(R0, R0); rc.rotate(Math.PI + radarYaw); rc.scale(k, k); rc.translate(-koda.pos.x, -koda.pos.z);
+  rc.fillStyle = "rgba(255,255,255,.05)";
+  for (const q of S.quadrants) {
+    const o = zoneOrigin(q), qd = mission && mission.quads.find(x => x.q === q);
+    rc.fillStyle = qd ? (qd.done ? "rgba(255,255,255,.10)" : hexCol(PART_COLOURS[qd.k]) + "44") : "rgba(255,255,255,.05)";
+    rc.fillRect(o.x, o.y, ZONE, ZONE);
+  }
+  rc.fillStyle = "rgba(140,96,56,.95)";
+  for (const m of muds) rc.fillRect(m.minX, m.minZ, m.maxX - m.minX, m.maxZ - m.minZ);
+  for (const b of blockers) {
+    if (b.mud) continue;
+    if (Math.abs((b.minX + b.maxX) / 2 - koda.pos.x) > range + 10 || Math.abs((b.minZ + b.maxZ) / 2 - koda.pos.z) > range + 10) continue;
+    rc.fillStyle = b.top >= 3 ? "rgba(190,190,200,.55)" : "rgba(190,190,200,.22)";
+    rc.fillRect(b.minX, b.minZ, b.maxX - b.minX, b.maxZ - b.minZ);
+  }
+  rc.fillStyle = "rgba(255,210,122,.25)";
+  for (const a of roofs) rc.fillRect(a.x - a.w / 2, a.z - a.d / 2, a.w, a.d);
+  // Parts you can see, people to talk to, guards.
+  const dot = (x, z, r, col) => { rc.fillStyle = col; rc.beginPath(); rc.arc(x, z, r / k, 0, 7); rc.fill(); };
+  if (mission) for (const qd of mission.quads) if (qd.orb && !qd.hidden && !qd.done) dot(qd.orb.position.x, qd.orb.position.z, 4, hexCol(PART_COLOURS[qd.k]));
+  for (const n of npcs) dot(n.a.pos.x, n.a.pos.z, 3, "#9fd3ff");
+  for (const e of enemies) {
+    if (e.state === "ko") continue;
+    if (e.hidden && e.state !== "alert" && !(e.qd && e.qd.revealT > 0)) continue;
+    dot(e.a.pos.x, e.a.pos.z, 3.2, e.state === "alert" ? "#ff5a46" : e.meter > 0.1 ? "#f2b544" : "rgba(255,120,100,.6)");
+  }
+  for (const d of drones) dot(d.x, d.z, 3, d.spotted > 0 ? "#ff5a46" : "#fff1a8");
+  rc.restore();
+  // The objective: on the radar if it's in range, pinned to the rim if not.
+  const t = objectiveTarget();
+  if (t) {
+    let dx = t.x - koda.pos.x, dz = t.z - koda.pos.z;
+    const c = Math.cos(Math.PI + radarYaw), s2 = Math.sin(Math.PI + radarYaw);
+    let px = (dx * c - dz * s2) * k, pz = (dx * s2 + dz * c) * k;
+    const len = Math.hypot(px, pz), lim = R0 - 9;
+    if (len > lim) { px *= lim / len; pz *= lim / len; }
+    rc.save(); rc.translate(R0 + px, R0 + pz); rc.rotate(Math.PI / 4);
+    rc.fillStyle = "#ffd27a"; rc.strokeStyle = "#1b1203"; rc.lineWidth = 2 * dpr;
+    rc.fillRect(-5 * dpr, -5 * dpr, 10 * dpr, 10 * dpr); rc.strokeRect(-5 * dpr, -5 * dpr, 10 * dpr, 10 * dpr);
+    rc.restore();
+  }
+  // North, on the rim.
+  const nA = Math.atan2(-Math.cos(Math.PI + radarYaw), Math.sin(Math.PI + radarYaw));
+  rc.fillStyle = "#fff"; rc.font = `900 ${10 * dpr}px Inter, sans-serif`; rc.textAlign = "center"; rc.textBaseline = "middle";
+  rc.fillText("N", R0 + Math.cos(nA) * (R0 - 10 * dpr), R0 + Math.sin(nA) * (R0 - 10 * dpr));
+  // Koda: an arrow in the middle, always pointing up.
+  rc.fillStyle = "#fff"; rc.beginPath();
+  rc.moveTo(R0, R0 - 7 * dpr); rc.lineTo(R0 + 5 * dpr, R0 + 5 * dpr); rc.lineTo(R0, R0 + 2 * dpr); rc.lineTo(R0 - 5 * dpr, R0 + 5 * dpr); rc.closePath(); rc.fill();
+  rc.strokeStyle = "rgba(255,255,255,.35)"; rc.lineWidth = 2 * dpr; rc.beginPath(); rc.arc(R0, R0, R0 - 2, 0, 7); rc.stroke();
+}
+
+/* ---------- the big map (pause) ---------- */
+function drawBigMap() {
+  const cv = $("bigmap"), dpr = Math.min(2, window.devicePixelRatio || 1);
+  const cssW = cv.clientWidth || 600, cssH = cv.clientHeight || 420;
+  cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
+  const g = cv.getContext("2d"), pad = 14 * dpr;
+  const k = Math.min((cv.width - pad * 2) / (WORLD_W + 2 * ROAD), (cv.height - pad * 2) / (WORLD_H + 2 * ROAD));
+  const ox = (cv.width - (WORLD_W + 2 * ROAD) * k) / 2 + ROAD * k, oz = (cv.height - (WORLD_H + 2 * ROAD) * k) / 2 + ROAD * k;
+  const X = x => ox + x * k, Z = z => oz + z * k;
+  g.fillStyle = "#0c0b10"; g.fillRect(0, 0, cv.width, cv.height);
+  g.fillStyle = "#24222b"; g.fillRect(X(-ROAD), Z(-ROAD), (WORLD_W + 2 * ROAD) * k, (WORLD_H + 2 * ROAD) * k);
+  for (const q of S.quadrants) {
+    const o = zoneOrigin(q), qd = mission && mission.quads.find(x => x.q === q);
+    g.fillStyle = qd ? (qd.done ? "#2c3a30" : hexCol(PART_COLOURS[qd.k]) + "40") : "#1a1920";
+    g.fillRect(X(o.x), Z(o.y), ZONE * k, ZONE * k);
+    if (qd) { g.strokeStyle = qd.done ? "#7fe39a" : hexCol(PART_COLOURS[qd.k]); g.lineWidth = 2 * dpr; g.strokeRect(X(o.x) + dpr, Z(o.y) + dpr, ZONE * k - 2 * dpr, ZONE * k - 2 * dpr); }
+  }
+  g.fillStyle = "#8c6038"; for (const m of muds) g.fillRect(X(m.minX), Z(m.minZ), (m.maxX - m.minX) * k, (m.maxZ - m.minZ) * k);
+  g.fillStyle = "#b08850"; for (const f of floats) g.fillRect(X(f.x - f.w / 2), Z(f.z - f.d / 2), f.w * k, f.d * k);
+  for (const b of blockers) { if (b.mud) continue; g.fillStyle = b.top >= 3 ? "#5a5866" : "#3a3944"; g.fillRect(X(b.minX), Z(b.minZ), (b.maxX - b.minX) * k, (b.maxZ - b.minZ) * k); }
+  g.fillStyle = "rgba(255,210,122,.35)"; for (const a of roofs) g.fillRect(X(a.x - a.w / 2), Z(a.z - a.d / 2), a.w * k, a.d * k);
+  // Names and what each lit quadrant holds.
+  g.textAlign = "center"; g.textBaseline = "middle";
+  const fs = Math.min(11 * dpr, ZONE * k * 0.13), fs2 = Math.min(10 * dpr, ZONE * k * 0.115);
+  for (const q of S.quadrants) {
+    const c = zoneCenter(q), qd = mission && mission.quads.find(x => x.q === q);
+    g.font = `800 ${fs}px Inter, sans-serif`; g.fillStyle = qd ? "#fff" : "rgba(255,255,255,.45)";
+    g.fillText(q.name.toUpperCase(), X(c.x), Z(c.y) - (qd ? fs * 0.8 : 0));
+    if (qd) {
+      const kind = { explore: "clue", sneak: "sneak", fight: "arena", race: "rooftops", rubble: "rubble", help: "help", blind: "hidden patrols", copies: "find her", pads: "pads", piano: "piano", chase: "chase" }[qd.focus] || qd.focus;
+      g.font = `700 ${fs2}px Inter, sans-serif`; g.fillStyle = qd.done ? "#7fe39a" : hexCol(PART_COLOURS[qd.k]);
+      if (qd.done) g.fillText(`${qd.partName} ✓`, X(c.x), Z(c.y) + fs * 0.8);
+      else { g.fillText(qd.partName, X(c.x), Z(c.y) + fs * 0.8); g.fillText(kind, X(c.x), Z(c.y) + fs * 0.8 + fs2 * 1.15); }
+    }
+  }
+  const pin = (x, z, col, label) => {
+    g.fillStyle = col; g.beginPath(); g.arc(X(x), Z(z), 5 * dpr, 0, 7); g.fill();
+    if (label) { g.font = `800 ${10 * dpr}px Inter, sans-serif`; g.fillText(label, X(x), Z(z) - 11 * dpr); }
+  };
+  if (zora && zora.waiting) pin(zora.pos.x, zora.pos.z, "#d58cff", "ZORA");
+  if (escape) pin(escape.exit.x, escape.exit.y, "#ffd27a", "EXIT");
+  const t = objectiveTarget();
+  if (t) { g.save(); g.translate(X(t.x), Z(t.z)); g.rotate(Math.PI / 4); g.fillStyle = "#ffd27a"; g.fillRect(-6 * dpr, -6 * dpr, 12 * dpr, 12 * dpr); g.restore(); }
+  // Koda, pointing the way he faces.
+  g.save(); g.translate(X(koda.pos.x), Z(koda.pos.z)); g.rotate(-koda.yaw + Math.PI);
+  g.fillStyle = "#fff"; g.strokeStyle = "#000"; g.lineWidth = 2 * dpr; g.beginPath();
+  g.moveTo(0, -9 * dpr); g.lineTo(6 * dpr, 6 * dpr); g.lineTo(0, 3 * dpr); g.lineTo(-6 * dpr, 6 * dpr); g.closePath(); g.stroke(); g.fill();
+  g.restore();
+  $("mapSong").textContent = mission ? `Mission ${mission.index + 1}: ${mission.def.song}  ·  ${mission.quads.filter(q => q.done).length}/${mission.quads.length} parts` : "";
+}
+
 /* ---------- camera ---------- */
 const camTarget = new THREE.Vector3();
 let camZoom = 1;
@@ -2754,6 +2875,7 @@ function tick(dt, now) {
   updateGuide(now, dt);
   updateMarker();
   if ((mmT -= dt) <= 0) { drawMinimap(); mmT = 0.1; }
+  drawRadar(dt);
   if (toastT > 0 && (toastT -= dt) <= 0) $("toast").classList.remove("show");
   if (tipT > 0 && (tipT -= dt) <= 0) nextTip();
   drawClock();
@@ -2765,7 +2887,7 @@ function tick(dt, now) {
 }
 
 /* ---------- screens ---------- */
-function pause() { if (state !== "play") return; state = "paused"; $("marker").classList.add("hidden"); $("pause").classList.remove("hidden"); if (music.ac) music.ac.suspend(); }
+function pause() { if (state !== "play") return; state = "paused"; $("marker").classList.add("hidden"); $("pause").classList.remove("hidden"); if (music.ac) music.ac.suspend(); drawBigMap(); }
 function resume() { $("pause").classList.add("hidden"); state = "play"; lastT = performance.now(); if (music.ac) music.ac.resume(); }
 $("pauseBtn").addEventListener("click", pause);
 $("resumeBtn").addEventListener("click", resume);
@@ -2838,6 +2960,6 @@ $("playBtn").addEventListener("click", () => begin(save.unlocked));
   toTitle();
   window.GILL_FLOATS = () => floats; window.GILL_DRONES = () => drones;
   window.GILL = { pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
-    enemies, npcs, get state() { return state; }, save: () => save, blockers, keys, input, cardContinue, pathNext, stick, FOCUS, beat, songTime, boost, get lastSafe() { return lastSafe; }, fightFoe, get camZoom() { return camZoom; }, attack, jump, action, objectiveTarget, get health() { return health; }, get music() { return music; },
+    enemies, npcs, get state() { return state; }, save: () => save, blockers, keys, input, cardContinue, pause, resume, drawBigMap, pathNext, stick, FOCUS, beat, songTime, boost, get lastSafe() { return lastSafe; }, fightFoe, get camZoom() { return camZoom; }, attack, jump, action, objectiveTarget, get health() { return health; }, get music() { return music; },
     sim(seconds) { let t = performance.now(); for (let i = 0; i < seconds * 30; i++) { t += 33; tick(1 / 30, t); } } };
 })();

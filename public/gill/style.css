@@ -225,3 +225,32 @@ button { font: inherit; color: inherit; cursor: pointer; }
   background: rgba(127, 227, 154, .18); border: 1px solid rgba(127, 227, 154, .6); color: #c9f5d5; font-weight: 900; font-size: 11px; letter-spacing: .14em;
   opacity: 0; transition: opacity .2s; }
 .cover.show { opacity: 1; }
+
+/* round radar on the left, under the quadrant name */
+#radar { position: absolute; left: calc(12px + var(--sal)); top: calc(62px + var(--sat)); width: 140px; height: 140px; border-radius: 50%;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .45); }
+.tip { left: calc(162px + var(--sal)); max-width: min(300px, 34vw); }
+@media (max-height: 520px) { #radar { width: 104px; height: 104px; top: calc(52px + var(--sat)); } .tip { left: calc(124px + var(--sal)); } }
+
+/* the big map on the pause screen */
+.pause-wrap { display: flex; gap: 22px; align-items: center; justify-content: center; width: min(1100px, 96vw); }
+.map-card { flex: 1 1 auto; min-width: 0; background: rgba(10, 9, 14, .9); border: 1px solid var(--line); border-radius: 20px; padding: 12px 14px; }
+.map-card .kicker { margin: 2px 0 8px; text-align: left; }
+#bigmap { display: block; width: 100%; aspect-ratio: 4 / 3; max-height: 70vh; border-radius: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 11px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.lg-you { background: #fff; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.lg-goal { background: #ffd27a; transform: rotate(45deg); }
+.lg-mud { background: #8c6038; } .lg-roof { background: rgba(255, 210, 122, .5); } .lg-done { background: #2c3a30; border: 1px solid #7fe39a; }
+.pause-wrap .title-card { flex: 0 0 auto; }
+@media (max-width: 760px), (max-height: 520px) {
+  .pause-wrap { flex-direction: row; gap: 10px; align-items: stretch; }
+  #bigmap { max-height: 72vh; }
+  .pause-wrap .title-card h2 { font-size: 20px; }
+  .pause-wrap .title-buttons.col .primary, .pause-wrap .title-buttons.col .ghost { min-width: 130px; padding: 9px 16px; font-size: 13px; }
+}
+
+/* phones: the round radar does the job of the square map, and the objective leaves room for the hearts */
+@media (pointer: coarse) { #minimap { display: none; } }
+@media (max-height: 520px) { .hud-objective { max-width: 30vw; font-size: 11px; padding: 6px 12px; } }
