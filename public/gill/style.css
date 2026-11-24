@@ -271,3 +271,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .tip { left: calc(124px + var(--sal)); }
 }
 @media (max-height: 520px) and (pointer: fine) { #radar { width: 116px; height: 116px; } }
+
+.hitside { position: fixed; inset: 0; pointer-events: none; opacity: 0; }
+.hitside.on { animation: hitside .45s ease-out; }
+@keyframes hitside { 0% { opacity: 1; } 100% { opacity: 0; } }

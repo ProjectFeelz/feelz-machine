@@ -110,20 +110,48 @@ addEventListener("resize", () => {
 
 /* ---------- ground and streets ---------- */
 // Paving and asphalt, drawn once on a canvas and tiled, so the ground reads as a street rather than a flat colour.
+// The ground of each Feelz Run district, painted once on a canvas and tiled.
+//   asphalt  the streets        lc dusty dirt and broken asphalt   mc concrete slabs
+//   uc polished stone tiles     rc grass and garden paving          de wind-rippled sand
 function groundTexture(kind) {
   const c = document.createElement("canvas"); c.width = c.height = 256;
   const g = c.getContext("2d");
-  const r = rng(kind === "paving" ? 7 : 11);
-  g.fillStyle = kind === "paving" ? "#8a8a8a" : "#3a3a3e"; g.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 2600; i++) {
-    const v = Math.floor(r() * 60) - 30;
-    g.fillStyle = `rgba(${v > 0 ? 255 : 0},${v > 0 ? 255 : 0},${v > 0 ? 255 : 0},${Math.abs(v) / 400})`;
-    g.fillRect(r() * 256, r() * 256, 1 + r() * 3, 1 + r() * 3);
-  }
-  if (kind === "paving") {
-    g.strokeStyle = "rgba(0,0,0,.28)"; g.lineWidth = 2;
-    for (let y = 0; y <= 256; y += 64) { g.beginPath(); g.moveTo(0, y); g.lineTo(256, y); g.stroke(); }
-    for (let y = 0; y < 256; y += 64) for (let x = (y / 64) % 2 ? 32 : 0; x <= 256; x += 64) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 64); g.stroke(); }
+  const r = rng(kind.length * 977 + kind.charCodeAt(0));
+  const base = { asphalt: "#3a3a3e", lc: "#6e5a45", mc: "#8e9094", uc: "#9c9488", rc: "#4f6a3a", de: "#d6b27a", sandroad: "#c9a46e" }[kind] || "#8a8a8a";
+  g.fillStyle = base; g.fillRect(0, 0, 256, 256);
+  const speck = (n, a, sz) => { for (let i = 0; i < n; i++) { const v = r() > 0.5; g.fillStyle = `rgba(${v ? 255 : 0},${v ? 255 : 0},${v ? 255 : 0},${r() * a})`; g.fillRect(r() * 256, r() * 256, 1 + r() * sz, 1 + r() * sz); } };
+  const line = (x1, y1, x2, y2) => { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); };
+  if (kind === "asphalt") speck(2600, 0.08, 3);
+  else if (kind === "lc") {
+    // Packed dirt, patches of old asphalt, cracks and dark wet sludge.
+    for (let i = 0; i < 14; i++) { g.fillStyle = `rgba(40,36,34,${0.25 + r() * 0.3})`; g.beginPath(); g.ellipse(r() * 256, r() * 256, 12 + r() * 30, 8 + r() * 18, r() * 3, 0, 7); g.fill(); }
+    for (let i = 0; i < 6; i++) { g.fillStyle = "rgba(30,24,18,.35)"; g.beginPath(); g.ellipse(r() * 256, r() * 256, 10 + r() * 14, 5 + r() * 8, r() * 3, 0, 7); g.fill(); }
+    speck(3000, 0.12, 3);
+    g.strokeStyle = "rgba(20,16,12,.45)"; g.lineWidth = 1.2;
+    for (let i = 0; i < 9; i++) { let x = r() * 256, y = r() * 256; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (r() - 0.5) * 40; y += (r() - 0.5) * 40; g.lineTo(x, y); } g.stroke(); }
+  } else if (kind === "mc") {
+    // Big concrete slabs with joints and stains.
+    speck(2200, 0.07, 3);
+    for (let i = 0; i < 5; i++) { g.fillStyle = `rgba(60,60,64,${0.08 + r() * 0.1})`; g.beginPath(); g.ellipse(r() * 256, r() * 256, 20 + r() * 30, 14 + r() * 20, r() * 3, 0, 7); g.fill(); }
+    g.strokeStyle = "rgba(40,40,44,.55)"; g.lineWidth = 2;
+    for (let y = 0; y <= 256; y += 128) line(0, y, 256, y);
+    for (let x = 0; x <= 256; x += 128) line(x, 0, x, 256);
+  } else if (kind === "uc") {
+    // Polished stone tiles with fine joints and a soft sheen.
+    speck(900, 0.05, 2);
+    for (let y = 0; y < 256; y += 64) for (let x = 0; x < 256; x += 64) { g.fillStyle = `rgba(255,255,255,${r() * 0.07})`; g.fillRect(x + 1, y + 1, 62, 62); }
+    g.strokeStyle = "rgba(90,80,70,.45)"; g.lineWidth = 1;
+    for (let y = 0; y <= 256; y += 64) line(0, y, 256, y);
+    for (let x = 0; x <= 256; x += 64) line(x, 0, x, 256);
+  } else if (kind === "rc") {
+    // Grass, with worn garden paving stones through it.
+    for (let i = 0; i < 5000; i++) { g.fillStyle = `rgba(${60 + r() * 60},${90 + r() * 70},${40 + r() * 30},.5)`; g.fillRect(r() * 256, r() * 256, 1, 2 + r() * 3); }
+    for (let i = 0; i < 10; i++) { const x = 40 + (i % 5) * 44 + r() * 8, y = i < 5 ? 110 : 150; g.fillStyle = "rgba(170,160,140,.9)"; g.beginPath(); g.ellipse(x, y + r() * 8, 16, 11, r(), 0, 7); g.fill(); }
+  } else if (kind === "de" || kind === "sandroad") {
+    // Sand, rippled by the wind.
+    speck(2500, 0.08, 2);
+    g.strokeStyle = "rgba(150,110,60,.35)"; g.lineWidth = 2;
+    for (let y = 8; y < 256; y += 14) { g.beginPath(); g.moveTo(0, y); for (let x = 0; x <= 256; x += 16) g.lineTo(x, y + Math.sin(x / 24 + y) * 4); g.stroke(); }
   }
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -131,6 +159,15 @@ function groundTexture(kind) {
   t.anisotropy = 4;
   return t;
 }
+const districtOf = q => q.district || "mc";
+// Buildings by district, from the Feelz Run kits.
+const DISTRICT_BUILDINGS = {
+  lc: ["tenement", "hostel", "kodas-building", "lc-b1", "lc-b2", "lc-b4", "lc-b5", "lc-b6", "lc-b7"],
+  mc: ["mc-b2", "mc-b4", "mc-b6", "mc-b7", "mc-b8"],
+  uc: ["uc-b1", "uc-b2", "uc-b3", "uc-b4"],
+  rc: ["rc-b1", "rc-b3", "rc-b4", "rc-b5"],
+  de: ["de-b1", "de-b3", "de-b4"]
+};
 const pads = {};   // quadrant id -> its ground material (lit up when it is part of the mission)
 function buildGround() {
   const asphalt = groundTexture("asphalt");
@@ -141,11 +178,22 @@ function buildGround() {
   road.position.set(WORLD_W / 2, -0.01, WORLD_H / 2);
   road.receiveShadow = true;
   scene.add(road);
+  // The desert starts at the East Gate: sand on its streets and out past the city's edge.
+  for (const q of S.quadrants) {
+    if (districtOf(q) !== "de") continue;
+    const o = zoneOrigin(q);
+    const sand = groundTexture("sandroad"); sand.repeat.set((ZONE + ROAD * 2 + 60) / 10, (ZONE + ROAD * 2) / 10);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(ZONE + ROAD * 2 + 60, ZONE + ROAD * 2), new THREE.MeshStandardMaterial({ map: sand, roughness: 1 }));
+    m.rotation.x = -Math.PI / 2; m.position.set(o.x + ZONE / 2 + 30, -0.005, o.y + ZONE / 2); m.receiveShadow = true;
+    scene.add(m);
+  }
   for (const q of S.quadrants) {
     const o = zoneOrigin(q);
-    const paving = groundTexture("paving");
-    paving.repeat.set(ZONE / 6, ZONE / 6);
-    const tint = new THREE.Color(q.tint).multiplyScalar(0.75);
+    const kind = districtOf(q);
+    const paving = groundTexture(kind);
+    const tileM = { lc: 8, mc: 8, uc: 5, rc: 9, de: 10 }[kind] || 6;
+    paving.repeat.set(ZONE / tileM, ZONE / tileM);
+    const tint = new THREE.Color(0xffffff).multiplyScalar(kind === "uc" ? 0.78 : kind === "de" ? 0.9 : 0.95);
     const mat = new THREE.MeshStandardMaterial({ color: tint, map: paving, roughness: 0.85, emissive: 0x000000 });
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(ZONE, ZONE), mat);
     pad.rotation.x = -Math.PI / 2;
@@ -202,7 +250,8 @@ async function buildCity(onProgress) {
   for (const q of S.quadrants) {
     const r = rng(q.id.charCodeAt(1) * 977 + q.id.charCodeAt(2) * 131);
     const o = zoneOrigin(q);
-    const pick = () => BUILDINGS[Math.floor(r() * BUILDINGS.length)];
+    const set = DISTRICT_BUILDINGS[districtOf(q)] || BUILDINGS;
+    const pick = () => set[Math.floor(r() * set.length)];
     const inset = 7.5, a = ZONE / 2;
     const slots = [];
     for (const off of [-16, 16]) {
@@ -2268,6 +2317,14 @@ function talkOrListen() {
     if (zz) { koda.faceTo(zz.z.pos.x, zz.z.pos.z); return FOCUS.copies.talkZora(qd, zz); }
   }
 }
+// A red flash on the edge of the screen the blow came from.
+function sideFlash(fromX, fromZ) {
+  dV.set(fromX, 1, fromZ).project(camera);
+  const el = $("hitside");
+  const ang = Math.atan2(-dV.y, dV.x);
+  el.style.background = `radial-gradient(ellipse 60% 60% at ${50 + Math.cos(ang) * 55}% ${50 + Math.sin(ang) * 55}%, rgba(255,40,30,.7), rgba(255,40,30,0) 70%)`;
+  el.classList.remove("on"); void el.offsetWidth; el.classList.add("on");
+}
 function hurtKoda(n, fromX, fromZ) {
   if (invuln > 0 || state !== "play" || air) return;
   health -= n; invuln = 1.0; drawHearts();
@@ -2276,7 +2333,9 @@ function hurtKoda(n, fromX, fromZ) {
   const dx = koda.pos.x - fromX, dz = koda.pos.z - fromZ, d = Math.hypot(dx, dz) || 1;
   moveWithCollision(koda.pos, dx / d * 0.45, dz / d * 0.45, 0.45, true);
   koda.faceTo(fromX, fromZ);
-  koda.play("hurt", { once: true }); attackLock = 0.3;
+  impact(koda.pos.x + (fromX - koda.pos.x) / d * 0.3, 1.4, koda.pos.z + (fromZ - koda.pos.z) / d * 0.3, dx / d, dz / d, true, 0xff6a50);
+  sideFlash(fromX, fromZ);
+  koda.play("hurt", { once: true, speed: koda.native ? 1.6 : 1 }); attackLock = 0.3;
   if (health <= 0) respawn();
 }
 function respawn() {
@@ -2302,6 +2361,8 @@ function alertEnemy(e) {
 }
 function hitEnemy(e, dmg, nx, nz, body = false) {
   e.hp -= dmg;
+  e.flash = 0.12;
+  impact(e.a.pos.x - nx * 0.3, body ? 1.05 : 1.55, e.a.pos.z - nz * 0.3, nx, nz, dmg > 1);
   sfxHit(dmg > 1);
   // Knocked back a step, and turned to face his attacker.
   moveWithCollision(e.a.pos, nx * 0.5, nz * 0.5, 0.45);
@@ -2314,13 +2375,23 @@ function hitEnemy(e, dmg, nx, nz, body = false) {
 function knockOut(e) {
   if (e.state === "ko") return;
   e.state = "ko"; e.a.play("ko", { once: true });
+  if (attacker === e) attacker = null;
   mission.stats.kos++;
   refreshObjective();
 }
 
 let anySeen = false, anySus = false, swingGap = 0;   // guards take turns to swing
+let attacker = null;                                 // the one guard allowed to come at Koda
+function pickAttacker() {
+  if (attacker && (attacker.state !== "alert" || !enemies.includes(attacker) || dist2(attacker.a.pos, koda.pos) > 10)) attacker = null;
+  if (attacker) return;
+  let best = null, bd = 10;
+  for (const e of enemies) { if (e.state !== "alert") continue; const d = dist2(e.a.pos, koda.pos); if (d < bd) { bd = d; best = e; } }
+  attacker = best;
+}
 function updateEnemies(dt) {
   anySeen = false; anySus = false; swingGap = Math.max(0, swingGap - dt);
+  pickAttacker();
   for (const e of enemies) {
     const a = e.a;
     const d = dist2(koda.pos, a.pos);
@@ -2379,6 +2450,17 @@ function updateEnemies(dt) {
     if (e.searchT <= 0) { e.state = "suspicious"; e.meter = 0.6; a.play("walk"); continue; }
     // Mid-swing or mid-shout: plant the feet and keep facing him.
     if ((e.holdT = Math.max(0, (e.holdT || 0) - dt)) > 0) { a.face(Math.atan2(dx, dz), Math.min(1, dt * 10)); continue; }
+    // One at a time: only the main attacker comes in. The rest wait their turn in a ring
+    // around Koda, shuffling sideways, until it's theirs.
+    if (attacker !== e && d < 8) {
+      const ringR = 3.4, ang = Math.atan2(a.pos.x - koda.pos.x, a.pos.z - koda.pos.z) + dt * 0.35 * (e.orbit || (e.orbit = Math.random() < 0.5 ? -1 : 1));
+      const tx = koda.pos.x + Math.sin(ang) * ringR, tz = koda.pos.z + Math.cos(ang) * ringR;
+      const mx = tx - a.pos.x, mz = tz - a.pos.z, md = Math.hypot(mx, mz);
+      if (md > 0.15) moveWithCollision(a.pos, mx / md * Math.min(md, 3 * dt), mz / md * Math.min(md, 3 * dt), 0.45);
+      a.face(Math.atan2(dx, dz), Math.min(1, dt * 8));
+      a.play(md > 0.6 ? "walk" : a.has("fight_idle") ? "fight_idle" : "walk");
+      continue;
+    }
     // In reach from 1.6 m, out of reach past 2.1 m: no flicking between chasing and squaring up.
     e.inReach = e.inReach ? d < 2.1 : d < 1.6;
     if (!e.inReach) {
@@ -2488,6 +2570,58 @@ function drawDanger() {
   const edge = $("edge");
   edge.style.opacity = level.toFixed(2);
   edge.classList.toggle("red", red);
+}
+const queueRingGeo = new THREE.RingGeometry(0.55, 0.72, 32);
+const queueRingMat = new THREE.MeshBasicMaterial({ color: 0xff3b2e, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false });
+function tintActor(a, r, g, b, k) {
+  if (!a.mats) { a.mats = []; a.model.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); a.mats.push(o.material); } }); }
+  for (const m of a.mats) { if (m.emissive) { m.emissive.setRGB(r, g, b); m.emissiveIntensity = k; } }
+}
+function updateFightMarks(now) {
+  for (const e of enemies) {
+    const a = e.a;
+    const waiting = e.state === "alert" && attacker && attacker !== e && dist2(a.pos, koda.pos) < 8;
+    if (waiting) {
+      if (!e.ring) { e.ring = new THREE.Mesh(queueRingGeo, queueRingMat); e.ring.rotation.x = -Math.PI / 2; scene.add(e.ring); }
+      e.ring.visible = a.root.visible; e.ring.position.set(a.pos.x, 0.06, a.pos.z);
+    } else if (e.ring) e.ring.visible = false;
+    // The one coming at you burns red; a hit flashes white for a moment.
+    if (e.flash > 0) { e.flash -= 1 / 60; tintActor(a, 1, 1, 1, 1.2 * Math.max(0, e.flash) / 0.12); e.tinted = true; }
+    else if (attacker === e && e.state === "alert") { tintActor(a, 1, 0.08, 0.05, 0.55 + 0.25 * Math.sin(now / 120)); e.tinted = true; }
+    else if (e.tinted) { tintActor(a, 0, 0, 0, 0); e.tinted = false; }
+  }
+}
+
+/* ---------- impacts: sparks on the side that was hit, a shake, a split-second freeze ---------- */
+const sparkGeo = new THREE.PlaneGeometry(0.09, 0.09);
+const sparks = [];
+let hitStop = 0, shake = 0;
+function impact(x, y, z, dirX, dirZ, strong, colour = 0xfff1b0) {
+  const mat = new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const n = strong ? 16 : 10;
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(sparkGeo, mat.clone());
+    m.position.set(x, y, z);
+    // They fly out of the struck side, away from the blow.
+    const spread = (Math.random() - 0.5) * 1.6, up = Math.random() * 3 + 1;
+    const vx = dirX * (3 + Math.random() * 4) + -dirZ * spread * 3, vz = dirZ * (3 + Math.random() * 4) + dirX * spread * 3;
+    sparks.push({ m, vx, vy: up, vz, t: 0.28 + Math.random() * 0.15 });
+    scene.add(m);
+  }
+  // A ring of air where the blow landed.
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.05, 0.12, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+  ring.position.set(x, y, z); ring.lookAt(x + dirX, y, z + dirZ);
+  sparks.push({ m: ring, ring: true, t: 0.22 });
+  scene.add(ring);
+  hitStop = strong ? 0.07 : 0.045; shake = strong ? 0.22 : 0.12;
+}
+function updateSparks(dt) {
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const s2 = sparks[i]; s2.t -= dt;
+    if (s2.ring) { s2.m.scale.multiplyScalar(1 + dt * 14); s2.m.material.opacity = Math.max(0, s2.t / 0.22); }
+    else { s2.vy -= 9 * dt; s2.m.position.x += s2.vx * dt; s2.m.position.y += s2.vy * dt; s2.m.position.z += s2.vz * dt; s2.m.material.opacity = Math.max(0, s2.t / 0.3); s2.m.lookAt(camera.position); }
+    if (s2.t <= 0) { scene.remove(s2.m); sparks.splice(i, 1); }
+  }
 }
 function updateNpcs(dt) {
   for (const n of npcs) {
@@ -2843,6 +2977,7 @@ function updateCamera(dt, snap) {
   if (snap) camera.position.copy(want); else camera.position.lerp(want, Math.min(1, dt * 5));
   camera.lookAt(camera.position.clone().sub(camOff));
   if (themeState.roll) camera.rotation.z += themeState.roll;
+  if (shake > 0) { shake = Math.max(0, shake - dt); camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake * 0.6; }
   sun.position.set(koda.pos.x + 14, 30, koda.pos.z + 8);
   sun.target.position.set(koda.pos.x, 0, koda.pos.z);
 }
@@ -2882,6 +3017,7 @@ function drawClock() {
   el.classList.toggle("low", left <= 20);
 }
 function tick(dt, now) {
+  if (hitStop > 0) { hitStop -= dt; updateSparks(dt); updateCamera(dt); return; }
   mission.t += dt;
   runTimers(dt);
   updateBeat();
@@ -2893,6 +3029,8 @@ function tick(dt, now) {
   updateGhost(dt);
   updateAwnings();
   updateEnemies(dt);
+  updateFightMarks(now);
+  updateSparks(dt);
   updateNpcs(dt);
   updateQuads(dt, now);
   updateZora(dt);

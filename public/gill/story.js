@@ -30,6 +30,14 @@
              the song changes section). Left out, they are worked out from the
              song when it loads; the guesses show in the browser console.
 
+   DISTRICTS the parts of the city from Feelz Run, each with its own ground and buildings:
+               lc  the Lower City: dusty, broken asphalt and packed dirt
+               mc  the Middle City: cold grey concrete slabs
+               uc  the Upper City: clean polished stone, where the Circle sits
+               rc  the Restored City: gardens, grass and old paving
+               de  the Desert: sand, out past the East Gate
+             Each quadrant names its `district`; change it and the ground follows.
+
    QUADRANTS the 12 blocks of the city. `grid` is (column, row) on the map.
              `focus` is the kind of task the quadrant gives:
                explore  find the part somewhere in the quadrant
@@ -52,18 +60,18 @@ window.GILL_STORY = {
   },
 
   quadrants: [
-    { id: "q01", name: "The Yard",      grid: [0, 0], focus: "explore", tint: 0x6b5a48 },
-    { id: "q02", name: "Chalk Street",  grid: [1, 0], focus: "sneak",   tint: 0x5a5f6e },
-    { id: "q03", name: "Ticket Row",    grid: [2, 0], focus: "explore", tint: 0x6e5a5a },
-    { id: "q04", name: "The Strip",     grid: [3, 0], focus: "race",    tint: 0x5e6b4f },
-    { id: "q05", name: "Tape Corner",   grid: [3, 1], focus: "sneak",   tint: 0x4f5e6b },
-    { id: "q06", name: "Warden Square", grid: [2, 1], focus: "fight",   tint: 0x6b4848 },
-    { id: "q07", name: "Angel Court",   grid: [1, 1], focus: "explore", tint: 0x5f5a6e },
-    { id: "q08", name: "Guard House",   grid: [0, 1], focus: "fight",   tint: 0x4f4f5e },
-    { id: "q09", name: "Paper Lane",    grid: [0, 2], focus: "sneak",   tint: 0x6e6248 },
-    { id: "q10", name: "The Tunnels",   grid: [1, 2], focus: "race",    tint: 0x48606b },
-    { id: "q11", name: "Old Tower",     grid: [2, 2], focus: "fight",   tint: 0x5a486e },
-    { id: "q12", name: "East Gate",     grid: [3, 2], focus: "explore", tint: 0x6b3f3f }
+    { id: "q01", name: "The Yard",      grid: [0, 0], focus: "explore", tint: 0x6b5a48, district: "lc" },
+    { id: "q02", name: "Chalk Street",  grid: [1, 0], focus: "sneak",   tint: 0x5a5f6e, district: "lc" },
+    { id: "q03", name: "Ticket Row",    grid: [2, 0], focus: "explore", tint: 0x6e5a5a, district: "mc" },
+    { id: "q04", name: "The Strip",     grid: [3, 0], focus: "race",    tint: 0x5e6b4f, district: "mc" },
+    { id: "q05", name: "Tape Corner",   grid: [3, 1], focus: "sneak",   tint: 0x4f5e6b, district: "mc" },
+    { id: "q06", name: "Warden Square", grid: [2, 1], focus: "fight",   tint: 0x6b4848, district: "uc" },
+    { id: "q07", name: "Angel Court",   grid: [1, 1], focus: "explore", tint: 0x5f5a6e, district: "rc" },
+    { id: "q08", name: "Guard House",   grid: [0, 1], focus: "fight",   tint: 0x4f4f5e, district: "lc" },
+    { id: "q09", name: "Paper Lane",    grid: [0, 2], focus: "sneak",   tint: 0x6e6248, district: "lc" },
+    { id: "q10", name: "The Tunnels",   grid: [1, 2], focus: "race",    tint: 0x48606b, district: "mc" },
+    { id: "q11", name: "Old Tower",     grid: [2, 2], focus: "fight",   tint: 0x5a486e, district: "uc" },
+    { id: "q12", name: "East Gate",     grid: [3, 2], focus: "explore", tint: 0x6b3f3f, district: "de" }
   ],
 
   // The placeholder parts, until a mission has real stems.
