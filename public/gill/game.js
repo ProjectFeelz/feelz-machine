@@ -170,8 +170,8 @@ scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffd9a8, 2.6);
 sun.castShadow = true;
 sun.shadow.mapSize.set(phone ? 1024 : 2048, phone ? 1024 : 2048);
-const SH = 22;
-Object.assign(sun.shadow.camera, { left: -SH, right: SH, top: SH, bottom: -SH, near: 1, far: 90 });
+const SH = phone ? 34 : 46;
+Object.assign(sun.shadow.camera, { left: -SH, right: SH, top: SH, bottom: -SH, near: 1, far: 260 });
 sun.shadow.bias = -0.0006;
 scene.add(sun, sun.target);
 const rim = new THREE.DirectionalLight(0x7fb8ff, 0.8);
@@ -281,11 +281,18 @@ function ribbon(points, width, y, mat, step = 3) {
   const m = new THREE.Mesh(g, mat); m.receiveShadow = true; scene.add(m);
   return m;
 }
+// Photo textures (ambientCG, free to use): colour, bumps and shine for real sand and mud.
+const texLoader = new THREE.TextureLoader();
+function photoTex(name) {
+  const load = (suf, srgb) => { const t = texLoader.load(`textures/${name}_${suf}.webp`); t.wrapS = t.wrapT = THREE.RepeatWrapping; if (srgb) t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; };
+  return { map: load("color", true), normalMap: load("normal", false), roughnessMap: load("rough", false) };
+}
+const SAND = photoTex("sand"), MUDTEX = photoTex("mud");
 function buildGround() {
   // The land: one sheet that rises and falls with the places on it.
   const pad = 120, W = WORLD_W + pad * 2, H = WORLD_H + pad * 2, sx = Math.round(W / 4), sz = Math.round(H / 4);
   const geo = new THREE.PlaneGeometry(W, H, sx, sz); geo.rotateX(-Math.PI / 2);
-  const p = geo.attributes.position, col = [];
+  const p = geo.attributes.position, col = [], sandy = [];
   // Open land is dry grass; ridges are grey rock, pale at the top; sand dunes out east.
   const cGrass = new THREE.Color(0x8a9455), cDry = new THREE.Color(0xa99a6a), cSand = new THREE.Color(0xe2c58a), cRock = new THREE.Color(0x8f8a83), cPeak = new THREE.Color(0xc9c4bb), cDune = new THREE.Color(0xe8cc90), tmp = new THREE.Color();
   for (let i = 0; i < p.count; i++) {
@@ -300,18 +307,30 @@ function buildGround() {
     const desert = best.district === "de" || x > 740;
     if (rg > 0.3) { tmp.lerp(desert ? cDune : cRock, clamp(rg / 2.5, 0, 1)); if (!desert && rg > 4.5) tmp.lerp(cPeak, clamp((rg - 4.5) / 4, 0, 0.8)); }
     col.push(tmp.r, tmp.g, tmp.b);
+    sandy.push(desert ? Math.max(clamp((x - 700) / 80, 0, 1), best.district === "de" ? 1 : 0) : 0);
   }
-  geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); geo.computeVertexNormals();
+  geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); geo.setAttribute("sandy", new THREE.Float32BufferAttribute(sandy, 1)); geo.computeVertexNormals();
   const dirt = groundTexture("land"); dirt.repeat.set(W / 8, H / 8);
-  const land = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: dirt, vertexColors: true, roughness: 0.95 }));
+  const landMat = new THREE.MeshStandardMaterial({ map: dirt, vertexColors: true, roughness: 0.95 });
+  // Out east the land turns to real photographed sand, blended in where the desert begins.
+  landMat.onBeforeCompile = sh => {
+    sh.uniforms.sandMap = { value: SAND.map };
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float sandy;\nvarying float vSandy;").replace("#include <uv_vertex>", "#include <uv_vertex>\nvSandy = sandy;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D sandMap;\nvarying float vSandy;")
+      .replace("#include <color_fragment>", "#include <color_fragment>\nif (vSandy > 0.001) { vec3 sandC = pow(texture2D(sandMap, vMapUv * 0.6).rgb, vec3(2.2)); diffuseColor.rgb = mix(diffuseColor.rgb, sandC, vSandy); }");
+  };
+  const land = new THREE.Mesh(geo, landMat);
   land.position.set(WORLD_W / 2, 0, WORLD_H / 2); land.receiveShadow = true; scene.add(land);
   // Each place has its own paving, flat at its height.
   for (const q of S.quadrants) {
-    const kind = districtOf(q), paving = groundTexture(kind);
+    const kind = districtOf(q), st = kind === "de" ? photoTex("sand") : null, paving = st ? st.map : groundTexture(kind);
     const tileM = { lc: 8, mc: 8, uc: 5, rc: 9, de: 10 }[kind] || 6;
     paving.repeat.set(q.w / tileM, q.d / tileM);
     const tint = new THREE.Color(0xffffff).multiplyScalar(kind === "uc" ? 0.78 : kind === "de" ? 0.9 : 0.95);
-    const mat = new THREE.MeshStandardMaterial({ color: tint, map: paving, roughness: 0.85, emissive: 0x000000 });
+    const mat = kind === "de"
+      ? new THREE.MeshStandardMaterial({ color: tint, map: paving, normalMap: st.normalMap, roughnessMap: st.roughnessMap, roughness: 1, emissive: 0x000000 })
+      : new THREE.MeshStandardMaterial({ color: tint, map: paving, roughness: 0.85, emissive: 0x000000 });
+    if (st) { st.normalMap.repeat.copy(paving.repeat); st.roughnessMap.repeat.copy(paving.repeat); }
     const m = new THREE.Mesh(new THREE.PlaneGeometry(q.w, q.d), mat);
     m.rotation.x = -Math.PI / 2; m.position.set(q.x0 + q.w / 2, q.elev + 0.02, q.z0 + q.d / 2); m.receiveShadow = true;
     scene.add(m);
@@ -319,14 +338,17 @@ function buildGround() {
   }
   // Roads, with a dashed centre line.
   const asphalt = groundTexture("asphalt"); asphalt.repeat.set(1, 1);
-  const roadMat = new THREE.MeshStandardMaterial({ color: 0x9a979e, map: asphalt, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
-  const kerbMat = new THREE.MeshStandardMaterial({ color: 0xd9d4c8, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 });
+  // Roads of fused sand glass: the city melts its own desert into paving. Smooth, glossy,
+  // sea-green, catching the sun and the street lamps. Kerbs are cut sandstone.
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0x7fb3aa, map: asphalt, roughness: 0.18, metalness: 0.25, emissive: 0x0b2320, emissiveIntensity: 0.6, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+  const kerbMat = new THREE.MeshStandardMaterial({ color: 0xd8c49c, map: SAND.map, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 });
   const dash = (() => { const c = document.createElement("canvas"); c.width = 8; c.height = 64; const g = c.getContext("2d"); g.fillStyle = "#f2d27a"; g.fillRect(2, 0, 4, 34); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
   const dashMat = new THREE.MeshBasicMaterial({ map: dash, transparent: true, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, depthWrite: false });
   for (const r of WD.roads) {
-    ribbon(r.points, r.width + 1.2, 0.14, kerbMat);
-    ribbon(r.points, r.width, 0.16, roadMat);
-    const dm = ribbon(r.points, 0.25, 0.19, dashMat, 3); dm.receiveShadow = false;
+    // Laid right on the land, so feet stand on the road, not in it.
+    ribbon(r.points, r.width + 1.2, 0.03, kerbMat);
+    ribbon(r.points, r.width, 0.05, roadMat);
+    const dm = ribbon(r.points, 0.25, 0.07, dashMat, 3); dm.receiveShadow = false;
     dm.geometry.attributes.uv.array.forEach((v, i, a) => { if (i % 2) a[i] = v * 0.25 / 6; });
   }
   // Boulders along the rocky ridges, so the borders read as mountains.
@@ -398,6 +420,8 @@ const nearBlocks = (x, z, r) => inBox(x - r, z - r, x + r, z + r);
 
 // Square to the streets only, so a building's collision box is its real footprint.
 // `maxFoot` caps how wide it can be. It sits on the land at its lowest corner.
+const BUILDING_TINT = { lc: 0xc9a07a, mc: 0xa9a7a2, uc: 0xe2dccd, rc: 0x9fb08a, de: 0xe0c08a };
+const tmpTint = new THREE.Color();
 async function placeBuilding(name, x, z, yaw, height, maxFoot = 13, force = false) {
   if (!force && (ridgeAt(x, z) > 0.3 || ridgeAt(x - 8, z - 8) > 0.6 || ridgeAt(x + 8, z + 8) > 0.6 || ridgeAt(x - 8, z + 8) > 0.6 || ridgeAt(x + 8, z - 8) > 0.6)) return;
   const src = await staticModel(name);
@@ -414,17 +438,75 @@ async function placeBuilding(name, x, z, yaw, height, maxFoot = 13, force = fals
   const base = (force ? terrainAt(x, z) : Math.min(terrainAt(x - hx, z - hz), terrainAt(x + hx, z - hz), terrainAt(x - hx, z + hz), terrainAt(x + hx, z + hz))) - 0.15;
   m.position.set(x - c.x, base - box2.min.y, z - c.z);
   const mats = [];
+  // Every building takes on its district's colour, so a street reads as one place:
+  // warm brick in the Lower City, grey concrete in the Middle, pale stone Upper, green Restored, sand out east.
+  let near = S.quadrants[0], nd = Infinity;
+  for (const q of S.quadrants) { const d = Math.hypot(Math.max(0, q.x0 - x, x - q.x0 - q.w), Math.max(0, q.z0 - z, z - q.z0 - q.d)); if (d < nd) { nd = d; near = q; } }
+  const tint = new THREE.Color(BUILDING_TINT[districtOf(near)] || 0xffffff);
   m.traverse(o => {
     if (o.isMesh) {
       o.castShadow = true; o.receiveShadow = true;
       o.material = o.material.clone();
+      if (o.material.color) {
+        // Pull the colour toward the district's own: its grey level stays, the hue follows the district.
+        const c = o.material.color, l = (c.r + c.g + c.b) / 3;
+        c.lerp(tmpTint.copy(tint).multiplyScalar(Math.max(0.35, l * 1.6)), 0.45);
+      }
       mats.push(o.material);
     }
   });
   scene.add(m);
   const b = new THREE.Box3().setFromObject(m);
-  blockers.push({ minX: b.min.x, maxX: b.max.x, minZ: b.min.z, maxZ: b.max.z, top: b.max.y, base, mesh: m, mats, faded: false, building: name });
+  blockers.push({ minX: b.min.x, maxX: b.max.x, minZ: b.min.z, maxZ: b.max.z, top: b.max.y, base, mesh: m, mats, faded: false, building: name, cells: buildingCells(m, base, b) });
 }
+/* What a body bumps into, from the building's real shape: every bit of wall, pillar or
+   stair at body height (knee to head) is marked on a fine grid, and the marks are joined
+   into boxes. Open ground floors, archways and doorways stay open to walk through. */
+function buildingCells(root, base, box) {
+  const C = 0.6, lo = base + 0.35, hi = base + 1.9;
+  const nx = Math.max(1, Math.ceil((box.max.x - box.min.x) / C)), nz = Math.max(1, Math.ceil((box.max.z - box.min.z) / C));
+  const grid = new Uint8Array(nx * nz);
+  const A = new THREE.Vector3(), B = new THREE.Vector3(), Cc = new THREE.Vector3(), P = new THREE.Vector3();
+  root.updateMatrixWorld(true);
+  root.traverse(o => {
+    if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
+    const pos = o.geometry.attributes.position, idx = o.geometry.index, n = idx ? idx.count : pos.count;
+    for (let t = 0; t + 2 < n; t += 3) {
+      const i0 = idx ? idx.getX(t) : t, i1 = idx ? idx.getX(t + 1) : t + 1, i2 = idx ? idx.getX(t + 2) : t + 2;
+      A.fromBufferAttribute(pos, i0).applyMatrix4(o.matrixWorld);
+      B.fromBufferAttribute(pos, i1).applyMatrix4(o.matrixWorld);
+      Cc.fromBufferAttribute(pos, i2).applyMatrix4(o.matrixWorld);
+      if (Math.max(A.y, B.y, Cc.y) < lo || Math.min(A.y, B.y, Cc.y) > hi) continue;
+      const L = Math.max(A.distanceTo(B), B.distanceTo(Cc), Cc.distanceTo(A));
+      const steps = Math.min(80, Math.max(1, Math.ceil(L / (C * 0.5))));
+      for (let i = 0; i <= steps; i++) for (let j = 0; j <= steps - i; j++) {
+        const u = i / steps, v = j / steps;
+        P.copy(A).addScaledVector(B.clone().sub(A), u).addScaledVector(Cc.clone().sub(A), v);
+        if (P.y < lo || P.y > hi) continue;
+        const gx = Math.floor((P.x - box.min.x) / C), gz = Math.floor((P.z - box.min.z) / C);
+        if (gx >= 0 && gz >= 0 && gx < nx && gz < nz) grid[gz * nx + gx] = 1;
+      }
+    }
+  });
+  let marked = 0; for (const g of grid) marked += g;
+  // Hardly anything at body height (an odd model): treat the whole footprint as solid.
+  if (marked < (nx + nz) * 0.6) return null;
+  // Join marked cells into boxes: runs along each row, then stack matching runs.
+  const boxes = [], open = new Map();
+  for (let z = 0; z <= nz; z++) {
+    const runs = [];
+    if (z < nz) for (let x = 0; x < nx; x++) if (grid[z * nx + x]) { const x0 = x; while (x < nx && grid[z * nx + x]) x++; runs.push(x0 + ":" + x); }
+    const next = new Map();
+    for (const k of runs) { if (open.has(k)) next.set(k, open.get(k)); else next.set(k, z); }
+    for (const [k, z0] of open) if (!next.has(k) || next.get(k) !== z0) {
+      const [x0, x1] = k.split(":").map(Number);
+      boxes.push({ minX: box.min.x + x0 * C, maxX: box.min.x + x1 * C, minZ: box.min.z + z0 * C, maxZ: box.min.z + z * C });
+    }
+    open.clear(); for (const [k, v] of next) open.set(k, v);
+  }
+  return boxes;
+}
+const inCells = (cells, x, z, r) => cells.some(c => x > c.minX - r && x < c.maxX + r && z > c.minZ - r && z < c.maxZ + r);
 async function buildCity(onProgress) {
   const jobs = [];
   for (const q of S.quadrants) {
@@ -443,6 +525,8 @@ async function buildCity(onProgress) {
     for (let i = 0; i < 3; i++) slots.push([q.x0 + 30 + r() * (q.w - 60), q.z0 + 30 + r() * (q.d - 60), Math.floor(r() * 4) * Math.PI / 2, true]);
     for (const [x, z, yaw, low] of slots) {
       if (onRoad(x, z, 12)) continue;
+      // The middle of every place stays open: that's where the arena, the rooftop course and the stalls go.
+      if (Math.hypot(x - (q.x0 + q.w / 2), z - (q.z0 + q.d / 2)) < 26) continue;
       if (q.id === "q01" && x === slots[0][0] && z === slots[0][1]) { jobs.push(() => placeBuilding("kodas-building", x, z, yaw, 18, 22)); continue; }
       jobs.push(() => placeBuilding(pick(), x, z, yaw, low ? 8 + r() * 3 : 13 + r() * 10, low ? 14 : 24));
     }
@@ -571,8 +655,8 @@ const deckMat = new THREE.MeshStandardMaterial({ color: 0x6b6259, roughness: 0.8
 function buildRivers() {
   for (const [x0, z0, x1, z1] of WD.river) {
     const w = x1 - x0, d = z1 - z0, along = d > w ? "z" : "x";
-    const mat = new THREE.MeshStandardMaterial({ map: mudMap.clone(), roughness: 0.12, metalness: 0.25, color: 0x8c6a44, emissive: 0x1a1208, polygonOffset: true, polygonOffsetFactor: -3 });
-    mat.map.repeat.set(1, 1); mat.map.needsUpdate = true;
+    // Wet river mud from a photo: its own bumps, with a wet shine on top.
+    const mat = new THREE.MeshStandardMaterial({ map: MUDTEX.map, normalMap: MUDTEX.normalMap, roughnessMap: MUDTEX.roughnessMap, roughness: 0.55, metalness: 0.05, color: 0xa08a6c, normalScale: new THREE.Vector2(1.4, 1.4), polygonOffset: true, polygonOffsetFactor: -3 });
     const pts = along === "z" ? [[x0 + w / 2, z0], [x0 + w / 2, z1]] : [[x0, z0 + d / 2], [x1, z0 + d / 2]];
     ribbon(pts, (along === "z" ? w : d) + 7, 0.04, new THREE.MeshStandardMaterial({ color: 0x4a3524, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2 }), 4);
     const m = ribbon(pts, along === "z" ? w : d, 0.1, mat, 4);
@@ -597,7 +681,7 @@ function buildRivers() {
     }
   }
   for (const [x0, z0, x1, z1] of WD.bridges) {
-    const top = Math.max(terrainAt(x0 - 2, (z0 + z1) / 2), terrainAt(x1 + 2, (z0 + z1) / 2), terrainAt((x0 + x1) / 2, z0 - 2), terrainAt((x0 + x1) / 2, z1 + 2)) + 0.25;
+    const top = Math.max(terrainAt(x0 - 2, (z0 + z1) / 2), terrainAt(x1 + 2, (z0 + z1) / 2), terrainAt((x0 + x1) / 2, z0 - 2), terrainAt((x0 + x1) / 2, z1 + 2)) + 0.07;   // flush with the road: it carries straight on
     const deck = new THREE.Mesh(propGeo, deckMat);
     deck.scale.set(x1 - x0, 0.5, z1 - z0); deck.position.set((x0 + x1) / 2, top - 0.25, (z0 + z1) / 2); deck.castShadow = true; deck.receiveShadow = true; scene.add(deck);
     blockers.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, top, base: top - 0.5, walk: true, bridge: true, mesh: deck, mats: [] });
@@ -608,6 +692,9 @@ function buildRivers() {
       if (along === "x") { rail.scale.set(x1 - x0, 0.9, 0.2); rail.position.set((x0 + x1) / 2, top + 0.45, side ? z1 - 0.1 : z0 + 0.1); }
       else { rail.scale.set(0.2, 0.9, z1 - z0); rail.position.set(side ? x1 - 0.1 : x0 + 0.1, top + 0.45, (z0 + z1) / 2); }
       scene.add(rail);
+      // Rails stop you: you can't walk off the side of a bridge.
+      const rb = new THREE.Box3().setFromObject(rail);
+      blockers.push({ minX: rb.min.x - 0.1, maxX: rb.max.x + 0.1, minZ: rb.min.z - 0.1, maxZ: rb.max.z + 0.1, top: top + 0.95, base: top, rail: true, mats: [] });
     }
   }
 }
@@ -708,18 +795,27 @@ function updateOcclusion() {
 // Mud stops guards; Koda can wade in (and gets washed back), so `isKoda` lets him through.
 function blocked(x, z, r, y = null, isKoda = false) {
   if (y === null) y = terrainAt(x, z);
-  if (ridgeAt(x, z) > 1.1) return RIDGE;
+  // Hills and dunes are walls: checked across the body's width, not just at its middle.
+  if (ridgeAt(x, z) > 0.9 || ridgeAt(x + r, z) > 0.9 || ridgeAt(x - r, z) > 0.9 || ridgeAt(x, z + r) > 0.9 || ridgeAt(x, z - r) > 0.9) return RIDGE;
   for (const b of nearBlocks(x, z, r + 0.1)) {
     if (b.mud) { if (isKoda) continue; if (b.bridgeOver) continue; if (onBridge(x, z)) continue; }
     else if ((b.ramp ? rampTop(b, x, z) : b.top) <= y + 0.35) continue;
-    if (x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r) return b;
+    if (x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r) { if (!b.cells || inCells(b.cells, x, z, r)) return b; }
   }
   return null;
 }
 const onBridge = (x, z) => WD.bridges.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1);
+// Too steep to walk up: more than about 40 degrees.
+const tooSteep = (ax, az, bx, bz) => { const d = Math.hypot(bx - ax, bz - az); return d > 1e-4 && (terrainAt(bx, bz) - terrainAt(ax, az)) / d > 0.85; };
 function moveWithCollision(pos, dx, dz, r, isKoda = false) {
-  if (!blocked(pos.x + dx, pos.z, r, pos.y, isKoda)) pos.x += dx;
-  if (!blocked(pos.x, pos.z + dz, r, pos.y, isKoda)) pos.z += dz;
+  // Already up on a hill somehow: every step that leads down off it is allowed.
+  const ok = (nx, nz) => {
+    const b = blocked(nx, nz, r, pos.y, isKoda);
+    if (b === RIDGE) return ridgeAt(nx, nz) < ridgeAt(pos.x, pos.z) - 1e-4;
+    return !b && !tooSteep(pos.x, pos.z, nx, nz);
+  };
+  if (ok(pos.x + dx, pos.z)) pos.x += dx;
+  if (ok(pos.x, pos.z + dz)) pos.z += dz;
   pos.x = clamp(pos.x, 1, WORLD_W - 1);
   pos.z = clamp(pos.z, 1, WORLD_H - 1);
 }
@@ -733,15 +829,17 @@ function sightClear(ax, az, bx, bz, walking = false, minTop = 1.6) {
   for (const b of inBox(Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz))) {
     if (!walking && (b.mud || b.top - Math.max(b.base, eye - 0.5) < minTop)) continue;   // eyes see over low things and mud
     if (walking && b.mud && onBridge((ax + bx) / 2, (az + bz) / 2)) continue;
-    let t0 = 0, t1 = 1;
-    for (const [p, d, mn, mx] of [[ax, dx, b.minX, b.maxX], [az, dz, b.minZ, b.maxZ]]) {
-      if (Math.abs(d) < 1e-6) { if (p < mn || p > mx) { t0 = 2; break; } continue; }
-      let ta = (mn - p) / d, tb = (mx - p) / d;
-      if (ta > tb) [ta, tb] = [tb, ta];
-      t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
-      if (t0 > t1) break;
+    for (const c of (walking && b.cells) ? b.cells : [b]) {
+      let t0 = 0, t1 = 1;
+      for (const [p, d, mn, mx] of [[ax, dx, c.minX, c.maxX], [az, dz, c.minZ, c.maxZ]]) {
+        if (Math.abs(d) < 1e-6) { if (p < mn || p > mx) { t0 = 2; break; } continue; }
+        let ta = (mn - p) / d, tb = (mx - p) / d;
+        if (ta > tb) [ta, tb] = [tb, ta];
+        t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+        if (t0 > t1) break;
+      }
+      if (t0 <= t1 && t0 < 1) return false;
     }
-    if (t0 <= t1 && t0 < 1) return false;
   }
   return true;
 }
@@ -750,7 +848,8 @@ function freeSpot(x, z, r = 1.2, rand = Math.random) {
   for (let i = 0; i < 60; i++) {
     const a = rand() * Math.PI * 2, d = i * 0.35;
     const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
-    if (!blocked(px, pz, r) && !onRiver(px, pz, r)) return { x: px, z: pz };
+    // Out in the open: not tucked inside a building's walls, where nobody could reach.
+    if (!blocked(px, pz, r) && !onRiver(px, pz, r) && !nearBlocks(px, pz, 0.1).some(b => b.cells && px > b.minX && px < b.maxX && pz > b.minZ && pz < b.maxZ)) return { x: px, z: pz };
   }
   return { x, z };
 }
@@ -892,7 +991,7 @@ function stripRootMotion(clip, rest) {
 // How fast a walking or running clip carries the body, in metres a second at this body's size:
 // the speed a planted foot slides back while it is on the ground. Playing the clip at
 // (ground speed / this) keeps the feet locked to the ground instead of skating.
-const STRIDE_CLIPS = /^(walk|run|sprint|crouch_walk|jog)$/;
+const STRIDE_CLIPS = /^(walk|run|sprint|crouch_walk|jog|push)$/;
 function measureStride(actor, name) {
   const act = actor.clips[name], clip = act.getClip(), feet = [];
   actor.model.traverse(o => { if (o.isBone && /(Left|Right)Foot$/.test(o.name)) feet.push(o); });
@@ -1017,6 +1116,9 @@ addEventListener("keydown", e => {
   if (e.code === "Escape" || e.code === "KeyP") pause();
 });
 addEventListener("keyup", e => keys.delete(e.code));
+// Alt is the walk key: stop the browser using it to jump to its menu.
+addEventListener("keydown", e => { if (e.key === "Alt" && state === "play") e.preventDefault(); });
+addEventListener("keyup", e => { if (e.key === "Alt" && state === "play") e.preventDefault(); });
 Object.defineProperty(input, "actionHeld", { get: () => keys.has("KeyE") || pad.action || input.touchAction });
 function keyVector() {
   let x = 0, z = 0;
@@ -1025,7 +1127,8 @@ function keyVector() {
   if (keys.has("KeyW") || keys.has("ArrowUp")) z -= 1;
   if (keys.has("KeyS") || keys.has("ArrowDown")) z += 1;
   const m = Math.hypot(x, z);
-  return m ? { x: x / m, z: z / m, mag: keys.has("ShiftLeft") || keys.has("ShiftRight") ? 1 : 0.8 } : { x: 0, z: 0, mag: 0 };
+  // Shift sprints, Alt walks.
+  return m ? { x: x / m, z: z / m, mag: keys.has("ShiftLeft") || keys.has("ShiftRight") ? 1 : keys.has("AltLeft") || keys.has("AltRight") ? 0.45 : 0.8 } : { x: 0, z: 0, mag: 0 };
 }
 const stick = { id: null, x: 0, z: 0, mag: 0 };
 (function touchSetup() {
@@ -1106,7 +1209,8 @@ function pollPad() {
   if (!g) return;
   const btn = i => !!(g.buttons[i] && (g.buttons[i].pressed || g.buttons[i].value > 0.5));
   let x = g.axes[0] || 0, z = g.axes[1] || 0;
-  if (btn(14)) x = -1; if (btn(15)) x = 1; if (btn(12)) z = -1; if (btn(13)) z = 1;
+  // In build mode the d-pad picks pieces, so only the stick walks.
+  if (state !== "build") { if (btn(14)) x = -1; if (btn(15)) x = 1; if (btn(12)) z = -1; if (btn(13)) z = 1; }
   const m = Math.hypot(x, z);
   if (m > 0.22) { pad.x = x / m; pad.z = z / m; pad.mag = btn(7) || btn(10) ? 1 : Math.min(0.9, m); }
   const press = i => btn(i) && !pad.prev[i];
@@ -1120,9 +1224,10 @@ function pollPad() {
     if (press(2)) buildRemove(B.near);
     if (press(3)) buildToggleInterior();
     if (press(1)) buildUndo();
-    if (press(4)) buildTurn();
-    if (press(5)) buildPick(null, (B.i + 1) % catPieces().length);
-    if (press(6)) buildPick(null, (B.i - 1 + catPieces().length) % catPieces().length);
+    if (press(6)) buildTurn();
+    if (press(15)) buildPick(null, (B.i + 1) % catPieces().length);
+    if (press(14)) buildPick(null, (B.i - 1 + catPieces().length) % catPieces().length);
+    if (press(12) || press(13)) { const cs = catList(), ci = cs.indexOf(B.cat); buildPick(cs[(ci + (press(13) ? 1 : -1) + cs.length) % cs.length], 0); }
     if (press(9)) stopBuild();
   }
   else if (state === "play") {
@@ -1134,7 +1239,9 @@ function pollPad() {
   }
   if ((state === "play" || state === "build") && press(8)) setView(cam.view + 1);
   pad.rx = g.axes[2] || 0; pad.ry = g.axes[3] || 0;
-  pad.action = btn(3); pad.boost = btn(4) || btn(6);
+  pad.action = btn(3); pad.boost = state === "play" && btn(6);
+  // LB and RB, held: zoom the camera out and in.
+  pad.zoom = (btn(4) ? 1 : 0) - (btn(5) ? 1 : 0);
   pad.prev = g.buttons.map((b, i) => btn(i));
 }
 function readInput() {
@@ -1150,10 +1257,10 @@ function readInput() {
      Close     low behind Koda's shoulder, turning with him; drag or use the right stick to look round
      Top       straight down from high above, to see the whole neighbourhood   */
 const VIEWS = ["Distance", "Close", "Top"];
-const cam = { view: 0, heading: Math.PI, look: 0, pitch: 0, yawV: 0, pitchV: 0 };
+const cam = { view: 0, heading: Math.PI, look: 0, pitch: 0, yawV: 0, pitchV: 0, zoom: 1, zoomV: 0 };
 // The right stick, gently: a dead zone, then a curve so small pushes turn slowly, and the turn
 // eases in and out instead of snapping.
-const stickCurve = v => { const a = Math.abs(v); return a < 0.2 ? 0 : Math.sign(v) * ((a - 0.2) / 0.8) ** 2; };
+const stickCurve = v => { const a = Math.abs(v); return a < 0.22 ? 0 : Math.sign(v) * ((a - 0.22) / 0.78) ** 2.4; };
 let arenaView = null;   // the view to go back to when an arena gate opens
 function setView(i, forArena = false) {
   if (!forArena) arenaView = null;
@@ -1165,11 +1272,12 @@ function setView(i, forArena = false) {
   if (state === "play" || state === "build") popText(VIEWS[cam.view].toUpperCase() + " VIEW");
   if (koda) updateCamera(0, true);
 }
+addEventListener("wheel", e => { if ((state === "play" || state === "build") && e.target === renderer.domElement) cam.zoom = clamp(cam.zoom * (e.deltaY > 0 ? 1.1 : 1 / 1.1), 0.45, 2.2); }, { passive: true });
 // Close view: drag anywhere on the game (not on a button) to look round.
 (() => {
   let drag = null;
   addEventListener("pointerdown", e => { if (cam.view === 1 && e.target === renderer.domElement && e.pointerId !== stick.id) drag = { id: e.pointerId, x: e.clientX }; });
-  addEventListener("pointermove", e => { if (drag && e.pointerId === drag.id) { cam.heading -= (e.clientX - drag.x) * 0.008; cam.look = 1.2; drag.x = e.clientX; } });
+  addEventListener("pointermove", e => { if (drag && e.pointerId === drag.id) { cam.heading -= (e.clientX - drag.x) * 0.0035; cam.look = 4; drag.x = e.clientX; } });
   addEventListener("pointerup", e => { if (drag && e.pointerId === drag.id) drag = null; });
 })();
 function toggleSneak() { if (state === "play" && dodge()) return; input.sneak = !input.sneak; $("btnSneak").classList.toggle("on", input.sneak); }
@@ -1544,6 +1652,7 @@ const boxBlock = (x, z, w, d, h, mat, walk = true) => {
 
 function clearMission() {
   timers.length = 0;
+  if (koda) koda.pushing = null;
   if (arenaView !== null) { const v = arenaView; arenaView = null; cam.view = v; cam.heading = v === 1 && koda ? koda.yaw : Math.PI; const b = $("btnView"); if (b) b.textContent = VIEWS[cam.view]; }
   for (const e of enemies) scene.remove(e.a.root);
   enemies.length = 0;
@@ -1753,7 +1862,11 @@ function updateDrones(dt, now) {
     if (d.spotted > 0) d.spotted -= dt;
     else if (dd < 0.5) d.leg = (d.leg + 1) % d.route.length;
     else { d.x += dx / dd * d.speed * dt; d.z += dz / dd * d.speed * dt; }
-    d.group.position.set(d.x, terrainAt(d.x, d.z) + 5.2 + Math.sin(now / 500 + d.leg) * 0.15, d.z);
+    // Drones fly over the rooftops, never through them: they climb ahead of anything tall.
+    let roof = terrainAt(d.x, d.z) + 5.2;
+    for (const b of nearBlocks(d.x, d.z, 4)) if (!b.mud && b !== RIDGE) roof = Math.max(roof, b.top + 3);
+    d.alt = d.alt === undefined ? roof : d.alt + (roof - d.alt) * Math.min(1, dt * (roof > d.alt ? 4 : 1.2));
+    d.group.position.set(d.x, d.alt + Math.sin(now / 500 + d.leg) * 0.15, d.z);
     d.group.rotation.y += dt * 0.8;
     d.pulse = Math.max(0, d.pulse - dt * 4);
     const s = 1 + d.pulse * 0.12;
@@ -1803,6 +1916,37 @@ const roofTopMat = (() => {
   return new THREE.MeshStandardMaterial({ map: t, roughness: 0.95 });
 })();
 const rubbleMat = new THREE.MeshStandardMaterial({ color: 0x77706a, roughness: 1 });
+const cartMat = new THREE.MeshStandardMaterial({ color: 0x3d5a6b, roughness: 0.6, metalness: 0.4 });
+const skipMat = new THREE.MeshStandardMaterial({ color: 0xd9a21a, roughness: 0.7, metalness: 0.3 });
+const tyreMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
+// A builder's barrow: a tray on a wheel with two handles. It shows what's in it.
+function makeCart(x, z) {
+  const group = new THREE.Group();
+  const tray = new THREE.Mesh(propGeo, cartMat); tray.scale.set(0.9, 0.45, 1.2); tray.position.set(0, 0.6, 0.1); tray.castShadow = true; group.add(tray);
+  const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.14, 16), tyreMat); wheel.rotation.z = Math.PI / 2; wheel.position.set(0, 0.28, 0.75); wheel.castShadow = true; group.add(wheel);
+  for (const sx of [-0.35, 0.35]) {
+    const h = new THREE.Mesh(propGeo, postMat); h.scale.set(0.06, 0.06, 1.1); h.position.set(sx, 0.75, -0.75); h.rotation.x = -0.25; group.add(h);
+    const leg = new THREE.Mesh(propGeo, postMat); leg.scale.set(0.06, 0.45, 0.06); leg.position.set(sx, 0.22, -0.3); group.add(leg);
+  }
+  const load = new THREE.Group(); group.add(load);
+  for (let k = 0; k < 6; k++) { const m = new THREE.Mesh(propGeo, rubbleMat); const sz = 0.25 + Math.random() * 0.2; m.scale.set(sz, sz, sz); m.position.set((Math.random() - 0.5) * 0.55, 0.85 + (k >> 1) * 0.08, (Math.random() - 0.5) * 0.8 + 0.1); m.rotation.set(Math.random(), Math.random() * 3, Math.random()); m.castShadow = true; load.add(m); }
+  scene.add(group);
+  const cart = { group, x, z, yaw: 0, loads: 0,
+    place() { group.position.set(cart.x, terrainAt(cart.x, cart.z), cart.z); group.rotation.y = cart.yaw; },
+    roll(d) { wheel.rotation.x += d / 0.28; },
+    refresh() { load.children.forEach((m, i) => { m.visible = i < cart.loads * 2; }); } };
+  cart.place(); cart.refresh();
+  return cart;
+}
+// A yellow skip to tip the rubble into. It fills up as you dump.
+function makeSkip(x, z) {
+  const group = new THREE.Group();
+  const add = (w, h, d, px, py, pz) => { const m = new THREE.Mesh(propGeo, skipMat); m.scale.set(w, h, d); m.position.set(px, py, pz); m.castShadow = true; m.receiveShadow = true; group.add(m); };
+  add(3.2, 0.15, 2.0, 0, 0.1, 0); add(3.2, 1.4, 0.12, 0, 0.8, 0.95); add(3.2, 1.4, 0.12, 0, 0.8, -0.95); add(0.12, 1.4, 2.0, 1.55, 0.8, 0); add(0.12, 1.4, 2.0, -1.55, 0.8, 0);
+  const heap = new THREE.Mesh(propGeo, rubbleMat); heap.scale.set(2.9, 0.01, 1.7); heap.position.y = 0.2; group.add(heap);
+  group.position.set(x, terrainAt(x, z), z); scene.add(group);
+  return { group, x, z, fill(n) { const h = Math.min(1.2, n * 0.14); heap.scale.y = Math.max(0.01, h); heap.position.y = 0.2 + h / 2; } };
+}
 const padColours = [0xff5a46, 0x5ad1ff, 0xf2b544, 0x7fe39a, 0xd58cff, 0xffffff, 0xff9ad5];
 let carrying = null;
 
@@ -1977,13 +2121,15 @@ const FOCUS = {
     }
   },
 
-  /* Put It On Me: rubble from the Veil coming down. Hold ACTION to clear it; people help. */
+  /* Put It On Me: rubble from the Veil coming down. Wheel the cart to a pile, load it up
+     (hold ACTION by the pile), push it to the skip and tip it out (ACTION by the skip).
+     Tap ACTION by the cart's handle to take hold of it or let go. People help you load. */
   rubble: {
     spawn(qd) {
       const c = zoneCenter(qd.q);
       qd.piles = [];
       for (let i = 0; i < 3; i++) {
-        const a = qd.r() * Math.PI * 2, rad = 5 + qd.r() * 6;
+        const a = qd.r() * Math.PI * 2, rad = 6 + qd.r() * 8;
         const x = c.x + Math.cos(a) * rad, z = c.y + Math.sin(a) * rad;
         if (blocked(x, z, 2.2)) continue;
         const group = new THREE.Group();
@@ -1995,39 +2141,96 @@ const FOCUS = {
         }
         group.position.set(x, terrainAt(x, z), z);
         const b = addBlock(qd, { minX: x - 1.4, maxX: x + 1.4, minZ: z - 1.4, maxZ: z + 1.4, top: 1.3, walk: true, mesh: group, mats: [] });
-        qd.piles.push({ x, z, b, left: 1 });
+        qd.piles.push({ x, z, b, loads: 3, total: 3, dig: 0 });
       }
+      // The cart, by the first pile, and the skip a walk away across the square.
+      const p0 = qd.piles[0] || { x: c.x, z: c.y };
+      const cs = freeSpot(p0.x + 3.5, p0.z, 1.2, qd.r);
+      qd.cart = makeCart(cs.x, cs.z); own(qd, qd.cart.group);
+      const ang = Math.atan2(p0.z - c.y, p0.x - c.x) + Math.PI;
+      const ss = freeSpot(c.x + Math.cos(ang) * 16, c.y + Math.sin(ang) * 16, 2, qd.r);
+      qd.skip = makeSkip(ss.x, ss.z); own(qd, qd.skip.group);
+      qd.skip.b = addBlock(qd, { minX: ss.x - 1.6, maxX: ss.x + 1.6, minZ: ss.z - 1.1, maxZ: ss.z + 1.1, top: 1.5, mats: [] });
       const helper = freeSpot(c.x + 3, c.y + 3, 1, qd.r);
-      spawnPerson(qd, TOWNSFOLK[Math.floor(qd.r() * TOWNSFOLK.length)], helper.x, helper.z, "We've been digging since the Veil came down. Help us and I'll dig with you.").then(n => { if (n) qd.helper = n; });
+      spawnPerson(qd, TOWNSFOLK[Math.floor(qd.r() * TOWNSFOLK.length)], helper.x, helper.z, "We've been digging since the Veil came down. Bring the cart over and I'll load with you.").then(n => { if (n) qd.helper = n; });
       if (!mission.def.calm) spawnGuards(qd, 1);
+    },
+    // ACTION taps: take or let go of the cart, tip it into the skip.
+    tap(qd) {
+      const cart = qd.cart; if (!cart || qd.done) return false;
+      if (qd.skip && cart.loads > 0 && Math.hypot(cart.x - qd.skip.x, cart.z - qd.skip.z) < 4.2 && Math.hypot(koda.pos.x - qd.skip.x, koda.pos.z - qd.skip.z) < 5) {
+        qd.dumped += cart.loads; cart.loads = 0; cart.refresh(); qd.skip.fill(qd.dumped); sfxHit(true); popText("DUMPED");
+        this.checkDone(qd); refreshObjective(); return true;
+      }
+      if (koda.pushing === cart) { koda.pushing = null; popText("LET GO"); refreshObjective(); return true; }
+      // Standing at the cart (nearer it than any pile), ACTION takes hold of it; at a pile it's for loading.
+      const dc = Math.hypot(koda.pos.x - cart.x, koda.pos.z - cart.z);
+      const dp = Math.min(99, ...qd.piles.filter(p => p.loads > 0).map(p => Math.hypot(koda.pos.x - p.x, koda.pos.z - p.z)));
+      if (dc < 2.2 && (dc < dp - 0.3 || cart.loads >= 3)) { koda.pushing = cart; popText("PUSH"); refreshObjective(); return true; }
+      return false;
+    },
+    checkDone(qd) {
+      const left = qd.piles.reduce((a, p) => a + p.loads, 0);
+      if (left === 0 && qd.cart.loads === 0 && !qd.orb) {
+        const p = qd.piles[qd.piles.length - 1];
+        qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(p.x, terrainAt(p.x, p.z), p.z);
+        koda.pushing = null;
+        toast(`The way is clear. ${qd.partName} was under there!`, 3);
+      }
     },
     update(qd, dt) {
       if (qd.done || !qd.piles) return;
-      const p = qd.piles.find(p => p.left > 0 && Math.hypot(koda.pos.x - p.x, koda.pos.z - p.z) < 2.6);
+      qd.dumped = qd.dumped || 0;
+      const cart = qd.cart;
+      // Pushing: the cart rolls just ahead of him and goes where he goes.
+      if (cart && koda.pushing === cart && Math.hypot(koda.pos.x - cart.x, koda.pos.z - cart.z) > 3) koda.pushing = null;   // too far away: he's let go
+      if (cart && koda.pushing === cart) {
+        const f = forward(koda), tx = koda.pos.x + f.x * 1.35, tz = koda.pos.z + f.y * 1.35;
+        const before = { x: cart.x, z: cart.z };
+        const pos = { x: cart.x, y: terrainAt(cart.x, cart.z), z: cart.z };
+        moveWithCollision(pos, tx - cart.x, tz - cart.z, 0.7);
+        cart.x = pos.x; cart.z = pos.z;
+        // Stuck against something: he can't walk through it either.
+        const sx = tx - cart.x, sz = tz - cart.z, sd = Math.hypot(sx, sz);
+        if (sd > 0.6) { const k = Math.min(sd, 0.5) / sd * 0.6; moveWithCollision(koda.pos, -sx * k, -sz * k, 0.45, true); }
+        cart.yaw = koda.yaw; cart.place();
+        if (Math.hypot(cart.x - before.x, cart.z - before.z) > 0.001) cart.roll(Math.hypot(cart.x - before.x, cart.z - before.z));
+      }
+      const p = qd.piles.find(p => p.loads > 0 && Math.hypot(koda.pos.x - p.x, koda.pos.z - p.z) < 2.8);
       qd.near = p;
-      if (p && input.actionHeld && !air) {
-        const helped = qd.helper && dist2(qd.helper.a.pos, koda.pos) < 8;
-        if (helped) { qd.helper.a.play(qd.helper.a.has("cheer") ? "cheer" : "idle"); qd.helper.a.faceTo(p.x, p.z); }
-        p.left -= dt / (helped ? 1.1 : 1.6);
-        koda.faceTo(p.x, p.z); koda.play(koda.has("pound") ? "pound" : "punch");
-        p.b.mesh.scale.setScalar(0.4 + 0.6 * Math.max(0, p.left));
-        if (p.left <= 0) {
-          removeBlock(qd, p.b); sfxHit(true); popText("CLEARED");
-          if (qd.piles.every(x => x.left <= 0)) {
-            qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(p.x, terrainAt(p.x, p.z), p.z);
-            toast(`The way is clear. ${qd.partName} was under there!`, 3);
+      if (p && input.actionHeld && !air && !koda.pushing) {
+        const cartNear = cart && Math.hypot(cart.x - p.x, cart.z - p.z) < 4.5;
+        if (!cartNear) { if (!qd.warned) { popText("BRING THE CART"); qd.warned = 1.5; } }
+        else if (cart.loads >= 3) { if (!qd.warned) { popText("CART FULL: TIP IT IN THE SKIP"); qd.warned = 1.5; } }
+        else {
+          const helped = qd.helper && dist2(qd.helper.a.pos, koda.pos) < 8;
+          if (helped) { qd.helper.a.play(qd.helper.a.has("cheer") ? "cheer" : "idle"); qd.helper.a.faceTo(p.x, p.z); }
+          koda.faceTo(p.x, p.z); koda.play(koda.has("pound") ? "pound" : "punch");
+          p.dig += dt / (helped ? 1.2 : 1.8);
+          if (p.dig >= 1) {
+            p.dig = 0; p.loads--; cart.loads++; cart.refresh(); sfxHit(false); popText("+1 LOAD");
+            p.b.mesh.scale.setScalar(0.35 + 0.65 * p.loads / p.total);
+            if (p.loads <= 0) { removeBlock(qd, p.b); popText("PILE CLEARED"); }
+            refreshObjective();
           }
-          refreshObjective();
         }
       }
+      if (qd.warned) qd.warned = Math.max(0, qd.warned - dt) || 0;
     },
     target(qd) {
       if (qd.orb) return { x: qd.orb.position.x, z: qd.orb.position.z, label: "GRAB " + qd.partName.toUpperCase() };
-      const p = (qd.piles || []).find(p => p.left > 0);
+      const cart = qd.cart; if (!cart) return null;
+      const p = (qd.piles || []).find(p => p.loads > 0);
+      if (cart.loads >= 3 || (!p && cart.loads > 0)) return koda.pushing === cart ? { x: qd.skip.x, z: qd.skip.z, label: "PUSH TO THE SKIP, ACTION TO TIP" } : { x: cart.x, z: cart.z, label: "ACTION: TAKE THE CART" };
       if (!p) return null;
-      return { x: p.x, z: p.z, label: qd.near === p && input.actionHeld ? `CLEARING ${Math.round((1 - p.left) * 100)}%` : "HOLD ACTION TO CLEAR" };
+      if (Math.hypot(cart.x - p.x, cart.z - p.z) >= 4.5) return koda.pushing === cart ? { x: p.x, z: p.z, label: "PUSH THE CART TO THE PILE" } : { x: cart.x, z: cart.z, label: "ACTION: TAKE THE CART" };
+      if (koda.pushing === cart) return { x: p.x, z: p.z, label: "ACTION: LET GO, THEN HOLD ACTION TO LOAD" };
+      return { x: p.x, z: p.z, label: qd.near === p && input.actionHeld ? `LOADING ${Math.round(p.dig * 100)}%` : `HOLD ACTION TO LOAD (CART ${cart.loads}/3)` };
     },
-    objective(qd) { const left = (qd.piles || []).filter(p => p.left > 0).length; return left ? `Clear the rubble in ${qd.q.name}: hold ACTION by a pile (${left} left). Stand near the helper and it goes faster.` : `Grab ${qd.partName}.`; }
+    objective(qd) {
+      const left = (qd.piles || []).reduce((a, p) => a + p.loads, 0);
+      return left || (qd.cart && qd.cart.loads) ? `Clear the rubble in ${qd.q.name}: wheel the cart to a pile, load it, push it to the skip and tip it out (${left} loads left).` : `Grab ${qd.partName}.`;
+    }
   },
 
   /* To My Angels: people ask for help. Fetch what they need; they give you the part. */
@@ -2662,8 +2865,11 @@ function updateKoda(dt) {
   if (attackLock > 0) { attackLock -= dt; koda.update(dt); settle(); return; }
   const sneaking = input.sneak;
   const sprint = !sneaking && input.mag > 0.93;
-  let speed = input.mag === 0 ? 0 : sneaking ? 2.6 : sprint ? 8.2 : 5.4;
+  // A light push walks, further runs, all the way (or RT / Shift) sprints.
+  const walking = !sneaking && !sprint && !boost.on && input.mag > 0 && input.mag < 0.55 && koda.has("walk");
+  let speed = input.mag === 0 ? 0 : sneaking ? 2.6 : sprint ? 8.2 : walking ? 1.7 : 5.4;
   if (boost.on && !sneaking) speed = 13;
+  if (koda.pushing) speed = Math.min(speed, 2.4);
   speed *= water;
   // Running and you pull the stick the other way: a proper turn on the spot.
   const want = Math.atan2(input.x, input.z);
@@ -2674,9 +2880,11 @@ function updateKoda(dt) {
     moveWithCollision(koda.pos, input.x * speed * dt, input.z * speed * dt, 0.45, true);
     koda.face(want, Math.min(1, dt * 14));
     if (swimming()) koda.play("swim", { speed: sprint ? 1.35 : 1 });
-    else koda.play(sneaking ? "crouch_walk" : sprint || boost.on ? "sprint" : "run", { speed: boost.on ? 1.4 : 1 });
+    else if (koda.pushing && koda.has("push")) koda.play("push");
+    else koda.play(sneaking ? "crouch_walk" : sprint || boost.on ? "sprint" : walking || (koda.pushing && !koda.has("push")) ? "walk" : "run", { speed: boost.on ? 1.4 : 1 });
   } else if (swimming()) koda.play(koda.has("tread") ? "tread" : "swim");
-  else koda.play(sneaking ? (koda.inCover && koda.has("corner") ? "corner" : "crouch_idle") : koda.has("fight_idle") && fightFoe() ? "fight_idle" : "idle");
+  // In cover he crouches with his back to the box (facing away from it, set below).
+  else koda.play(sneaking ? "crouch_idle" : koda.has("fight_idle") && fightFoe() ? "fight_idle" : "idle");
   // In the water his body floats up to the surface, head above it.
   const lift = swimming() ? (speed > 0 ? WATER_Y - 0.8 : WATER_Y - 1.45) : 0;
   koda.model.position.y += (koda.baseY + lift - koda.model.position.y) * Math.min(1, dt * 6);
@@ -2725,6 +2933,7 @@ function settle() {
 }
 function jump() {
   if (!koda || attackLock > 0 || koda.sinking) return;
+  koda.pushing = null;
   // Just walked off an edge: a moment's grace to still jump.
   if (air && !(air.fall && air.t < 0.16)) return;
   readInput();
@@ -2756,6 +2965,7 @@ function strikeTarget(reach) {
 }
 function attack() {
   if (!koda || attackLock > 0) return;
+  koda.pushing = null;
   if (air) {
     if (air.kick) return;
     air.kick = true; air.vy = Math.max(air.vy, 3);
@@ -2830,6 +3040,8 @@ function landKick() {
 }
 function action() {
   if (!koda || attackLock > 0 || air) return;
+  if (mission) for (const qd of mission.quads) if (qd.focus === "rubble" && FOCUS.rubble.tap(qd)) return;
+  if (prayNear()) return;
   if (npcs.some(n => dist2(koda.pos, n.a.pos) < 2.6) || (mission && mission.quads.some(q => q.focus === "copies" && q.zoras && q.zoras.some(z => !z.gone && dist2(z.z.pos, koda.pos) < 2.4)))) return talkOrListen();
   if (searchNear()) return;
   // A takedown: from behind, unseen.
@@ -2927,6 +3139,9 @@ function hitEnemy(e, dmg, nx, nz, body = false) {
 function knockOut(e) {
   if (e.state === "ko") return;
   e.state = "ko"; e.a.play("ko", { once: true });
+  // He falls flat: slide him clear of crates, rubble and walls so the body lies on open ground.
+  const f = forward(e.a), lie = freeSpot(e.a.pos.x + f.x * 0.9, e.a.pos.z + f.y * 0.9, 1.3);
+  e.koTo = { x: lie.x - f.x * 0.9, z: lie.z - f.y * 0.9 };
   if (attacker === e) attacker = null;
   mission.stats.kos++;
   refreshObjective();
@@ -2952,7 +3167,10 @@ function updateEnemies(dt) {
     a.root.visible = d < 60 && shown;
     if (d > 55) continue;
     a.update(dt);
-    if (e.state === "ko") continue;
+    if (e.state === "ko") {
+      if (e.koTo) { const k = Math.min(1, dt * 6); a.pos.x += (e.koTo.x - a.pos.x) * k; a.pos.z += (e.koTo.z - a.pos.z) * k; a.pos.y = floorAt(a.pos.x, a.pos.z); if (Math.hypot(e.koTo.x - a.pos.x, e.koTo.z - a.pos.z) < 0.02) e.koTo = null; }
+      continue;
+    }
     e.cool = Math.max(0, e.cool - dt); e.hitT = Math.max(0, e.hitT - dt);
     if (e.hitT > 0) continue;
     if (d < 14 && e.state === "patrol" && shown) tip("guard");
@@ -2973,7 +3191,10 @@ function updateEnemies(dt) {
     const inCone = d < range && (dx * f.x + dz * f.y) / (d || 1) > 0.55;
     const heard = (koda.sprinting || air) && d < 4;
     // Crouched, anything waist-high hides him; standing, it has to be chest-high.
-    const sees = (inCone || heard || d < 1.3) && sightClear(a.pos.x, a.pos.z, koda.pos.x, koda.pos.z, false, koda.sneaking ? 0.75 : 1.35);
+    // Once he's after you he looks all round, further: break his line of sight (round a corner,
+    // behind a wall, over the river) and stay out of it for a few seconds to lose him, like GTA.
+    const chasing = e.state === "alert" && d < 18;
+    const sees = (inCone || heard || d < 1.3 || chasing) && sightClear(a.pos.x, a.pos.z, koda.pos.x, koda.pos.z, false, koda.sneaking ? 0.75 : 1.35);
     e.sees = sees;
 
     if (e.state !== "alert") {
@@ -2998,8 +3219,8 @@ function updateEnemies(dt) {
 
     // Alerted: chase, square up, and swing only when face to face.
     anySeen = true;
-    if (sees) { e.lastSeen.copy(koda.pos); e.searchT = 6; } else e.searchT -= dt;
-    if (e.searchT <= 0) { e.state = "suspicious"; e.meter = 0.6; a.play("walk"); continue; }
+    if (sees) { e.lastSeen.copy(koda.pos); e.searchT = Math.max(e.searchT, 4); } else e.searchT -= dt;
+    if (e.searchT <= 0) { e.state = "suspicious"; e.meter = 0.6; a.play("walk"); if (attacker === e) attacker = null; continue; }
     // Mid-swing or mid-shout: plant the feet and keep facing him.
     if ((e.holdT = Math.max(0, (e.holdT || 0) - dt)) > 0) { a.face(Math.atan2(dx, dz), Math.min(1, dt * 10)); continue; }
     // One at a time: only the main attacker comes in. The rest wait their turn in a ring
@@ -3397,6 +3618,10 @@ function guideRoute(x, z, tx, tz) {
   return lead.concat(way.slice(1), [{ x: tx, z: tz }]);
 }
 function updateGuide(now, dt) {
+  // Walk up to an unlit prayer point: a hint to pray.
+  const sh = shrines.find(x => Math.hypot(koda.pos.x - x.x, koda.pos.z - x.z) < 3 && !(save.shrines && save.shrines[x.q.id]));
+  if (sh && sh !== updateGuide.hinted) { updateGuide.hinted = sh; popText("ACTION: PRAY"); }
+  for (const x of shrines) x.flame.rotation.y += dt * 1.2;
   const goal = objectiveTarget();
   const d = goal ? Math.hypot(goal.x - koda.pos.x, goal.z - koda.pos.z) : 0;
   // The route shows on the radar, GTA style; nothing is drawn on the ground.
@@ -3506,6 +3731,7 @@ function drawRadar(dt) {
     dot(e.a.pos.x, e.a.pos.z, 3.2, e.state === "alert" ? "#ff5a46" : e.meter > 0.1 ? "#f2b544" : "rgba(255,120,100,.6)");
   }
   for (const d of drones) dot(d.x, d.z, 3, d.spotted > 0 ? "#ff5a46" : "#fff1a8");
+  for (const sh of shrines) dot(sh.x, sh.z, 3.5, save.shrines && save.shrines[sh.q.id] ? "#ffd27a" : "#8a8578");
   // The way to go, along the roads, like a GTA route.
   if (guidePath && guidePath.length) {
     const line = [{ x: koda.pos.x, z: koda.pos.z }, ...guidePath];
@@ -3637,6 +3863,7 @@ function drawBigMap() {
     g.fillStyle = col; g.strokeStyle = "#000"; g.lineWidth = 2 * dpr; g.beginPath(); g.arc(X(x), Z(z), 7 * dpr, 0, 7); g.fill(); g.stroke();
     if (label) { g.font = `800 ${12 * dpr}px Inter, sans-serif`; g.lineWidth = 4 * dpr; g.strokeText(label, X(x), Z(z) - 15 * dpr); g.fillText(label, X(x), Z(z) - 15 * dpr); }
   };
+  for (const sh of shrines) { const lit = save.shrines && save.shrines[sh.q.id]; g.fillStyle = lit ? "#ffd27a" : "#55524a"; g.strokeStyle = "#000"; g.lineWidth = 2 * dpr; g.beginPath(); g.arc(X(sh.x), Z(sh.z), 6 * dpr, 0, 7); g.fill(); g.stroke(); }
   if (zora && zora.waiting) pin(zora.pos.x, zora.pos.z, "#d58cff", "ZORA");
   if (escape) pin(escape.exit.x, escape.exit.y, "#ffd27a", "EXIT");
   if (t) { g.save(); g.translate(X(t.x), Z(t.z)); g.rotate(Math.PI / 4); g.fillStyle = "#ffd27a"; g.strokeStyle = "#000"; g.lineWidth = 2 * dpr; g.fillRect(-8 * dpr, -8 * dpr, 16 * dpr, 16 * dpr); g.strokeRect(-8 * dpr, -8 * dpr, 16 * dpr, 16 * dpr); g.restore(); }
@@ -3737,11 +3964,16 @@ function updateCamera(dt, snap) {
   if (foe) camTarget.set((koda.pos.x + foe.a.pos.x) / 2, 0.9, (koda.pos.z + foe.a.pos.z) / 2);
   else camTarget.set(koda.pos.x + Math.sin(koda.yaw) * lead, terrainAt(koda.pos.x, koda.pos.z) + 0.8 + Math.max(0, kUp()) * 0.7, koda.pos.z + Math.cos(koda.yaw) * lead);
   {
-    const wantYaw = -stickCurve(pad.rx || 0) * 1.9, wantPitch = stickCurve(pad.ry || 0) * 0.9;
-    cam.yawV += (wantYaw - cam.yawV) * Math.min(1, dt * 7);
-    cam.pitchV += (wantPitch - cam.pitchV) * Math.min(1, dt * 7);
+    // Slow and steady: a full push turns about 50 degrees a second, and it eases in and out.
+    const wantYaw = -stickCurve(pad.rx || 0) * 0.85, wantPitch = stickCurve(pad.ry || 0) * 0.4;
+    cam.yawV += (wantYaw - cam.yawV) * Math.min(1, dt * 3.5);
+    cam.pitchV += (wantPitch - cam.pitchV) * Math.min(1, dt * 3.5);
+    // Zoom: LB and RB on a controller, - and = on the keyboard, the mouse wheel.
+    const zin = (pad.zoom || 0) + (keys.has("Minus") ? 1 : 0) - (keys.has("Equal") ? 1 : 0);
+    cam.zoomV += (zin * 0.9 - cam.zoomV) * Math.min(1, dt * 8);
+    if (Math.abs(cam.zoomV) > 0.005) cam.zoom = clamp(cam.zoom * Math.exp(cam.zoomV * dt), 0.45, 2.2);
     if (cam.view === 1) {
-      if (Math.abs(cam.yawV) > 0.01) { cam.heading += cam.yawV * dt; cam.look = 1.2; }
+      if (Math.abs(cam.yawV) > 0.01) { cam.heading += cam.yawV * dt; cam.look = 4; }
       if (Math.abs(cam.pitchV) > 0.01) cam.pitch = clamp(cam.pitch + cam.pitchV * dt, -0.25, 0.9);
     }
   }
@@ -3749,8 +3981,10 @@ function updateCamera(dt, snap) {
     // Close: follow behind him. When he runs, the camera swings round behind him; after you look
     // round yourself it waits a moment first.
     cam.look = Math.max(0, cam.look - dt);
-    if (koda.moving && !cam.look && !foe) { const d = angleLerp(cam.heading, koda.yaw, 1) - cam.heading; if (Math.abs(d) < 2.4) cam.heading = angleLerp(cam.heading, koda.yaw, Math.min(1, dt * 1.6)); }
-    const dist = 4.6 + (foe ? 0.8 : 0), fx = Math.sin(cam.heading), fz = Math.cos(cam.heading);
+    // The camera only drifts back behind him slowly while he runs, and never for a few
+    // seconds after you've turned it yourself: you aim it, it doesn't pull.
+    if (koda.moving && !cam.look && !foe) { const d = angleLerp(cam.heading, koda.yaw, 1) - cam.heading; if (Math.abs(d) < 2.4) cam.heading = angleLerp(cam.heading, koda.yaw, Math.min(1, dt * 0.45)); }
+    const dist = (4.6 + (foe ? 0.8 : 0)) * cam.zoom, fx = Math.sin(cam.heading), fz = Math.cos(cam.heading);
     const ty = terrainAt(koda.pos.x, koda.pos.z) + Math.max(0, kUp()) + 1.5;
     camTarget.set(koda.pos.x + fx * 2.2, ty, koda.pos.z + fz * 2.2);
     // Up and down on the right stick tilt the camera over him, or down to his shoulder.
@@ -3761,9 +3995,15 @@ function updateCamera(dt, snap) {
     const floor = Math.max(terrainAt(cx, cz), ...nearBlocks(cx, cz, 0.5).filter(b => !b.mud && cx > b.minX && cx < b.maxX && cz > b.minZ && cz < b.maxZ).map(b => b.top));
     if (ty + camOff.y < floor + 1.2) camOff.y = floor + 1.2 - ty;
   } else if (cam.view === 2) {
-    camOff.set(0, 21, 0.4);
-  } else camOff.copy(CAM_OFFSET).multiplyScalar(camZoom);
+    camOff.set(0, 21 * cam.zoom, 0.4);
+  } else camOff.copy(CAM_OFFSET).multiplyScalar(camZoom * cam.zoom);
   const want = camTarget.clone().add(camOff);
+  // Never inside the land: the camera rides over hills and slopes instead of through them.
+  for (let s = 0.25; s <= 1.001; s += 0.25) {
+    const px = camTarget.x + camOff.x * s, pz = camTarget.z + camOff.z * s, py = camTarget.y + camOff.y * s;
+    const floor = terrainAt(px, pz) + 0.9;
+    if (py < floor) want.y += (floor - py) / s;
+  }
   if (snap) camera.position.copy(want); else camera.position.lerp(want, Math.min(1, dt * (cam.view === 1 ? 8 : 5)));
   camera.lookAt(camera.position.clone().sub(camOff));
   if (cam.view === 2) { scene.fog.near = Math.max(scene.fog.near, 60); scene.fog.far = Math.max(scene.fog.far, 140); }
@@ -3773,7 +4013,7 @@ function updateCamera(dt, snap) {
   if (!kodaRing) { kodaRing = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 40), new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide })); kodaRing.rotation.x = -Math.PI / 2; kodaRing.renderOrder = 2; scene.add(kodaRing); }
   kodaRing.visible = cam.view === 2 && state !== "title";
   if (kodaRing.visible) kodaRing.position.set(koda.pos.x, koda.pos.y + 0.06, koda.pos.z);
-  sun.position.set(koda.pos.x + DAY.dir.x, koda.pos.y + DAY.dir.y, koda.pos.z + DAY.dir.z);
+  sun.position.set(koda.pos.x + DAY.dir.x * 3, koda.pos.y + DAY.dir.y * 3, koda.pos.z + DAY.dir.z * 3);
   sun.target.position.set(koda.pos.x, terrainAt(koda.pos.x, koda.pos.z), koda.pos.z);
 }
 
@@ -3845,7 +4085,7 @@ function tick(dt, now) {
 }
 
 /* ---------- screens ---------- */
-function pause() { if (state !== "play") return; state = "paused"; $("marker").classList.add("hidden"); $("pause").classList.remove("hidden"); if (music.ac) music.ac.suspend(); mapCentreOnKoda(); drawBigMap(); }
+function pause() { if (state !== "play") return; state = "paused"; $("marker").classList.add("hidden"); $("pause").classList.remove("hidden"); if (music.ac) music.ac.suspend(); mapCentreOnKoda(); renderTravel(); drawBigMap(); }
 function resume() { $("pause").classList.add("hidden"); state = "play"; lastT = performance.now(); if (music.ac) music.ac.resume(); }
 $("pauseBtn").addEventListener("click", pause);
 $("resumeBtn").addEventListener("click", resume);
@@ -4186,6 +4426,62 @@ function buildUndo() { const m = B.undo.pop(); if (m && placed.includes(m)) buil
   });
 })();
 
+/* ---------- prayer points ----------
+   One in every place. Find it and pray (ACTION) to light it; from then on the pause map
+   can take you straight there. */
+const shrines = [];
+const shrineStone = new THREE.MeshStandardMaterial({ color: 0x8a8378, roughness: 0.95 });
+const shrineGlow = new THREE.MeshStandardMaterial({ color: 0x3a3428, emissive: 0x000000, roughness: 0.4 });
+function buildShrines() {
+  for (const q of S.quadrants) {
+    const r = rng(q.id.charCodeAt(2) * 313 + 7);
+    const spot = freeSpot(q.x0 + q.w * (0.25 + r() * 0.1), q.z0 + q.d * (0.72 + r() * 0.1), 1.6, r);
+    const g = new THREE.Group(), base = terrainAt(spot.x, spot.z);
+    const step = new THREE.Mesh(propGeo, shrineStone); step.scale.set(2.2, 0.3, 2.2); step.position.y = 0.15; g.add(step);
+    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.36, 1.5, 8), shrineStone); pillar.position.y = 1.05; g.add(pillar);
+    const mat = shrineGlow.clone();
+    const flame = new THREE.Mesh(new THREE.OctahedronGeometry(0.32), mat); flame.position.y = 2.1; g.add(flame);
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    g.position.set(spot.x, base, spot.z); scene.add(g);
+    blockers.push({ minX: spot.x - 0.45, maxX: spot.x + 0.45, minZ: spot.z - 0.45, maxZ: spot.z + 0.45, top: base + 1.8, base, mats: [] });
+    shrines.push({ q, x: spot.x, z: spot.z, flame, mat });
+  }
+  lightShrines();
+}
+function lightShrines() {
+  for (const sh of shrines) {
+    const lit = !!(save.shrines && save.shrines[sh.q.id]);
+    sh.mat.color.setHex(lit ? 0xffd27a : 0x3a3428); sh.mat.emissive.setHex(lit ? 0xffa83a : 0x000000); sh.mat.emissiveIntensity = lit ? 1.4 : 0;
+  }
+}
+function prayNear() {
+  const sh = shrines.find(s => Math.hypot(koda.pos.x - s.x, koda.pos.z - s.z) < 3);
+  if (!sh) return false;
+  save.shrines = save.shrines || {};
+  if (!save.shrines[sh.q.id]) {
+    save.shrines[sh.q.id] = true; writeSave(); lightShrines(); sfxUnlock();
+    toast(`Prayer point found in ${sh.q.name}. Travel here any time from the map.`, 3.5);
+  } else popText("PRAYED");
+  return true;
+}
+function travelTo(sh) {
+  const busy = race || (mission && mission.quads.some(q => q.arena && q.arena.started && !q.arena.open));
+  if (busy) { toast("Finish what you're in the middle of first.", 2.5); return; }
+  resume();
+  koda.pushing = null; air = null;
+  const s = freeSpot(sh.x, sh.z + 2.2, 0.8);
+  koda.pos.set(s.x, groundAt(s.x, s.z), s.z); lastSafe.copy(koda.pos);
+  if (zora && zora.following) zora.pos.set(s.x + 1, floorAt(s.x + 1, s.z), s.z);
+  updateCamera(0, true);
+  toast(`You arrive at the prayer point in ${sh.q.name}.`, 2.5);
+}
+function renderTravel() {
+  const box = $("pauseTravel"); if (!box) return;
+  const lit = shrines.filter(s => save.shrines && save.shrines[s.q.id]);
+  box.innerHTML = lit.length ? '<span class="travel-label">Travel to</span>' + lit.map((s, i) => `<button class="ghost" data-i="${shrines.indexOf(s)}">${s.q.name}</button>`).join("") : '<span class="travel-label">Find prayer points to travel between places.</span>';
+}
+$("pauseTravel") && $("pauseTravel").addEventListener("click", e => { const b = e.target.closest("button"); if (b) travelTo(shrines[+b.dataset.i]); });
+
 /* ---------- boot ---------- */
 (async function boot() {
   $("playBtn").disabled = true;
@@ -4207,6 +4503,7 @@ function buildUndo() { const m = B.undo.pop(); if (m && placed.includes(m)) buil
   cam.view = save.view || 0; $("btnView").textContent = VIEWS[cam.view];
   await buildCity(p => { $("loading").textContent = "Building the city… " + Math.round(p * 100) + "%"; });
   buildRivers();
+  buildShrines();
   buildProps();
   buildAwnings();
   buildNav();
@@ -4219,7 +4516,7 @@ function buildUndo() { const m = B.undo.pop(); if (m && placed.includes(m)) buil
   $("playBtn").disabled = false;
   toTitle();
   window.GILL_FLOATS = () => floats; window.GILL_DRONES = () => drones;
-  window.GILL = { guideRoute, buildStep: dt => updateBuild(dt), scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
+  window.GILL = { shrines, travelTo, prayNear, guideRoute, buildStep: dt => updateBuild(dt), scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
     enemies, npcs, get state() { return state; }, save: () => save, blockers, keys, input, cardContinue, pause, resume, drawBigMap, pathNext, stick, FOCUS, beat, songTime, boost, get lastSafe() { return lastSafe; }, fightFoe, get camZoom() { return camZoom; }, attack, jump, action, objectiveTarget, get health() { return health; }, get music() { return music; },
     sim(seconds) { let t = performance.now(); for (let i = 0; i < seconds * 30; i++) { t += 33; tick(1 / 30, t); } } };
 })();

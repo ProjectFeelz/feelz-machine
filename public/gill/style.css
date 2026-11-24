@@ -351,3 +351,41 @@ button.padfocus { outline: 3px solid #ffd27a; outline-offset: 3px; }
 #title .title-buttons { justify-content: flex-start; flex-wrap: wrap; }
 #title .missions { margin-left: 0; margin-right: 0; }
 @media (max-height: 520px) { #title .title-card h1 { font-size: 40px; } #title .blurb { display: none; } }
+
+/* Build mode: pieces down the left, actions down the right, Koda clear in the middle. */
+.build { left: 0; right: 0; top: 0; bottom: 0; transform: none; width: auto; background: none; border: 0; padding: 0; pointer-events: none; display: block; }
+.build > * { pointer-events: auto; }
+.build-left { position: absolute; left: max(10px, env(safe-area-inset-left)); top: 64px; bottom: 12px; width: min(236px, 26vw);
+  display: flex; flex-direction: column; gap: 8px; background: rgba(0,0,0,.82); border: 1px solid rgba(255,255,255,.14); border-radius: 16px; padding: 10px; }
+.build-items { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 0; align-content: start; scrollbar-width: none; }
+.build-items::-webkit-scrollbar, .missions::-webkit-scrollbar { display: none; }
+.build .bitem { width: auto; padding: 4px 2px; font-size: 9.5px; }
+.build .bitem img, .build .bitem i { width: 40px; height: 40px; font-size: 22px; }
+.build-actions { position: absolute; right: max(10px, env(safe-area-inset-right)); top: 64px; width: min(150px, 18vw); display: flex; flex-direction: column; gap: 6px;
+  background: rgba(0,0,0,.82); border: 1px solid rgba(255,255,255,.14); border-radius: 16px; padding: 10px; }
+.build-actions button { flex: 0 0 auto; }
+.bcat.on, .build-actions button.go { color: #000; }
+@media (pointer: coarse) { .build { left: 0; right: 0; width: auto; } .build-left { width: min(200px, 30vw); top: 54px; bottom: 170px; } .build-actions { width: min(120px, 18vw); top: 54px; } }
+
+/* Title fits the screen: no scrolling. */
+#title .title-card { width: min(640px, 50vw); overflow: hidden; justify-content: center; padding-top: max(16px, env(safe-area-inset-top)); padding-bottom: 16px; }
+#title .title-card h1 { font-size: clamp(40px, 11vh, 96px); }
+#title .sub { font-size: clamp(13px, 2.2vh, 18px); margin-bottom: 1.2vh; }
+#title .blurb { font-size: clamp(12px, 1.9vh, 16px); margin: 0 0 2vh; max-width: 520px; }
+#title .title-buttons { flex-wrap: nowrap; }
+#title .title-buttons .primary, #title .title-buttons .ghost { min-width: 0; padding: clamp(8px, 1.5vh, 14px) clamp(18px, 2.4vw, 34px); font-size: clamp(13px, 2vh, 17px); }
+#title .loading { margin-top: 1vh; }
+#title .missions { grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 1.5vh; max-width: none; overflow: hidden; }
+#title .mission { padding: clamp(3px, .8vh, 7px) 8px; font-size: clamp(11px, 1.6vh, 13px); }
+#title .how { position: fixed; right: max(20px, env(safe-area-inset-right)); bottom: 16px; max-width: min(440px, 44vw); margin: 0; z-index: 2;
+  background: rgba(0,0,0,.85); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 8px 14px; }
+#title .how[open] { padding-bottom: 12px; }
+@media (max-height: 520px) { #title .title-card h1 { font-size: 36px; } #title .blurb { display: none; } #title .kicker { font-size: 9px; } }
+html, body, .screen { scrollbar-width: none; }
+.screen::-webkit-scrollbar { display: none; }
+
+.pause-travel { align-items: center; }
+.pause-travel button { padding: 6px 12px; font-size: 12.5px; }
+.travel-label { font-size: 11px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.pause-bar.closed .pause-travel { display: none; }
+.lg-shrine { background: #ffd27a; border-radius: 50% !important; box-shadow: 0 0 6px #ffa83a; }

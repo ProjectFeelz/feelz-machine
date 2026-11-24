@@ -59,12 +59,14 @@
 
   <!-- Build mode: pick a piece, walk to the spot, drop it -->
   <div id="build" class="build hidden">
-    <div class="build-head">
-      <b id="buildName"></b>
-      <span id="buildSave" aria-live="polite"></span>
+    <div class="build-left">
+      <div class="build-head">
+        <b id="buildName"></b>
+        <span id="buildSave" aria-live="polite"></span>
+      </div>
+      <div class="build-cats" id="buildCats"></div>
+      <div class="build-items" id="buildItems"></div>
     </div>
-    <div class="build-cats" id="buildCats"></div>
-    <div class="build-items" id="buildItems"></div>
     <div class="build-actions">
       <button id="bTurn" title="R">Turn</button>
       <button id="bPlace" class="go" title="F or Enter">Place</button>
@@ -94,7 +96,7 @@
         <summary>How to play</summary>
         <p><b>Phone:</b> left thumb moves (push far to sprint). JUMP, HIT (jump then HIT for a flying kick), SNEAK to crouch, ACTION to talk and to take a guard down from behind.</p>
         <p><b>Keyboard:</b> WASD or arrows to move, Shift to sprint, Space to jump, J to hit, E for action (hold to clear rubble), C to sneak, Q to boost once you've earned it, Esc to pause.</p>
-        <p><b>Controller:</b> left stick or d-pad to move, RT to sprint, A to jump, X to hit, Y for action, B to sneak, LB to boost, Start to pause.</p>
+        <p><b>Controller:</b> left stick or d-pad to move, right stick to look, LB and RB to zoom out and in, RT to sprint, A to jump, X to hit, Y for action, B to sneak, LT to boost, Start to pause. In menus the d-pad moves and A picks.</p>
         <p><b>The beat:</b> the dot by the clock pulses with the song. Hits on the beat do double damage, and the guards change shift every 8 bars.</p>
       </details>
     </div>
@@ -110,6 +112,7 @@
         <button class="ghost" id="muteBtn">Music: on</button>
         <button class="ghost" id="quitBtn">Back to title</button>
       </div>
+      <div class="pause-travel pause-btns" id="pauseTravel"></div>
       <button class="pause-toggle" id="pauseToggle" aria-label="Show or hide the buttons">&#9650;</button>
     </div>
     <div class="map-zoom">
@@ -118,7 +121,7 @@
       <button id="mapMe" aria-label="Back to Koda">&#9678;</button>
     </div>
     <div class="legend map-legend">
-      <span><i class="lg-you"></i>You</span><span><i class="lg-goal"></i>Next</span><span><i class="lg-route"></i>Route</span><span><i class="lg-road"></i>Road</span><span><i class="lg-mud"></i>River</span><span><i class="lg-hill"></i>Hills</span><span><i class="lg-done"></i>Done</span>
+      <span><i class="lg-you"></i>You</span><span><i class="lg-goal"></i>Next</span><span><i class="lg-route"></i>Route</span><span><i class="lg-road"></i>Road</span><span><i class="lg-mud"></i>River</span><span><i class="lg-hill"></i>Hills</span><span><i class="lg-done"></i>Done</span><span><i class="lg-shrine"></i>Prayer point</span>
     </div>
   </div>
 
