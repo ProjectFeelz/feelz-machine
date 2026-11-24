@@ -427,10 +427,12 @@ function moveWithCollision(pos, dx, dz, r, isKoda = false) {
   pos.z = clamp(pos.z, -ROAD + 1, WORLD_H + ROAD - 1);
 }
 // Eyes see over low obstacles; feet don't walk through them (`walking`).
-function sightClear(ax, az, bx, bz, walking = false) {
+// `minTop`: how tall something must be to hide what's behind it. A crouching Koda hides
+// behind a crate; standing up, only something chest-high or taller hides him.
+function sightClear(ax, az, bx, bz, walking = false, minTop = 1.6) {
   const dx = bx - ax, dz = bz - az;
   for (const b of blockers) {
-    if (!walking && (b.mud || b.top < 1.6)) continue;   // eyes see over low things and mud
+    if (!walking && (b.mud || b.top < minTop)) continue;   // eyes see over low things and mud
     let t0 = 0, t1 = 1;
     for (const [p, d, mn, mx] of [[ax, dx, b.minX, b.maxX], [az, dz, b.minZ, b.maxZ]]) {
       if (Math.abs(d) < 1e-6) { if (p < mn || p > mx) { t0 = 2; break; } continue; }
@@ -604,6 +606,9 @@ class Actor {
     const a = this.clips[name];
     if (!a) return 0;
     if (this.current === a && !once) { a.timeScale = speed; return a.getClip().duration; }
+    // Looping moves don't swap back and forth faster than this: that flicker reads as a glitch.
+    if (!once && this.current && this.held < 0.22 && this.current.loop !== THREE.LoopOnce) return a.getClip().duration;
+    this.held = 0;
     a.reset();
     a.timeScale = speed;
     a.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity);
@@ -617,6 +622,7 @@ class Actor {
   face(yaw, t) { this.yaw = angleLerp(this.yaw, yaw, t); this.root.rotation.y = this.yaw; }
   faceTo(x, z, t = 1) { this.face(Math.atan2(x - this.pos.x, z - this.pos.z), t); }
   update(dt) {
+    this.held = (this.held || 0) + dt;
     restoreRest(this.model);
     this.mixer.update(dt);
     const name = this.current ? this.current.getClip().name : "";
@@ -1242,7 +1248,7 @@ function updateDrones(dt, now) {
       d.spotted = 2; d.meter = 0;
       popText("SPOTTED", "bad");
       // The drone calls the nearest guards to where it saw him.
-      const near = enemies.filter(e => e.state !== "ko").sort((a, b) => dist2(a.a.pos, koda.pos) - dist2(b.a.pos, koda.pos)).slice(0, 2);
+      const near = enemies.filter(e => e.state !== "ko" && dist2(e.a.pos, koda.pos) < 20).sort((a, b) => dist2(a.a.pos, koda.pos) - dist2(b.a.pos, koda.pos)).slice(0, 2);
       for (const e of near) { e.lastSeen.copy(koda.pos); alertEnemy(e); e.searchT = 6; }
       if (!near.length) seenIn(d.qd);
     }
@@ -2105,6 +2111,17 @@ function updateKoda(dt) {
     koda.play(sneaking ? "crouch_walk" : sprint || boost.on ? "sprint" : "run", { speed: boost.on ? 1.4 : 1 });
   } else koda.play(sneaking ? "crouch_idle" : "idle");
   koda.moving = speed > 0; koda.sprinting = sprint || boost.on; koda.sneaking = sneaking;
+  // Crouched beside a crate, wall or dumpster: he presses his back to it and is much harder to see.
+  koda.inCover = null;
+  if (sneaking && koda.pos.y < 0.3) {
+    for (const b of blockers) {
+      if (b.mud || b.top < 0.75) continue;
+      const cx = clamp(koda.pos.x, b.minX, b.maxX), cz = clamp(koda.pos.z, b.minZ, b.maxZ);
+      const dd = Math.hypot(koda.pos.x - cx, koda.pos.z - cz);
+      if (dd < 0.75) { koda.inCover = b; if (!speed && dd > 0.01) koda.face(Math.atan2(koda.pos.x - cx, koda.pos.z - cz), Math.min(1, dt * 8)); break; }
+    }
+  }
+  $("cover").classList.toggle("show", !!koda.inCover);
   koda.update(dt);
   settle();
 }
@@ -2302,10 +2319,12 @@ function updateEnemies(dt) {
     const f = forward(a), dx = koda.pos.x - a.pos.x, dz = koda.pos.z - a.pos.z;
     // Under a roof or sneaking: much harder to spot. Up on a rooftop: guards look along the street, not up.
     const covered = underRoof(koda.pos.x, koda.pos.z);
-    const range = (koda.sneaking ? 4 : 7.5) * (covered ? 0.5 : 1) * (koda.pos.y > 1.5 ? 0.6 : 1);
+    const range = (koda.sneaking ? 4 : 7.5) * (covered ? 0.5 : 1) * (koda.pos.y > 1.5 ? 0.6 : 1) * (koda.inCover ? 0.6 : 1);
     const inCone = d < range && (dx * f.x + dz * f.y) / (d || 1) > 0.55;
     const heard = (koda.sprinting || air) && d < 4;
-    const sees = (inCone || heard || d < 1.3) && sightClear(a.pos.x, a.pos.z, koda.pos.x, koda.pos.z);
+    // Crouched, anything waist-high hides him; standing, it has to be chest-high.
+    const sees = (inCone || heard || d < 1.3) && sightClear(a.pos.x, a.pos.z, koda.pos.x, koda.pos.z, false, koda.sneaking ? 0.75 : 1.35);
+    e.sees = sees;
 
     if (e.state !== "alert") {
       if (sees) {
@@ -2333,14 +2352,17 @@ function updateEnemies(dt) {
     if (e.searchT <= 0) { e.state = "suspicious"; e.meter = 0.6; a.play("walk"); continue; }
     // Mid-swing or mid-shout: plant the feet and keep facing him.
     if ((e.holdT = Math.max(0, (e.holdT || 0) - dt)) > 0) { a.face(Math.atan2(dx, dz), Math.min(1, dt * 10)); continue; }
-    if (d > 1.7) {
+    // In reach from 1.6 m, out of reach past 2.1 m: no flicking between chasing and squaring up.
+    e.inReach = e.inReach ? d < 2.1 : d < 1.6;
+    if (!e.inReach) {
       if (steer(e, e.lastSeen.x, e.lastSeen.z, 5.2, dt, 8)) a.play("run");
       else { a.play(a.has("fight_idle") ? "fight_idle" : "walk"); a.face(Math.atan2(dx, dz), Math.min(1, dt * 8)); }
       continue;
     }
     // In range: always face him, hold contact distance.
     a.face(Math.atan2(dx, dz), Math.min(1, dt * 12));
-    const closing = d > CONTACT + 0.1;
+    e.closing = e.closing ? d > CONTACT + 0.05 : d > CONTACT + 0.3;
+    const closing = e.closing;
     if (closing) moveWithCollision(a.pos, dx / d * 2.5 * dt, dz / d * 2.5 * dt, 0.45);
     if (e.cool <= 0 && swingGap > 0) e.cool = 0.25;
     if (e.cool > 0) { a.play(closing ? "walk" : a.has("fight_idle") ? "fight_idle" : "walk"); continue; }
@@ -2371,6 +2393,7 @@ function updateEnemies(dt) {
     }
   }
   drawEdge();
+  drawDanger();
   const al = $("alert");
   al.className = "alert" + (anySeen ? " seen" : anySus ? " sus" : "");
   al.textContent = anySeen ? "SEEN" : anySus ? "?" : "";
@@ -2401,6 +2424,42 @@ function drawEdge() {
     if (el.dataset.red !== String(red)) { el.dataset.red = String(red); el.classList.toggle("red", red); }
   }
 }
+// Edges of the screen glow yellow when a guard is getting suspicious and red when one
+// is onto you, and an arc on the edge points to where each one is coming from.
+const dangerCv = $("danger"), dangerCx = dangerCv.getContext("2d");
+const dV = new THREE.Vector3();
+function drawDanger() {
+  const W = innerWidth, H = innerHeight;
+  if (dangerCv.width !== W || dangerCv.height !== H) { dangerCv.width = W; dangerCv.height = H; }
+  dangerCx.clearRect(0, 0, W, H);
+  let level = 0, red = false;
+  for (const e of enemies) {
+    if (e.state === "ko") continue;
+    const d = dist2(e.a.pos, koda.pos);
+    const alerted = e.state === "alert";
+    if (!alerted && e.meter < 0.08) continue;
+    if (d > 26) continue;
+    const near = clamp(1 - d / 26, 0, 1);
+    const k = alerted ? 0.45 + near * 0.55 : Math.min(1, e.meter) * (0.4 + near * 0.6);
+    level = Math.max(level, k); if (alerted) red = true;
+    // Where he is, as seen on screen, pushed out to the edge.
+    dV.set(e.a.pos.x, 1, e.a.pos.z).project(camera);
+    let sx = dV.x, sy = -dV.y; if (dV.z > 1) { sx = -sx; sy = -sy; }
+    const ang = Math.atan2(sy * H, sx * W);
+    const onScreen = dV.z < 1 && Math.abs(dV.x) < 0.9 && Math.abs(dV.y) < 0.85;
+    const rx = W / 2 - 14, ry = H / 2 - 14;
+    dangerCx.beginPath();
+    dangerCx.ellipse(W / 2, H / 2, rx, ry, 0, ang - 0.28, ang + 0.28);
+    dangerCx.lineWidth = 7 + near * 9;
+    dangerCx.lineCap = "round";
+    dangerCx.strokeStyle = alerted ? `rgba(255,70,50,${(0.35 + k * 0.65).toFixed(2)})` : `rgba(242,181,68,${(0.3 + k * 0.6).toFixed(2)})`;
+    dangerCx.shadowColor = alerted ? "rgba(255,40,30,.9)" : "rgba(242,181,68,.9)"; dangerCx.shadowBlur = 18;
+    if (!onScreen || d > 4) dangerCx.stroke();
+  }
+  const edge = $("edge");
+  edge.style.opacity = level.toFixed(2);
+  edge.classList.toggle("red", red);
+}
 function updateNpcs(dt) {
   for (const n of npcs) {
     const d = dist2(koda.pos, n.a.pos);
@@ -2415,7 +2474,7 @@ function updateNpcs(dt) {
 const pathLine = (() => {
   const geo = new THREE.BufferGeometry();
   const mat = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, side: THREE.DoubleSide, side: THREE.DoubleSide,
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
     uniforms: { uPhase: { value: 0 }, uLen: { value: 1 }, uColor: { value: new THREE.Color(0xffd27a) } },
     vertexShader: "attribute float along; varying float vA; void main() { vA = along; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
     fragmentShader: `uniform float uPhase; uniform float uLen; uniform vec3 uColor; varying float vA;
