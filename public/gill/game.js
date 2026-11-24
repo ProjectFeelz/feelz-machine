@@ -647,6 +647,7 @@ class Actor {
     for (const c of gltf.animations) { stripRootMotion(c, rest); this.clips[c.name] = this.mixer.clipAction(c); }
     this.current = null;
     this.model = model;
+    this.baseY = model.position.y;
     this.pos = this.root.position;
     this.yaw = 0;
   }
@@ -1923,6 +1924,9 @@ function refreshObjective() {
 
 /* ---------- mission looks: the wobble, the grey, the water ---------- */
 const themeState = { roll: 0 };
+let waterSurface = null;
+const WATER_Y = 1.05;
+const swimming = () => !!(mission && mission.def.theme === "water" && koda && koda.has("swim") && koda.pos.y < 0.6);
 function applyTheme(theme, dt, reset) {
   const cv = renderer.domElement;
   if (reset) {
@@ -1930,6 +1934,7 @@ function applyTheme(theme, dt, reset) {
     scene.fog.color.setHex(0x15121c); scene.background.setHex(0x15121c); scene.fog.near = 28; scene.fog.far = 70;
     hemi.intensity = 0.7; sun.intensity = 2.6;
     $("tint").className = "tint";
+    if (waterSurface) waterSurface.visible = false;
     if (!theme) return;
   }
   const t = mission ? mission.t : 0;
@@ -1945,6 +1950,15 @@ function applyTheme(theme, dt, reset) {
     cv.style.filter = `grayscale(${Math.max(0, 1 - done / mission.quads.length)})`;
   } else if (theme === "water") {
     $("tint").className = "tint water";
+    // The streets are flooded: a dark surface he swims through.
+    if (!waterSurface) {
+      waterSurface = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_W + 120, WORLD_H + 120),
+        new THREE.MeshStandardMaterial({ color: 0x0b3a4a, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.62, depthWrite: false }));
+      waterSurface.rotation.x = -Math.PI / 2; waterSurface.position.set(WORLD_W / 2, WATER_Y, WORLD_H / 2); waterSurface.renderOrder = 2;
+      scene.add(waterSurface);
+    }
+    waterSurface.visible = true;
+    waterSurface.material.opacity = 0.62 + Math.sin(t * 1.3) * 0.04;
     // Thinking of You: dark water that gets darker as the song goes on.
     const p = mission && mission.limit ? clamp(mission.t / mission.limit, 0, 1) : 0;
     scene.fog.color.setRGB(0.02, 0.12 - p * 0.08, 0.16 - p * 0.1); scene.background.copy(scene.fog.color);
@@ -2178,8 +2192,13 @@ function updateKoda(dt) {
   if (speed > 0) {
     moveWithCollision(koda.pos, input.x * speed * dt, input.z * speed * dt, 0.45, true);
     koda.face(want, Math.min(1, dt * 14));
-    koda.play(sneaking ? "crouch_walk" : sprint || boost.on ? "sprint" : "run", { speed: boost.on ? 1.4 : 1 });
-  } else koda.play(sneaking ? "crouch_idle" : koda.has("fight_idle") && fightFoe() ? "fight_idle" : "idle");
+    if (swimming()) koda.play("swim", { speed: sprint ? 1.35 : 1 });
+    else koda.play(sneaking ? "crouch_walk" : sprint || boost.on ? "sprint" : "run", { speed: boost.on ? 1.4 : 1 });
+  } else if (swimming()) koda.play(koda.has("tread") ? "tread" : "swim");
+  else koda.play(sneaking ? (koda.inCover && koda.has("corner") ? "corner" : "crouch_idle") : koda.has("fight_idle") && fightFoe() ? "fight_idle" : "idle");
+  // In the water his body floats up to the surface, head above it.
+  const lift = swimming() ? (speed > 0 ? WATER_Y - 0.8 : WATER_Y - 1.45) : 0;
+  koda.model.position.y += (koda.baseY + lift - koda.model.position.y) * Math.min(1, dt * 6);
   koda.moving = speed > 0; koda.sprinting = sprint || boost.on; koda.sneaking = sneaking;
   // Crouched beside a crate, wall or dumpster: he presses his back to it and is much harder to see.
   koda.inCover = null;
