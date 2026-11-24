@@ -275,3 +275,18 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .hitside { position: fixed; inset: 0; pointer-events: none; opacity: 0; }
 .hitside.on { animation: hitside .45s ease-out; }
 @keyframes hitside { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+/* The city's time of day, beside the mission timer. */
+.dayclock { font: 700 12px/1 Inter, system-ui, sans-serif; color: #ffd27a; background: rgba(12,10,18,.72); border: 1px solid rgba(255,255,255,.12); border-radius: 999px; padding: 6px 9px; font-variant-numeric: tabular-nums; }
+.dayclock::before { content: "☀ "; }
+.dayclock[data-night="1"] { color: #b9c8ff; }
+.dayclock[data-night="1"]::before { content: "☾ "; }
+
+/* Phones play in landscape only: held upright, the game waits behind this. */
+.turn { display: none; position: fixed; inset: 0; z-index: 999; background: #0b0a10; color: #ece8f4; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 24px; font-family: Inter, system-ui, sans-serif; }
+.turn p { font-size: 18px; font-weight: 700; margin: 0; }
+.turn small { color: #a59fb3; }
+.turn-phone { width: 46px; height: 80px; border: 3px solid #ffd27a; border-radius: 10px; animation: turnphone 2.2s ease-in-out infinite; }
+@keyframes turnphone { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+@media (pointer: coarse) and (orientation: portrait) { .turn { display: flex; } }
+@media (prefers-reduced-motion: reduce) { .turn-phone { animation: none; transform: rotate(-90deg); } }

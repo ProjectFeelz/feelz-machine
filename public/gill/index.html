@@ -25,7 +25,8 @@
     <div class="hud-objective" id="objective"></div>
     <div class="hud-right">
       <div class="hud-row">
-        <div class="timer" id="timer">0:00</div>
+        <div class="timer" id="timer" title="Time on this mission">0:00</div>
+        <div class="dayclock" id="dayClock" title="Time of day in the city">18:00</div>
         <div class="beat" id="beat" aria-hidden="true"></div>
         <button class="icon-btn" id="pauseBtn" aria-label="Pause">II</button>
       </div>
@@ -61,7 +62,7 @@
       <p class="kicker">A FEELZ MACHINE GAME · BIG FEELZ</p>
       <h1>G.I.L.L.</h1>
       <p class="sub">Good Intentions Last Longest</p>
-      <p class="blurb">Zora was taken when the Veil fell. Every mission is a song. Each lit quadrant of the city holds one part of it: unlock them in the order you choose and you mix the track. Finish the album and bring her home.</p>
+      <p class="blurb">Zora was taken when the Veil fell. Every mission is a song. Each lit place in the city holds one part of it: unlock them in the order you choose and you mix the track, at your own pace. Finish the album and bring her home.</p>
       <div class="title-buttons">
         <button class="primary" id="playBtn">Play</button>
       </div>
@@ -126,6 +127,8 @@
     </div>
   </div>
 
+  <div class="turn" id="turn" aria-live="polite"><div class="turn-phone" aria-hidden="true"></div><p>Turn your phone sideways to play.</p><small>G.I.L.L. plays in landscape.</small></div>
+  <script src="world.js"></script>
   <script src="story.js"></script>
   <script type="module" src="game.js"></script>
 </body>

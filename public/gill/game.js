@@ -21,15 +21,6 @@ const MODELS = "../run/assets/models/";
 const $ = id => document.getElementById(id);
 const phone = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
 
-/* ---------- city layout ---------- */
-const ZONE = 56;           // metres across one quadrant
-const ROAD = 10;           // the street between quadrants
-const COLS = 4, ROWS = 3;
-const zoneOrigin = z => new THREE.Vector2(z.grid[0] * (ZONE + ROAD), z.grid[1] * (ZONE + ROAD));
-const zoneCenter = z => zoneOrigin(z).addScalar(ZONE / 2);
-const WORLD_W = COLS * (ZONE + ROAD) - ROAD, WORLD_H = ROWS * (ZONE + ROAD) - ROAD;
-const Q = id => S.quadrants.find(q => q.id === id);
-
 const BUILDINGS = ["tenement", "hostel", "kodas-building", "lc-b1", "lc-b2", "lc-b4", "lc-b5", "lc-b6", "lc-b7",
   "mc-b2", "mc-b4", "mc-b6", "mc-b7", "mc-b8", "rc-b1", "rc-b3", "rc-b4", "rc-b5", "uc-b1", "uc-b2", "uc-b3", "uc-b4",
   "de-b1", "de-b3", "de-b4"];
@@ -44,9 +35,94 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 function angleLerp(a, b, t) { let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI; if (d < -Math.PI) d += Math.PI * 2; return a + d * t; }
 const dist2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 function zoneAt(x, z) {
-  for (const q of S.quadrants) { const o = zoneOrigin(q); if (x >= o.x && x <= o.x + ZONE && z >= o.y && z <= o.y + ZONE) return q; }
+  for (const q of S.quadrants) if (x >= q.x0 && x <= q.x0 + q.w && z >= q.z0 && z <= q.z0 + q.d) return q;
   return null;
 }
+
+/* ---------- the map ----------
+   The City of Good Intentions, laid out in world.js (GILL_WORLD): named places (the
+   zones missions happen in), roads, the mud river and its bridges. The land rises and
+   falls between places; inside a place the ground is flat at its own height. */
+const WD = window.GILL_WORLD;
+const WORLD_W = WD.size[0], WORLD_H = WD.size[1];
+const ROAD = 0;
+for (const z of WD.zones) {
+  const q = S.quadrants.find(k => k.id === z.id);
+  if (q) Object.assign(q, { x0: z.x, z0: z.z, w: z.w, d: z.d, elev: z.elev, district: z.district, region: z.region, about: z.about, name: z.name });
+}
+const zoneOrigin = q => new THREE.Vector2(q.x0, q.z0);
+const zoneCenter = q => new THREE.Vector2(q.x0 + q.w / 2, q.z0 + q.d / 2);
+const Q = id => S.quadrants.find(q => q.id === id);
+const MUD = -999;   // groundAt's answer for open mud
+
+// Land height: flat inside each place, blending smoothly between places over 60 m.
+const TH = { cell: 2, w: 0, h: 0, data: null };
+function terrainRaw(x, z) {
+  let sw = 0, se = 0, mx = 0;
+  for (const q of S.quadrants) {
+    const dx = Math.max(0, q.x0 - x, x - q.x0 - q.w), dz = Math.max(0, q.z0 - z, z - q.z0 - q.d);
+    if (dx === 0 && dz === 0) return q.elev;
+    let w = 1 - Math.hypot(dx, dz) / 60; if (w <= 0) continue; w = w * w * (3 - 2 * w);
+    sw += w; se += w * q.elev; if (w > mx) mx = w;
+  }
+  return se / (sw + 0.15 * (1 - mx) + 1e-6);
+}
+// Borders: every place is ringed by rocky ridges (sand dunes out east), so you come and go
+// by its roads. Where the mud river runs past, the river is the border instead.
+const RG = { data: null };
+function ridgeRaw(x, z) {
+  if (inZoneRaw(x, z)) return 0;
+  let h = 0;
+  for (const q of S.quadrants) {
+    const d = Math.hypot(Math.max(0, q.x0 - x, x - q.x0 - q.w), Math.max(0, q.z0 - z, z - q.z0 - q.d));
+    if (d < 3 || d > 16) continue;
+    const t = (d - 3) / 13, peak = 6.5 + 2.5 * Math.sin(x * 0.07 + z * 0.05) + 1.5 * Math.sin(x * 0.19 - z * 0.13);
+    h = Math.max(h, peak * Math.pow(Math.sin(Math.PI * t), 0.6));
+  }
+  if (!h) return 0;
+  // Gaps where the roads come through, and none along the river.
+  const r = roadDistRaw(x, z), gate = clamp((r.d - r.half - 3) / 6, 0, 1);
+  let river = 1e9; for (const [x0, z0, x1, z1] of WD.river) river = Math.min(river, Math.hypot(Math.max(0, x0 - x, x - x1), Math.max(0, z0 - z, z - z1)));
+  const bank = clamp((river - 14) / 10, 0, 1);
+  return h * gate * gate * (3 - 2 * gate) * bank;
+}
+const inZoneRaw = (x, z) => S.quadrants.some(q => x >= q.x0 && x <= q.x0 + q.w && z >= q.z0 && z <= q.z0 + q.d);
+function roadDistRaw(x, z) {
+  let best = 1e9, half = 0;
+  for (const r of WD.roads) for (let k = 0; k + 1 < r.points.length; k++) {
+    const [ax, az] = r.points[k], [bx, bz] = r.points[k + 1];
+    const vx = bx - ax, vz = bz - az, L = vx * vx + vz * vz || 1;
+    const t = clamp(((x - ax) * vx + (z - az) * vz) / L, 0, 1);
+    const d = Math.hypot(x - ax - vx * t, z - az - vz * t);
+    if (d - r.width / 2 < best - half) { best = d; half = r.width / 2; }
+  }
+  return { d: best, half };
+}
+(function bakeTerrain() {
+  TH.w = Math.ceil(WORLD_W / TH.cell) + 2; TH.h = Math.ceil(WORLD_H / TH.cell) + 2;
+  TH.data = new Float32Array(TH.w * TH.h); RG.data = new Float32Array(TH.w * TH.h);
+  for (let j = 0; j < TH.h; j++) for (let i = 0; i < TH.w; i++) {
+    const x = i * TH.cell, z = j * TH.cell, rg = ridgeRaw(x, z);
+    RG.data[j * TH.w + i] = rg; TH.data[j * TH.w + i] = terrainRaw(x, z) + rg;
+  }
+})();
+// How high the border ridge rises here (0 off the ridges).
+function ridgeAt(x, z) {
+  const fx = clamp(x / TH.cell, 0, TH.w - 1.001), fz = clamp(z / TH.cell, 0, TH.h - 1.001);
+  const i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j, D = RG.data, W = TH.w;
+  return (D[j * W + i] * (1 - u) + D[j * W + i + 1] * u) * (1 - v) + (D[(j + 1) * W + i] * (1 - u) + D[(j + 1) * W + i + 1] * u) * v;
+}
+const RIDGE = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, top: 999, base: 0, walk: false, ridge: true, mats: [] };
+function terrainAt(x, z) {
+  for (const q of S.quadrants) if (x >= q.x0 && x <= q.x0 + q.w && z >= q.z0 && z <= q.z0 + q.d) return q.elev;
+  const fx = clamp(x / TH.cell, 0, TH.w - 1.001), fz = clamp(z / TH.cell, 0, TH.h - 1.001);
+  const i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j, D = TH.data, W = TH.w;
+  return (D[j * W + i] * (1 - u) + D[j * W + i + 1] * u) * (1 - v) + (D[(j + 1) * W + i] * (1 - u) + D[(j + 1) * W + i + 1] * u) * v;
+}
+const roadDist = roadDistRaw;
+const onRoad = (x, z, pad = 0) => { const r = roadDist(x, z); return r.d < r.half + pad; };
+const onRiver = (x, z, pad = 0) => WD.river.some(([x0, z0, x1, z1]) => x > x0 - pad && x < x1 + pad && z > z0 - pad && z < z1 + pad);
+const inZone = (x, z, pad = 0) => S.quadrants.find(q => x > q.x0 - pad && x < q.x0 + q.w + pad && z > q.z0 - pad && z < q.z0 + q.d + pad) || null;
 
 /* ---------- loading ---------- */
 const loader = new GLTFLoader();
@@ -168,59 +244,139 @@ const DISTRICT_BUILDINGS = {
   rc: ["rc-b1", "rc-b3", "rc-b4", "rc-b5"],
   de: ["de-b1", "de-b3", "de-b4"]
 };
-const pads = {};   // quadrant id -> its ground material (lit up when it is part of the mission)
-function buildGround() {
-  const asphalt = groundTexture("asphalt");
-  asphalt.repeat.set((WORLD_W + 80) / 8, (WORLD_H + 80) / 8);
-  const road = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_W + 80, WORLD_H + 80),
-    new THREE.MeshStandardMaterial({ color: 0x8a8790, map: asphalt, roughness: 0.92 }));
-  road.rotation.x = -Math.PI / 2;
-  road.position.set(WORLD_W / 2, -0.01, WORLD_H / 2);
-  road.receiveShadow = true;
-  scene.add(road);
-  // The desert starts at the East Gate: sand on its streets and out past the city's edge.
-  for (const q of S.quadrants) {
-    if (districtOf(q) !== "de") continue;
-    const o = zoneOrigin(q);
-    const sand = groundTexture("sandroad"); sand.repeat.set((ZONE + ROAD * 2 + 60) / 10, (ZONE + ROAD * 2) / 10);
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(ZONE + ROAD * 2 + 60, ZONE + ROAD * 2), new THREE.MeshStandardMaterial({ map: sand, roughness: 1 }));
-    m.rotation.x = -Math.PI / 2; m.position.set(o.x + ZONE / 2 + 30, -0.005, o.y + ZONE / 2); m.receiveShadow = true;
-    scene.add(m);
+const pads = {};   // place id -> its ground material (lit up when it is part of the mission)
+const DCOLOUR = { lc: 0x8c7556, mc: 0x8d9096, uc: 0x9a90a6, rc: 0x6f8a58, de: 0xcfb07a };
+const lamps = [];  // street lamps: lit at night
+const lampBulbMat = new THREE.MeshStandardMaterial({ color: 0xffd28a, emissive: 0xffb04a, emissiveIntensity: 0.2 });
+function ribbon(points, width, y, mat, step = 3) {
+  // A strip laid over the land along a path of points.
+  const pos = [], uv = [], idx = [];
+  let run = 0;
+  for (let k = 0; k + 1 < points.length; k++) {
+    const [ax, az] = points[k], [bx, bz] = points[k + 1];
+    const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / step));
+    const nx = -(bz - az) / L, nz = (bx - ax) / L;
+    for (let s = 0; s <= n; s++) {
+      if (k > 0 && s === 0) continue;
+      const t = s / n, cx = ax + (bx - ax) * t, cz = az + (bz - az) * t;
+      for (const side of [-1, 1]) {
+        const px = cx + nx * width / 2 * side, pz = cz + nz * width / 2 * side;
+        pos.push(px, terrainAt(px, pz) + y, pz);
+        uv.push(side < 0 ? 0 : 1, (run + L * t) / width);
+      }
+    }
+    run += L;
   }
+  const rows = pos.length / 6;
+  for (let r = 0; r + 1 < rows; r++) { const a = r * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, mat); m.receiveShadow = true; scene.add(m);
+  return m;
+}
+function buildGround() {
+  // The land: one sheet that rises and falls with the places on it.
+  const pad = 120, W = WORLD_W + pad * 2, H = WORLD_H + pad * 2, sx = Math.round(W / 4), sz = Math.round(H / 4);
+  const geo = new THREE.PlaneGeometry(W, H, sx, sz); geo.rotateX(-Math.PI / 2);
+  const p = geo.attributes.position, col = [];
+  const cDirt = new THREE.Color(0x7d6f58), cSand = new THREE.Color(0xd8b980), cRock = new THREE.Color(0x6a625a), cDune = new THREE.Color(0xd9b87c), tmp = new THREE.Color();
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i) + WORLD_W / 2, z = p.getZ(i) + WORLD_H / 2;
+    p.setY(i, terrainAt(clamp(x, 0, WORLD_W), clamp(z, 0, WORLD_H)) - 0.05);
+    // Colour by the nearest place's district; sand out past the East Gate.
+    let best = null, bd = 1e9;
+    for (const q of S.quadrants) { const d = Math.hypot(Math.max(0, q.x0 - x, x - q.x0 - q.w), Math.max(0, q.z0 - z, z - q.z0 - q.d)); if (d < bd) { bd = d; best = q; } }
+    tmp.set(DCOLOUR[best.district] || 0x8c8070).lerp(cDirt, clamp(bd / 90, 0, 0.7));
+    if (x > 840) tmp.lerp(cSand, clamp((x - 840) / 40, 0, 1));
+    const rg = ridgeAt(clamp(x, 0, WORLD_W), clamp(z, 0, WORLD_H));
+    if (rg > 0.3) tmp.lerp(best.district === "de" || x > 740 ? cDune : cRock, clamp(rg / 3, 0, 0.9));
+    col.push(tmp.r, tmp.g, tmp.b);
+  }
+  geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); geo.computeVertexNormals();
+  const dirt = groundTexture("lc"); dirt.repeat.set(W / 10, H / 10);
+  const land = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: dirt, vertexColors: true, roughness: 0.95 }));
+  land.position.set(WORLD_W / 2, 0, WORLD_H / 2); land.receiveShadow = true; scene.add(land);
+  // Each place has its own paving, flat at its height.
   for (const q of S.quadrants) {
-    const o = zoneOrigin(q);
-    const kind = districtOf(q);
-    const paving = groundTexture(kind);
+    const kind = districtOf(q), paving = groundTexture(kind);
     const tileM = { lc: 8, mc: 8, uc: 5, rc: 9, de: 10 }[kind] || 6;
-    paving.repeat.set(ZONE / tileM, ZONE / tileM);
+    paving.repeat.set(q.w / tileM, q.d / tileM);
     const tint = new THREE.Color(0xffffff).multiplyScalar(kind === "uc" ? 0.78 : kind === "de" ? 0.9 : 0.95);
     const mat = new THREE.MeshStandardMaterial({ color: tint, map: paving, roughness: 0.85, emissive: 0x000000 });
-    const pad = new THREE.Mesh(new THREE.PlaneGeometry(ZONE, ZONE), mat);
-    pad.rotation.x = -Math.PI / 2;
-    pad.position.set(o.x + ZONE / 2, 0, o.y + ZONE / 2);
-    pad.receiveShadow = true;
-    scene.add(pad);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(q.w, q.d), mat);
+    m.rotation.x = -Math.PI / 2; m.position.set(q.x0 + q.w / 2, q.elev + 0.02, q.z0 + q.d / 2); m.receiveShadow = true;
+    scene.add(m);
     pads[q.id] = { mat, base: tint.clone() };
   }
+  // Roads, with a dashed centre line.
+  const asphalt = groundTexture("asphalt"); asphalt.repeat.set(1, 1);
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0x8a8790, map: asphalt, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2 });
+  const dash = (() => { const c = document.createElement("canvas"); c.width = 8; c.height = 64; const g = c.getContext("2d"); g.fillStyle = "#f2d27a"; g.fillRect(2, 0, 4, 34); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
+  const dashMat = new THREE.MeshBasicMaterial({ map: dash, transparent: true, polygonOffset: true, polygonOffsetFactor: -4, depthWrite: false });
+  for (const r of WD.roads) {
+    ribbon(r.points, r.width, 0.06, roadMat);
+    const dm = ribbon(r.points, 0.25, 0.08, dashMat, 3); dm.receiveShadow = false;
+    dm.geometry.attributes.uv.array.forEach((v, i, a) => { if (i % 2) a[i] = v * 0.25 / 6; });
+  }
+  // Lamps along every road, lit at night.
   const poleMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1f, metalness: 0.6, roughness: 0.4 });
-  const bulbMat = new THREE.MeshStandardMaterial({ color: 0xffd28a, emissive: 0xffb04a, emissiveIntensity: 2.2 });
-  const poleGeo = new THREE.CylinderGeometry(0.08, 0.12, 4.2, 8), bulbGeo = new THREE.SphereGeometry(0.22, 10, 8);
-  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
-    const x = c * (ZONE + ROAD) - ROAD / 2, z = r * (ZONE + ROAD) + ZONE / 2;
-    for (const [px, pz] of [[x, z - 12], [x, z + 12]]) {
-      if (px < 0 || RIVERS.some(([x0, x1, z0, z1]) => px > x0 - 0.5 && px < x1 + 0.5 && pz > z0 - 0.5 && pz < z1 + 0.5)) continue;
-      const pole = new THREE.Mesh(poleGeo, poleMat); pole.position.set(px, 2.1, pz); pole.castShadow = true;
-      const bulb = new THREE.Mesh(bulbGeo, bulbMat); bulb.position.set(px, 4.3, pz);
-      scene.add(pole, bulb);
+  const poleGeo = new THREE.CylinderGeometry(0.08, 0.12, 4.2, 8), bulbGeo = new THREE.SphereGeometry(0.24, 10, 8);
+  for (const r of WD.roads) for (let k = 0; k + 1 < r.points.length; k++) {
+    const [ax, az] = r.points[k], [bx, bz] = r.points[k + 1], L = Math.hypot(bx - ax, bz - az);
+    const nx = -(bz - az) / L, nz = (bx - ax) / L;
+    for (let s = 14, side = 1; s < L - 4; s += 30, side = -side) {
+      const px = ax + (bx - ax) * s / L + nx * (r.width / 2 + 1.2) * side, pz = az + (bz - az) * s / L + nz * (r.width / 2 + 1.2) * side;
+      if (onRiver(px, pz, 1) || ridgeAt(px, pz) > 0.3) continue;
+      const y = terrainAt(px, pz);
+      const pole = new THREE.Mesh(poleGeo, poleMat); pole.position.set(px, y + 2.1, pz); pole.castShadow = true;
+      const bulb = new THREE.Mesh(bulbGeo, lampBulbMat); bulb.position.set(px, y + 4.3, pz);
+      scene.add(pole, bulb); lamps.push({ x: px, y: y + 4.3, z: pz });
     }
   }
 }
 
-/* ---------- buildings (static, with collision boxes) ---------- */
-const blockers = [];
+/* ---------- buildings (static, with collision boxes) ----------
+   Every solid thing is a box with a floor (`base`) and a `top`. They are kept in a
+   grid of 8 m cells so a lookup only checks what is nearby. */
+const BCELL = 8, bgrid = new Map();
+let bstamp = 1;
+const bkey = (i, j) => (i + 1000) * 4096 + (j + 1000);
+function bindex(b) {
+  if (b.base === undefined) b.base = terrainAt((b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2);
+  b._k = [];
+  for (let i = Math.floor(b.minX / BCELL); i <= Math.floor(b.maxX / BCELL); i++)
+    for (let j = Math.floor(b.minZ / BCELL); j <= Math.floor(b.maxZ / BCELL); j++) {
+      const k = bkey(i, j); let c = bgrid.get(k); if (!c) bgrid.set(k, c = []); c.push(b); b._k.push(k);
+    }
+}
+function bunindex(b) {
+  for (const k of b._k || []) { const c = bgrid.get(k); if (!c) continue; const i = c.indexOf(b); if (i >= 0) c.splice(i, 1); }
+  b._k = [];
+}
+class BlockList extends Array {
+  static get [Symbol.species]() { return Array; }
+  push(...bs) { for (const b of bs) bindex(b); return super.push(...bs); }
+  splice(start, n, ...add) { const out = super.splice(start, n, ...add); for (const b of out) bunindex(b); for (const b of add) bindex(b); return out; }
+}
+const blockers = new BlockList();
+// Everything whose box overlaps the rectangle.
+function inBox(minX, minZ, maxX, maxZ) {
+  const out = [], s = ++bstamp;
+  for (let i = Math.floor(minX / BCELL); i <= Math.floor(maxX / BCELL); i++)
+    for (let j = Math.floor(minZ / BCELL); j <= Math.floor(maxZ / BCELL); j++) {
+      const c = bgrid.get(bkey(i, j)); if (!c) continue;
+      for (const b of c) if (b._s !== s) { b._s = s; out.push(b); }
+    }
+  return out;
+}
+const nearBlocks = (x, z, r) => inBox(x - r, z - r, x + r, z + r);
+
 // Square to the streets only, so a building's collision box is its real footprint.
-// `maxFoot` caps how wide it can be, so ways into each quadrant stay open.
+// `maxFoot` caps how wide it can be. It sits on the land at its lowest corner.
 async function placeBuilding(name, x, z, yaw, height, maxFoot = 13) {
+  if (ridgeAt(x, z) > 0.3 || ridgeAt(x - 5, z - 5) > 0.6 || ridgeAt(x + 5, z + 5) > 0.6 || ridgeAt(x - 5, z + 5) > 0.6 || ridgeAt(x + 5, z - 5) > 0.6) return;
   const src = await staticModel(name);
   if (!src) return;
   const m = src.clone(true);
@@ -231,7 +387,9 @@ async function placeBuilding(name, x, z, yaw, height, maxFoot = 13) {
   m.scale.setScalar(k);
   const box2 = new THREE.Box3().setFromObject(m);
   const c = box2.getCenter(new THREE.Vector3());
-  m.position.set(x - c.x, -box2.min.y, z - c.z);
+  const hx = (box2.max.x - box2.min.x) / 2, hz = (box2.max.z - box2.min.z) / 2;
+  const base = Math.min(terrainAt(x - hx, z - hz), terrainAt(x + hx, z - hz), terrainAt(x - hx, z + hz), terrainAt(x + hx, z + hz)) - 0.15;
+  m.position.set(x - c.x, base - box2.min.y, z - c.z);
   const mats = [];
   m.traverse(o => {
     if (o.isMesh) {
@@ -242,25 +400,44 @@ async function placeBuilding(name, x, z, yaw, height, maxFoot = 13) {
   });
   scene.add(m);
   const b = new THREE.Box3().setFromObject(m);
-  blockers.push({ minX: b.min.x, maxX: b.max.x, minZ: b.min.z, maxZ: b.max.z, top: b.max.y, mesh: m, mats, faded: false });
+  blockers.push({ minX: b.min.x, maxX: b.max.x, minZ: b.min.z, maxZ: b.max.z, top: b.max.y, base, mesh: m, mats, faded: false, building: name });
 }
-
 async function buildCity(onProgress) {
   const jobs = [];
   for (const q of S.quadrants) {
     const r = rng(q.id.charCodeAt(1) * 977 + q.id.charCodeAt(2) * 131);
-    const o = zoneOrigin(q);
     const set = DISTRICT_BUILDINGS[districtOf(q)] || BUILDINGS;
     const pick = () => set[Math.floor(r() * set.length)];
-    const inset = 7.5, a = ZONE / 2;
+    const inset = 8;
+    // Buildings around the edges of each place, facing in, with gaps for the roads.
+    const edge = (len) => { const out = []; for (let s = 12; s < len - 10; s += 21 + r() * 6) out.push(s); return out; };
     const slots = [];
-    for (const off of [-16, 16]) {
-      slots.push([a + off, inset, 0], [a + off, ZONE - inset, Math.PI], [inset, a + off, Math.PI / 2], [ZONE - inset, a + off, -Math.PI / 2]);
+    for (const s of edge(q.w)) slots.push([q.x0 + s, q.z0 + inset, 0], [q.x0 + s, q.z0 + q.d - inset, Math.PI]);
+    for (const s of edge(q.d)) slots.push([q.x0 + inset, q.z0 + s, Math.PI / 2], [q.x0 + q.w - inset, q.z0 + s, -Math.PI / 2]);
+    // A few low buildings for cover further in.
+    for (let i = 0; i < 3; i++) slots.push([q.x0 + 24 + r() * (q.w - 48), q.z0 + 24 + r() * (q.d - 48), Math.floor(r() * 4) * Math.PI / 2, true]);
+    for (const [x, z, yaw, low] of slots) {
+      if (onRoad(x, z, 7)) continue;
+      if (q.id === "q01" && x === slots[0][0] && z === slots[0][1]) { jobs.push(() => placeBuilding("kodas-building", x, z, yaw, 13, 13)); continue; }
+      jobs.push(() => placeBuilding(pick(), x, z, yaw, low ? 4 + r() * 3 : 8 + r() * 7, low ? 7 : 12));
     }
-    slots.push([inset, inset, 0], [ZONE - inset, inset, 0], [inset, ZONE - inset, Math.PI], [ZONE - inset, ZONE - inset, Math.PI]);
-    const cover = [[a - 11, a + 11, Math.floor(r() * 4) * Math.PI / 2], [a + 11, a - 11, Math.floor(r() * 4) * Math.PI / 2]];
-    for (const [sx, sz, yaw] of slots) jobs.push(() => placeBuilding(pick(), o.x + sx, o.y + sz, yaw, 7 + r() * 7, 12));
-    for (const [sx, sz, yaw] of cover) jobs.push(() => placeBuilding(pick(), o.x + sx, o.y + sz, yaw, 4 + r() * 3, 7));
+  }
+  // Houses and shops along the roads between places.
+  const r = rng(4242);
+  for (const road of WD.roads) {
+    if (road.name === "Ring Road") continue;
+    for (let k = 0; k + 1 < road.points.length; k++) {
+      const [ax, az] = road.points[k], [bx, bz] = road.points[k + 1], L = Math.hypot(bx - ax, bz - az);
+      const nx = -(bz - az) / L, nz = (bx - ax) / L;
+      for (let s = 10; s < L - 6; s += 22) for (const side of [-1, 1]) {
+        const x = ax + (bx - ax) * s / L + nx * (road.width / 2 + 9) * side, z = az + (bz - az) * s / L + nz * (road.width / 2 + 9) * side;
+        if (inZone(x, z, 6) || onRiver(x, z, 10)) continue;
+        const near = S.quadrants.reduce((a, q) => Math.hypot(q.x0 + q.w / 2 - x, q.z0 + q.d / 2 - z) < Math.hypot(a.x0 + a.w / 2 - x, a.z0 + a.d / 2 - z) ? q : a);
+        const set = DISTRICT_BUILDINGS[districtOf(near)] || BUILDINGS;
+        const yaw = Math.abs(nx) > Math.abs(nz) ? (side * nx > 0 ? -Math.PI / 2 : Math.PI / 2) : (side * nz > 0 ? Math.PI : 0);
+        jobs.push(() => placeBuilding(set[Math.floor(r() * set.length)], x, z, yaw, 6 + r() * 6, 12));
+      }
+    }
   }
   let done = 0;
   const queue = jobs.slice();
@@ -292,56 +469,69 @@ const PROPS = (() => {
   const wood = new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: 0.85 });
   const metal = new THREE.MeshStandardMaterial({ color: 0x2f5a45, roughness: 0.6, metalness: 0.4 });
   const bench = new THREE.MeshStandardMaterial({ color: 0x5b4a3a, roughness: 0.8 });
+  const bin = new THREE.MeshStandardMaterial({ color: 0x3b4048, roughness: 0.55, metalness: 0.5 });
   return [
     { kind: "barrier", w: 2.6, d: 0.6, h: 0.85, mat: concrete, low: true, weight: 4 },
     { kind: "crate", w: 1.1, d: 1.1, h: 0.95, mat: wood, low: true, weight: 3 },
     { kind: "bench", w: 2.0, d: 0.7, h: 0.6, mat: bench, low: true, weight: 2 },
     { kind: "dumpster", w: 2.2, d: 1.3, h: 1.5, mat: metal, low: false, weight: 2 },
-    { kind: "stack", w: 1.2, d: 1.2, h: 2.0, mat: wood, low: false, weight: 1 }
+    { kind: "stack", w: 1.2, d: 1.2, h: 2.0, mat: wood, low: false, weight: 1 },
+    { kind: "bin", w: 0.7, d: 0.7, h: 1.0, mat: bin, low: true, weight: 2 }
   ];
 })();
+const PROP = kind => PROPS.find(p => p.kind === kind);
+// Things you can search: a part of the song can be hidden inside one.
+const SEARCHABLE = { bin: "the bin", dumpster: "the dumpster", stack: "the stacked crates", crate: "the crate" };
 const propGeo = new THREE.BoxGeometry(1, 1, 1);
 function addProp(type, x, z, rot) {
   const w = rot ? type.d : type.w, d = rot ? type.w : type.d;
-  if (blocked(x, z, Math.max(w, d) / 2 + 1.2)) return false;
+  if (blocked(x, z, Math.max(w, d) / 2 + 1.2) || onRoad(x, z, 0.5) || onRiver(x, z, 1) || ridgeAt(x, z) > 0.2) return null;
+  const base = terrainAt(x, z);
   const m = new THREE.Mesh(propGeo, type.mat);
-  m.scale.set(w, type.h, d); m.position.set(x, type.h / 2, z);
+  m.scale.set(w, type.h, d); m.position.set(x, base + type.h / 2, z);
   m.castShadow = true; m.receiveShadow = true;
   scene.add(m);
-  blockers.push({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, top: type.h, low: type.low, walk: true, mesh: m, mats: [], faded: false, prop: type.kind });
-  return true;
+  const b = { minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, top: base + type.h, base, low: type.low, walk: true, mesh: m, mats: [], faded: false, prop: type.kind };
+  blockers.push(b);
+  return b;
 }
 function buildProps() {
   const total = PROPS.reduce((a, p) => a + p.weight, 0);
   for (const q of S.quadrants) {
     const r = rng(q.id.charCodeAt(2) * 4241 + 99);
-    const o = zoneOrigin(q);
     const pick = () => { let n = r() * total; for (const p of PROPS) if ((n -= p.weight) < 0) return p; return PROPS[0]; };
-    // Scattered through the open middle of the quadrant.
+    // Scattered through the place; the middle 12 metres stay open for arenas, races and puzzles.
+    const cx = q.x0 + q.w / 2, cz = q.z0 + q.d / 2, want = Math.round(q.w * q.d / 420);
     let placed = 0;
-    // The middle 12 metres stay open for arenas, race courses and puzzles.
-    const cx = o.x + ZONE / 2, cz = o.y + ZONE / 2;
-    for (let tries = 0; tries < 120 && placed < 14; tries++) {
-      const x = o.x + 10 + r() * (ZONE - 20), z = o.y + 10 + r() * (ZONE - 20);
+    for (let tries = 0; tries < want * 8 && placed < want; tries++) {
+      const x = q.x0 + 10 + r() * (q.w - 20), z = q.z0 + 10 + r() * (q.d - 20);
       if (Math.hypot(x - cx, z - cz) < 12.5) continue;
       if (addProp(pick(), x, z, r() < 0.5)) placed++;
     }
+    // Bins by the buildings: somewhere to look for what's hidden.
+    for (let i = 0, n = 0; i < 40 && n < 6; i++) {
+      const side = Math.floor(r() * 4), t = 0.15 + r() * 0.7;
+      const x = side < 2 ? q.x0 + t * q.w : (side === 2 ? q.x0 + 17 : q.x0 + q.w - 17);
+      const z = side >= 2 ? q.z0 + t * q.d : (side === 0 ? q.z0 + 17 : q.z0 + q.d - 17);
+      if (addProp(PROP(r() < 0.7 ? "bin" : "dumpster"), x, z, false)) n++;
+    }
   }
-  // Barrier lines across the streets, with gaps, so the roads aren't straight runs.
-  const bar = PROPS[0];
-  for (let c = 0; c < COLS; c++) for (let rw = 0; rw < ROWS - 1; rw++) {
-    const z = (rw + 1) * (ZONE + ROAD) - ROAD / 2, x0 = c * (ZONE + ROAD);
-    for (let k = 0; k < 4; k++) if ((c + rw + k) % 3 !== 0) addProp(bar, x0 + 10 + k * 12, z, true);
-  }
-  for (let c = 0; c < COLS - 1; c++) for (let rw = 0; rw < ROWS; rw++) {
-    const x = (c + 1) * (ZONE + ROAD) - ROAD / 2, z0 = rw * (ZONE + ROAD);
-    for (let k = 0; k < 4; k++) if ((c + rw + k) % 3 !== 1) addProp(bar, x, z0 + 10 + k * 12, false);
+  // Crates and barriers along the roads between places.
+  const r = rng(77);
+  for (const road of WD.roads) for (let k = 0; k + 1 < road.points.length; k++) {
+    const [ax, az] = road.points[k], [bx, bz] = road.points[k + 1], L = Math.hypot(bx - ax, bz - az);
+    const nx = -(bz - az) / L, nz = (bx - ax) / L;
+    for (let s = 20; s < L - 10; s += 35 + r() * 20) {
+      const side = r() < 0.5 ? -1 : 1, off = road.width / 2 + 2.2;
+      const x = ax + (bx - ax) * s / L + nx * off * side, z = az + (bz - az) * s / L + nz * off * side;
+      if (!inZone(x, z, 2)) addProp(PROPS[Math.floor(r() * PROPS.length)], x, z, Math.abs(nx) > Math.abs(nz));
+    }
   }
 }
 
-/* ---------- mud rivers, floating crates and awnings ----------
-   Some streets between quadrants are mud. Guards can't cross. Koda crosses by jumping
-   from one floating crate to the next; step in the mud and it washes him back. */
+/* ---------- the mud river, its bridges and floating crates ----------
+   Guards can't cross the mud. Koda can: over a bridge, or jumping from crate to crate.
+   Step in the mud and it washes him back. */
 const muds = [], floats = [], roofs = [];
 function mudTexture() {
   const c = document.createElement("canvas"); c.width = 128; c.height = 128;
@@ -352,35 +542,46 @@ function mudTexture() {
 }
 const mudMap = mudTexture();
 const floatMat = new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: 0.8 });
-// Rivers: [minX, maxX, minZ, maxZ, runs along "x" or "z"]
-const RIVERS = [
-  [123, 131, -9, 131, "z"],                    // between Chalk Street / Angel Court and Ticket Row / Warden Square
-  [123, 263, 123, 131, "x"],                   // between Warden Square / Tape Corner and Old Tower / East Gate
-  [57, 65, 123, 197, "z"]                      // between Paper Lane and The Tunnels
-];
+const deckMat = new THREE.MeshStandardMaterial({ color: 0x6b6259, roughness: 0.85 });
 function buildRivers() {
-  for (const [x0, x1, z0, z1, along] of RIVERS) {
-    const w = x1 - x0, d = z1 - z0;
-    const mat = new THREE.MeshStandardMaterial({ map: mudMap.clone(), roughness: 0.35, metalness: 0.1, color: 0x8a6a4a });
-    mat.map.repeat.set(w / 6, d / 6); mat.map.needsUpdate = true;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
-    m.rotation.x = -Math.PI / 2; m.position.set(x0 + w / 2, 0.02, z0 + d / 2); m.receiveShadow = true;
-    scene.add(m);
-    const rv = { minX: x0, maxX: x1, minZ: z0, maxZ: z1, top: 0, mud: true, along, mat, mesh: m, mats: [] };
+  for (const [x0, z0, x1, z1] of WD.river) {
+    const w = x1 - x0, d = z1 - z0, along = d > w ? "z" : "x";
+    const mat = new THREE.MeshStandardMaterial({ map: mudMap.clone(), roughness: 0.35, metalness: 0.1, color: 0x8a6a4a, polygonOffset: true, polygonOffsetFactor: -3 });
+    mat.map.repeat.set(1, 1); mat.map.needsUpdate = true;
+    const pts = along === "z" ? [[x0 + w / 2, z0], [x0 + w / 2, z1]] : [[x0, z0 + d / 2], [x1, z0 + d / 2]];
+    const m = ribbon(pts, along === "z" ? w : d, 0.1, mat, 4);
+    m.geometry.attributes.uv.array.forEach((v, i, a) => { if (i % 2) a[i] = v * (along === "z" ? w : d) / 6; else a[i] = v * (along === "z" ? w : d) / 6; });
+    const rv = { minX: x0, maxX: x1, minZ: z0, maxZ: z1, top: 0, base: 0, mud: true, along, mat, mesh: m, mats: [] };
     muds.push(rv); blockers.push(rv);
-    // A crossing every 13 metres: three crates across the river, drifting with the current.
+    // A crossing of three crates every 60 metres, away from the bridges.
     const len = along === "z" ? d : w;
-    for (let s = 6; s < len - 4; s += 13) {
-      for (let k = 0; k < 3; k++) {
-        const across = (k - 1) * 2.7;
-        const cx = along === "z" ? x0 + w / 2 + across : x0 + s;
-        const cz = along === "z" ? z0 + s : z0 + d / 2 + across;
+    for (let s = 30; s < len - 10; s += 60) {
+      const sx = along === "z" ? x0 + w / 2 : x0 + s, sz = along === "z" ? z0 + s : z0 + d / 2;
+      if (WD.bridges.some(([bx0, bz0, bx1, bz1]) => sx > bx0 - 20 && sx < bx1 + 20 && sz > bz0 - 20 && sz < bz1 + 20)) continue;
+      for (let k = 0; k < 4; k++) {
+        const across = (k - 1.5) * ((along === "z" ? w : d) / 4.2);
+        const cx = along === "z" ? sx + across : sx, cz = along === "z" ? sz : sz + across;
         const fw = along === "z" ? 2.3 : 1.8, fd = along === "z" ? 1.8 : 2.3;
         const mesh = new THREE.Mesh(propGeo, floatMat);
         mesh.scale.set(fw, 0.35, fd); mesh.castShadow = true; mesh.receiveShadow = true;
         scene.add(mesh);
-        floats.push({ mesh, bx: cx, bz: cz, x: cx, z: cz, w: fw, d: fd, top: 0.2, along, phase: s * 0.7 + k * 2.1, amp: 1.6 + (k % 2) * 0.6, dx: 0, dz: 0 });
+        const y = terrainAt(cx, cz);
+        floats.push({ mesh, bx: cx, bz: cz, x: cx, z: cz, y, w: fw, d: fd, top: y + 0.3, along, phase: s * 0.7 + k * 2.1, amp: 1.2 + (k % 2) * 0.5, dx: 0, dz: 0 });
       }
+    }
+  }
+  for (const [x0, z0, x1, z1] of WD.bridges) {
+    const top = Math.max(terrainAt(x0 - 2, (z0 + z1) / 2), terrainAt(x1 + 2, (z0 + z1) / 2), terrainAt((x0 + x1) / 2, z0 - 2), terrainAt((x0 + x1) / 2, z1 + 2)) + 0.25;
+    const deck = new THREE.Mesh(propGeo, deckMat);
+    deck.scale.set(x1 - x0, 0.5, z1 - z0); deck.position.set((x0 + x1) / 2, top - 0.25, (z0 + z1) / 2); deck.castShadow = true; deck.receiveShadow = true; scene.add(deck);
+    blockers.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, top, base: top - 0.5, walk: true, bridge: true, mesh: deck, mats: [] });
+    // Rails along the long sides.
+    const along = (x1 - x0) > (z1 - z0) ? "x" : "z";
+    for (const side of [0, 1]) {
+      const rail = new THREE.Mesh(propGeo, deckMat);
+      if (along === "x") { rail.scale.set(x1 - x0, 0.9, 0.2); rail.position.set((x0 + x1) / 2, top + 0.45, side ? z1 - 0.1 : z0 + 0.1); }
+      else { rail.scale.set(0.2, 0.9, z1 - z0); rail.position.set(side ? x1 - 0.1 : x0 + 0.1, top + 0.45, (z0 + z1) / 2); }
+      scene.add(rail);
     }
   }
 }
@@ -389,19 +590,25 @@ function updateFloats(t) {
     const off = Math.sin(t * 0.6 + f.phase) * f.amp;
     const nx = f.along === "z" ? f.bx : f.bx + off, nz = f.along === "z" ? f.bz + off : f.bz;
     f.dx = nx - f.x; f.dz = nz - f.z; f.x = nx; f.z = nz;
-    f.mesh.position.set(f.x, 0.04 + Math.sin(t * 2 + f.phase) * 0.04, f.z);
+    f.mesh.position.set(f.x, f.y + 0.14 + Math.sin(t * 2 + f.phase) * 0.04, f.z);
     f.mesh.rotation.y = Math.sin(t * 0.8 + f.phase) * 0.06;
   }
   for (const m of muds) { m.mat.map.offset[m.along === "z" ? "y" : "x"] = t * 0.02; }
 }
 const inMud = (x, z) => muds.some(m => x > m.minX && x < m.maxX && z > m.minZ && z < m.maxZ);
 function floatAt(x, z) { for (const f of floats) if (Math.abs(x - f.x) < f.w / 2 + 0.1 && Math.abs(z - f.z) < f.d / 2 + 0.1) return f; return null; }
-// Height of whatever is under (x, z): the ground, the top of a crate or roof, a floating crate,
-// or -1 for open mud.
+// Height of whatever is under (x, z): the land, the top of a crate, roof or bridge, a
+// floating crate, or MUD for open mud.
 function groundAt(x, z) {
-  let g = 0;
-  if (inMud(x, z)) { const f = floatAt(x, z); g = f ? f.top : -1; }
-  for (const b of blockers) if (b.walk && x > b.minX - 0.05 && x < b.maxX + 0.05 && z > b.minZ - 0.05 && z < b.maxZ + 0.05) g = Math.max(g, b.top);
+  let g = terrainAt(x, z);
+  if (inMud(x, z)) { const f = floatAt(x, z); g = f ? f.top : MUD; }
+  for (const b of nearBlocks(x, z, 0.1)) if (b.walk && x > b.minX - 0.05 && x < b.maxX + 0.05 && z > b.minZ - 0.05 && z < b.maxZ + 0.05) g = Math.max(g, b.top);
+  return g;
+}
+// The land and bridges only, for people who don't climb: guards and townsfolk.
+function floorAt(x, z) {
+  let g = terrainAt(x, z);
+  for (const b of nearBlocks(x, z, 0.1)) if (b.bridge && x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ) g = Math.max(g, b.top);
   return g;
 }
 // Awnings: roofs on posts to hide under. Drones can't see you there and guards see less.
@@ -409,13 +616,13 @@ const awningMat = new THREE.MeshStandardMaterial({ color: 0x7a2f2f, roughness: 0
 const postMat = new THREE.MeshStandardMaterial({ color: 0x222228, roughness: 0.6, metalness: 0.4 });
 const postGeo = new THREE.CylinderGeometry(0.07, 0.07, 3, 6);
 function addAwning(x, z, w = 4.5, d = 3.2, colour) {
-  if (blocked(x, z, Math.max(w, d) / 2 + 0.6)) return null;
+  if (blocked(x, z, Math.max(w, d) / 2 + 0.6) || onRoad(x, z, 2)) return null;
   const g = new THREE.Group();
   const mat = awningMat.clone(); if (colour) mat.color.setHex(colour);
   const roof = new THREE.Mesh(propGeo, mat); roof.scale.set(w, 0.12, d); roof.position.y = 3; roof.castShadow = true;
   g.add(roof);
   for (const [px, pz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const p = new THREE.Mesh(postGeo, postMat); p.position.set(px * (w / 2 - 0.15), 1.5, pz * (d / 2 - 0.15)); g.add(p); }
-  g.position.set(x, 0, z);
+  g.position.set(x, terrainAt(x, z), z);
   scene.add(g);
   const a = { x, z, w, d, group: g, mat };
   roofs.push(a);
@@ -425,10 +632,10 @@ const underRoof = (x, z) => roofs.some(a => Math.abs(x - a.x) < a.w / 2 && Math.
 function buildAwnings() {
   const colours = [0x7a2f2f, 0x2f4f7a, 0x2f6a4a, 0x7a5a2f];
   for (const q of S.quadrants) {
-    const r = rng(q.id.charCodeAt(2) * 911 + 7), o = zoneOrigin(q), cx = o.x + ZONE / 2, cz = o.y + ZONE / 2;
-    let n = 0;
-    for (let t = 0; t < 40 && n < 3; t++) {
-      const x = o.x + 9 + r() * (ZONE - 18), z = o.y + 9 + r() * (ZONE - 18);
+    const r = rng(q.id.charCodeAt(2) * 911 + 7), cx = q.x0 + q.w / 2, cz = q.z0 + q.d / 2;
+    let n = 0; const want = Math.max(3, Math.round(q.w * q.d / 3500));
+    for (let t = 0; t < 60 && n < want; t++) {
+      const x = q.x0 + 9 + r() * (q.w - 18), z = q.z0 + 9 + r() * (q.d - 18);
       if (Math.hypot(x - cx, z - cz) < 13) continue;
       if (addAwning(x, z, 4 + r() * 2, 3 + r(), colours[Math.floor(r() * 4)])) n++;
     }
@@ -444,44 +651,56 @@ function updateAwnings() {
 }
 
 /* Fade any building standing between the camera and Koda. */
+const fadedNow = new Set();
 function updateOcclusion() {
   if (!koda) return;
-  const kx = koda.pos.x, kz = koda.pos.z;
-  for (const b of blockers) {
-    if (b.mud || b.top < 3) continue;
-    const hides = b.minZ > kz - 1 && b.minZ < kz + 12 && kx > b.minX - 2 && kx < b.maxX + 2;
+  const kx = koda.pos.x, kz = koda.pos.z, ky = koda.pos.y;
+  const hit = new Set();
+  for (const b of inBox(kx - 8, kz - 1, kx + 8, kz + 14)) {
+    if (b.mud || b.top - b.base < 3 || b.top < ky + 2) continue;
+    if (b.minZ > kz - 1 && b.minZ < kz + 12 && kx > b.minX - 2 && kx < b.maxX + 2) hit.add(b);
+  }
+  for (const b of new Set([...fadedNow, ...hit])) {
+    const hides = hit.has(b);
     if (hides !== b.faded) {
       b.faded = hides;
       for (const m of b.mats) { m.transparent = hides; m.opacity = hides ? 0.28 : 1; m.depthWrite = !hides; m.needsUpdate = true; }
     }
   }
+  fadedNow.clear(); for (const b of hit) fadedNow.add(b);
 }
 
 /* ---------- collision ---------- */
 // Everything has a top. `y` is how high the body's feet are: anything whose top is at or
 // below the feet (plus a small step) is stood on, not walked into. Guards stay on the ground.
 // Mud stops guards; Koda can wade in (and gets washed back), so `isKoda` lets him through.
-function blocked(x, z, r, y = 0, isKoda = false) {
-  for (const b of blockers) {
-    if (b.mud) { if (isKoda) continue; }
+function blocked(x, z, r, y = null, isKoda = false) {
+  if (y === null) y = terrainAt(x, z);
+  if (ridgeAt(x, z) > 1.1) return RIDGE;
+  for (const b of nearBlocks(x, z, r + 0.1)) {
+    if (b.mud) { if (isKoda) continue; if (b.bridgeOver) continue; if (onBridge(x, z)) continue; }
     else if (b.top <= y + 0.35) continue;
     if (x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r) return b;
   }
   return null;
 }
+const onBridge = (x, z) => WD.bridges.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1);
 function moveWithCollision(pos, dx, dz, r, isKoda = false) {
   if (!blocked(pos.x + dx, pos.z, r, pos.y, isKoda)) pos.x += dx;
   if (!blocked(pos.x, pos.z + dz, r, pos.y, isKoda)) pos.z += dz;
-  pos.x = clamp(pos.x, -ROAD + 1, WORLD_W + ROAD - 1);
-  pos.z = clamp(pos.z, -ROAD + 1, WORLD_H + ROAD - 1);
+  pos.x = clamp(pos.x, 1, WORLD_W - 1);
+  pos.z = clamp(pos.z, 1, WORLD_H - 1);
 }
 // Eyes see over low obstacles; feet don't walk through them (`walking`).
 // `minTop`: how tall something must be to hide what's behind it. A crouching Koda hides
 // behind a crate; standing up, only something chest-high or taller hides him.
 function sightClear(ax, az, bx, bz, walking = false, minTop = 1.6) {
   const dx = bx - ax, dz = bz - az;
-  for (const b of blockers) {
-    if (!walking && (b.mud || b.top < minTop)) continue;   // eyes see over low things and mud
+  const eye = Math.max(terrainAt(ax, az), terrainAt(bx, bz));
+  if (!walking) { const L = Math.hypot(dx, dz); for (let s = 1; s < L; s += 2) if (ridgeAt(ax + dx * s / L, az + dz * s / L) > 2.2) return false; }
+  for (const b of inBox(Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz))) {
+    if (!walking && (b.mud || b.top - Math.max(b.base, eye - 0.5) < minTop)) continue;   // eyes see over low things and mud
+    if (walking && b.mud && onBridge((ax + bx) / 2, (az + bz) / 2)) continue;
     let t0 = 0, t1 = 1;
     for (const [p, d, mn, mx] of [[ax, dx, b.minX, b.maxX], [az, dz, b.minZ, b.maxZ]]) {
       if (Math.abs(d) < 1e-6) { if (p < mn || p > mx) { t0 = 2; break; } continue; }
@@ -499,7 +718,7 @@ function freeSpot(x, z, r = 1.2, rand = Math.random) {
   for (let i = 0; i < 60; i++) {
     const a = rand() * Math.PI * 2, d = i * 0.35;
     const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
-    if (!blocked(px, pz, r)) return { x: px, z: pz };
+    if (!blocked(px, pz, r) && !onRiver(px, pz, r)) return { x: px, z: pz };
   }
   return { x, z };
 }
@@ -652,7 +871,7 @@ class Actor {
     this.yaw = 0;
   }
   has(name) { return !!this.clips[name]; }
-  play(name, { once = false, fade = 0.15, speed = 1 } = {}) {
+  play(name, { once = false, fade = 0.15, speed = 1, from = 0 } = {}) {
     const a = this.clips[name];
     if (!a) return 0;
     if (this.current === a && !once) { a.timeScale = speed; return a.getClip().duration; }
@@ -660,6 +879,7 @@ class Actor {
     if (!once && this.current && this.held < 0.22 && this.current.loop !== THREE.LoopOnce) return a.getClip().duration;
     this.held = 0;
     a.reset();
+    if (from) a.time = from;
     a.timeScale = speed;
     a.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity);
     a.clampWhenFinished = once;
@@ -772,7 +992,7 @@ function readInput() {
   const s = stick.mag ? stick : pad.mag ? pad : k;
   input.x = s.x; input.z = s.z; input.mag = s.mag;
 }
-function toggleSneak() { input.sneak = !input.sneak; $("btnSneak").classList.toggle("on", input.sneak); }
+function toggleSneak() { if (state === "play" && dodge()) return; input.sneak = !input.sneak; $("btnSneak").classList.toggle("on", input.sneak); }
 
 /* ---------- save ---------- */
 function loadSave() {
@@ -875,7 +1095,7 @@ function startMusic(m) {
   for (let i = 0; i < n; i++) {
     const src = ac.createBufferSource();
     src.buffer = music.stems ? music.stems[i] : music.buffer;
-    src.loop = false;
+    src.loop = true;
     let node = src;
     if (!music.stems) for (const [type, f] of BANDS[i % BANDS.length]) {
       const fl = ac.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = 0.7;
@@ -887,7 +1107,7 @@ function startMusic(m) {
     music.sources.push(src); music.parts.push(g);
   }
   // Before any part is in, the song is heard faintly, as if through a wall.
-  const hs = ac.createBufferSource(); hs.buffer = music.stems ? music.stems[0] : music.buffer; hs.loop = false;
+  const hs = ac.createBufferSource(); hs.buffer = music.stems ? music.stems[0] : music.buffer; hs.loop = true;
   const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 320;
   const hg = ac.createGain(); hg.gain.value = 0.22;
   hs.connect(lp); lp.connect(hg); hg.connect(music.master); hs.start(t0);
@@ -1033,10 +1253,16 @@ function setupBeat(m) {
   beat.last = -1;
   console.info(`[gill] ${d.song}: ${beat.bpm} BPM, first beat ${beat.offset}s, sections ${beat.sections.join(", ")}${beat.guessed ? " (guessed from the audio)" : ""}`);
 }
-function songTime() {
+// How far into the song we are. The song loops for as long as the mission takes, so this
+// wraps back to 0 at the end; songClock() keeps counting up.
+function songClock() {
   // Test recordings step the game slower than real time: follow the game clock there.
   if (window.GILL_HOLD && mission) return mission.t;
   return music.ac && music.started ? Math.max(0, music.ac.currentTime - music.t0) : (mission ? mission.t : 0);
+}
+function songTime() {
+  const t = songClock(), L = mission && mission.limit;
+  return L ? t % L : t;
 }
 function nearBeat(win = 0.11) {
   if (!beat.bpm) return false;
@@ -1104,7 +1330,8 @@ function makeOrb(colour) {
   return g;
 }
 const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
-function ringAt(x, z, r, y = 0) {
+function ringAt(x, z, r, y = null) {
+  if (y === null) y = terrainAt(x, z);
   const g = new THREE.Group();
   const m = new THREE.Mesh(new THREE.RingGeometry(r - 0.35, r, 48), ringMat);
   m.rotation.x = -Math.PI / 2; m.position.y = 0.05;
@@ -1130,8 +1357,9 @@ function removeBlock(qd, b) {
   navMark(b);
 }
 const boxBlock = (x, z, w, d, h, mat, walk = true) => {
-  const mesh = new THREE.Mesh(propGeo, mat); mesh.scale.set(w, h, d); mesh.position.set(x, h / 2, z); mesh.castShadow = true; mesh.receiveShadow = true;
-  return { minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, top: h, walk, mesh, mats: [] };
+  const base = terrainAt(x, z);
+  const mesh = new THREE.Mesh(propGeo, mat); mesh.scale.set(w, h, d); mesh.position.set(x, base + h / 2, z); mesh.castShadow = true; mesh.receiveShadow = true;
+  return { minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, top: base + h, base, walk, mesh, mats: [] };
 };
 
 function clearMission() {
@@ -1169,17 +1397,20 @@ async function startMission(i, { showIntro = true } = {}) {
   if (phone) $("touch").classList.remove("hidden");
   $("btnBoost").classList.toggle("hidden", !(save.superspeed && !def.noBoost));
   lunge = null; air = null; attackLock = 0; invuln = 0; comboStep = 0; race = null; currentQuad = null; boost.meter = 1; koda.sinking = null;
-  const c = zoneCenter(mission.quads[0].q);
-  const spot = freeSpot(c.x, c.y + ZONE / 2 - 3);
-  koda.pos.set(spot.x, 0, spot.z); koda.face(Math.PI, 1); koda.play("idle");
-  lastSafe.set(spot.x, 0, spot.z);
+  const q0 = mission.quads[0].q, c = zoneCenter(q0);
+  const spot = freeSpot(c.x, c.y + q0.d / 2 - 6);
+  koda.pos.set(spot.x, groundAt(spot.x, spot.z), spot.z); koda.face(Math.PI, 1); koda.play("idle");
+  lastSafe.copy(koda.pos);
   updateCamera(0, true);
   applyTheme(def.theme, 0, true);
+  // Each song starts at its own time of day.
+  DAY.hour = def.hour ?? [17, 21, 10, 14, 19, 22, 9, 23, 16, 13, 1, 20][mission.index % 12];
+  updateDayNight(0);
   const loading = loadMissionMusic(mission);
   if (showIntro) {
     const cs = def.cutscene && S.cutscenes[def.cutscene];
     await showCard({ kicker: `MISSION ${i + 1} OF ${S.missions.length}`, title: def.song, lines: cs,
-      goal: def.goal + " Each lit quadrant holds one part of the song: unlock them in any order to build your own mix, before the song ends.", button: "Start the mission" });
+      goal: def.goal + " Each lit place on the map holds one part of the song. Unlock them in any order to build your own mix. Take your time: the song plays until it's complete.", button: "Start the mission" });
   }
   await loading;
   if (mission && mission.index === i) {
@@ -1208,7 +1439,7 @@ function spawnGuards(qd, count, { radius = [8, 16], kinds, hidden = false, alert
     for (let k = 0; k < 4; k++) {
       const a2 = ang + k * Math.PI / 2;
       const s = freeSpot(cx + Math.cos(a2) * rad, cz + Math.sin(a2) * rad, 0.6, r);
-      route.push(new THREE.Vector3(s.x, 0, s.z));
+      route.push(new THREE.Vector3(s.x, floorAt(s.x, s.z), s.z));
     }
     made.push(makeActor(kind + ".glb", ENEMIES[kind]).then(a => {
       if (mission !== m) return null;
@@ -1227,7 +1458,7 @@ async function spawnPerson(qd, who, x, z, line) {
   const m = mission;
   const a = await makeActor("townsfolk/" + who + ".glb", 1.65).catch(() => null);
   if (!a || mission !== m) return null;
-  a.pos.set(x, 0, z); a.faceTo(koda.pos.x, koda.pos.z); scene.add(a.root); a.play("idle");
+  a.pos.set(x, floorAt(x, z), z); a.faceTo(koda.pos.x, koda.pos.z); scene.add(a.root); a.play("idle");
   const n = { a, line, qd };
   npcs.push(n);
   return n;
@@ -1236,6 +1467,7 @@ async function spawnPerson(qd, who, x, z, line) {
 function describeSpot(qd, x, z) {
   const c = zoneCenter(qd.q), dx = x - c.x, dz = z - c.y;
   const side = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? "east" : "west") : (dz > 0 ? "south" : "north");
+  for (const b of nearBlocks(x, z, 0.5)) if (b.holds && SEARCHABLE[b.prop] && x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) return `in ${SEARCHABLE[b.prop]} on the ${side} side`;
   if (underRoof(x, z)) return `under an awning on the ${side} side`;
   let best = null, bd = 7;
   for (const b of blockers) {
@@ -1243,13 +1475,55 @@ function describeSpot(qd, x, z) {
     const d = Math.hypot((b.minX + b.maxX) / 2 - x, (b.minZ + b.maxZ) / 2 - z);
     if (d < bd) { bd = d; best = b; }
   }
-  const names = { barrier: "the striped barrier", crate: "the crates", bench: "the bench", dumpster: "the green dumpster", stack: "the stacked crates" };
+  const names = { barrier: "the striped barrier", crate: "the crates", bench: "the bench", dumpster: "the green dumpster", stack: "the stacked crates", bin: "the bin" };
   return best ? `near ${names[best.prop]} on the ${side} side` : `out in the open on the ${side} side`;
+}
+// Somewhere to hide a part: usually inside a bin, dumpster or crate stack you have to
+// search; now and then it's just lying somewhere, a lucky find.
+function stashSpot(qd) {
+  const q = qd.q, c = zoneCenter(q);
+  if (qd.r() < 0.85) {
+    const boxes = inBox(q.x0 + 4, q.z0 + 4, q.x0 + q.w - 4, q.z0 + q.d - 4).filter(b => SEARCHABLE[b.prop] && !b.holds && Math.hypot((b.minX + b.maxX) / 2 - c.x, (b.minZ + b.maxZ) / 2 - c.y) > 12);
+    if (boxes.length) {
+      const b = boxes[Math.floor(qd.r() * boxes.length)];
+      b.holds = qd;
+      return { x: (b.minX + b.maxX) / 2, z: (b.minZ + b.maxZ) / 2, in: b };
+    }
+  }
+  return hiddenSpot(qd);
+}
+// Put a part in its spot: inside a container (hidden until searched) or on the ground.
+function stashPart(qd, s) {
+  qd.orb = makeOrb(PART_COLOURS[qd.k]);
+  qd.orb.position.set(s.x, s.in ? s.in.top : terrainAt(s.x, s.z), s.z);
+  if (s.in) { qd.stash = s.in; qd.orb.visible = false; }
+}
+function searchNear() {
+  // Search the bin, dumpster or crates Koda is standing at.
+  let best = null, bd = 1.9;
+  for (const b of nearBlocks(koda.pos.x, koda.pos.z, 2)) {
+    if (!SEARCHABLE[b.prop]) continue;
+    const d = Math.hypot(Math.max(0, b.minX - koda.pos.x, koda.pos.x - b.maxX), Math.max(0, b.minZ - koda.pos.z, koda.pos.z - b.maxZ));
+    if (d < bd) { bd = d; best = b; }
+  }
+  if (!best) return false;
+  koda.faceTo((best.minX + best.maxX) / 2, (best.minZ + best.maxZ) / 2);
+  attackLock = Math.max(attackLock, koda.play(koda.has("pound") ? "pound" : "idle", { once: true, speed: 2.2 }) * 0.45 || 0.4);
+  const qd = best.holds;
+  if (qd && qd.stash === best && !qd.done) {
+    later(0.4, () => {
+      qd.stash = null; best.holds = null;
+      const s = freeSpot((best.minX + best.maxX) / 2 + forward(koda).x * -1.2, (best.minZ + best.maxZ) / 2 + forward(koda).y * -1.2, 0.5);
+      qd.orb.position.set(s.x, terrainAt(s.x, s.z), s.z); qd.orb.visible = true; qd.hidden = false;
+      popText(`FOUND ${qd.partName.toUpperCase()}`, "good"); sfxUnlock(); refreshObjective();
+    });
+  } else later(0.4, () => popText(`NOTHING IN ${SEARCHABLE[best.prop].replace("the ", "").toUpperCase()}`));
+  return true;
 }
 function hiddenSpot(qd) {
   const o = zoneOrigin(qd.q), c = zoneCenter(qd.q);
   for (let t = 0; t < 40; t++) {
-    const s = freeSpot(o.x + 9 + qd.r() * (ZONE - 18), o.y + 9 + qd.r() * (ZONE - 18), 1.2, qd.r);
+    const s = freeSpot(o.x + 9 + qd.r() * (qd.q.w - 18), o.y + 9 + qd.r() * (qd.q.d - 18), 1.2, qd.r);
     if (Math.hypot(s.x - c.x, s.z - c.y) > 10) return s;
   }
   return freeSpot(c.x + 12, c.y);
@@ -1257,7 +1531,8 @@ function hiddenSpot(qd) {
 function entrySpot(qd) {
   // Just inside the quadrant on the side Koda is coming from.
   const c = zoneCenter(qd.q), dx = koda.pos.x - c.x, dz = koda.pos.z - c.y, d = Math.hypot(dx, dz) || 1;
-  return freeSpot(c.x + dx / d * 17, c.y + dz / d * 17, 1, qd.r);
+  const k = Math.min(qd.q.w, qd.q.d) / 2 - 10;
+  return freeSpot(c.x + dx / d * k, c.y + dz / d * k, 1, qd.r);
 }
 
 /* ---------- drones with searchlights ---------- */
@@ -1284,7 +1559,8 @@ async function spawnDrone(qd, idx) {
   scene.add(group); scene.add(light);
   const route = [];
   const inset = 8 + idx * 5;
-  for (const [px, pz] of [[inset, inset], [ZONE - inset, inset], [ZONE - inset, ZONE - inset], [inset, ZONE - inset]]) route.push(new THREE.Vector2(o.x + px, o.y + pz));
+  const zw = qd.q.w, zd = qd.q.d;
+  for (const [px, pz] of [[inset, inset], [zw - inset, inset], [zw - inset, zd - inset], [inset, zd - inset]]) route.push(new THREE.Vector2(o.x + px, o.y + pz));
   if (idx % 2) route.reverse();
   const start = route[Math.floor(r() * 4)];
   drones.push({ qd, group, light, lmat, beamMat, cone, route, leg: 0, x: start.x, z: start.y, meter: 0, spotted: 0, pulse: 0, speed: 3 + idx * 0.4 });
@@ -1296,14 +1572,14 @@ function updateDrones(dt, now) {
     if (d.spotted > 0) d.spotted -= dt;
     else if (dd < 0.5) d.leg = (d.leg + 1) % d.route.length;
     else { d.x += dx / dd * d.speed * dt; d.z += dz / dd * d.speed * dt; }
-    d.group.position.set(d.x, 5.2 + Math.sin(now / 500 + d.leg) * 0.15, d.z);
+    d.group.position.set(d.x, terrainAt(d.x, d.z) + 5.2 + Math.sin(now / 500 + d.leg) * 0.15, d.z);
     d.group.rotation.y += dt * 0.8;
     d.pulse = Math.max(0, d.pulse - dt * 4);
     const s = 1 + d.pulse * 0.12;
-    d.light.position.set(d.x, 0.06, d.z); d.light.scale.set(s, s, 1);
+    d.light.position.set(d.x, terrainAt(d.x, d.z) + 0.06, d.z); d.light.scale.set(s, s, 1);
     if (d.qd.done) { d.lmat.opacity = 0.12; d.lmat.color.setHex(0x9fd3ff); continue; }
     // Caught in the light, out in the open: the meter fills.
-    const inLight = Math.hypot(koda.pos.x - d.x, koda.pos.z - d.z) < 2.6 * s && !underRoof(koda.pos.x, koda.pos.z) && koda.pos.y < 2.6;
+    const inLight = Math.hypot(koda.pos.x - d.x, koda.pos.z - d.z) < 2.6 * s && !underRoof(koda.pos.x, koda.pos.z) && kUp() < 2.6;
     d.meter = clamp(d.meter + (inLight ? dt * 2.4 : -dt), 0, 1);
     const red = d.spotted > 0 || d.meter > 0.5;
     d.lmat.color.setHex(red ? 0xff5a46 : 0xfff1a8); d.beamMat.color.setHex(red ? 0xff5a46 : 0xfff1a8);
@@ -1325,8 +1601,9 @@ function seenIn(qd) {
   // Seen while sneaking: the part moves somewhere else.
   if (qd.focus === "sneak" && qd.orb && !qd.moved) {
     qd.moved = true;
-    const s = hiddenSpot(qd);
-    qd.orb.position.set(s.x, 0, s.z);
+    if (qd.stash) { qd.stash.holds = null; qd.stash = null; }
+    scene.remove(qd.orb);
+    stashPart(qd, stashSpot(qd));
     toast(`They saw you. ${qd.partName} has moved.`, 3);
   }
 }
@@ -1353,8 +1630,8 @@ const FOCUS = {
      its part of the song gets louder as you get near it. */
   explore: {
     spawn(qd) {
-      const s = hiddenSpot(qd);
-      qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(s.x, 0, s.z); qd.hidden = true;
+      const s = stashSpot(qd);
+      stashPart(qd, s); qd.hidden = true;
       qd.clue = describeSpot(qd, s.x, s.z);
       const e = entrySpot(qd);
       spawnPerson(qd, TOWNSFOLK[Math.floor(qd.r() * TOWNSFOLK.length)], e.x, e.z,
@@ -1364,7 +1641,7 @@ const FOCUS = {
     talk(qd, n) { qd.talked = true; setObjective(`Search ${qd.clue}. Follow the music.`); },
     target(qd) {
       if (!qd.talked && qd.giver) return { x: qd.giver.a.pos.x, z: qd.giver.a.pos.z, label: "TALK TO HIM" };
-      if (qd.orb && dist2(koda.pos, qd.orb.position) < 7) return { x: qd.orb.position.x, z: qd.orb.position.z, label: "GRAB " + qd.partName.toUpperCase() };
+      if (qd.orb && dist2(koda.pos, qd.orb.position) < 7) return { x: qd.orb.position.x, z: qd.orb.position.z, label: qd.stash ? "SEARCH " + SEARCHABLE[qd.stash.prop].replace("the ", "").toUpperCase() : "GRAB " + qd.partName.toUpperCase() };
       if (qd.talked) return { x: qd.orb.position.x + qd.fx, z: qd.orb.position.z + qd.fz, label: "SEARCH AROUND HERE", rough: true };
       return null;
     },
@@ -1374,19 +1651,19 @@ const FOCUS = {
   /* Reach the part unseen: drones with searchlights, guards, tall cover and awnings. */
   sneak: {
     spawn(qd) {
-      const s = hiddenSpot(qd);
-      qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(s.x, 0, s.z);
+      const s = stashSpot(qd);
+      stashPart(qd, s);
       const o = zoneOrigin(qd.q);
       for (let i = 0; i < 4; i++) {
-        const x = o.x + 10 + qd.r() * (ZONE - 20), z = o.y + 10 + qd.r() * (ZONE - 20);
+        const x = o.x + 10 + qd.r() * (qd.q.w - 20), z = o.y + 10 + qd.r() * (qd.q.d - 20);
         if (!blocked(x, z, 2.2)) addBlock(qd, Object.assign(boxBlock(x, z, 1.3, 1.3, 2.1, PROPS[4].mat), { prop: "stack" }));
       }
-      for (let i = 0; i < 2; i++) { const a = addAwning(o.x + 12 + qd.r() * (ZONE - 24), o.y + 12 + qd.r() * (ZONE - 24)); if (a) { a.group.userData.roof = a; own(qd, a.group); } }
+      for (let i = 0; i < 2; i++) { const a = addAwning(o.x + 12 + qd.r() * (qd.q.w - 24), o.y + 12 + qd.r() * (qd.q.d - 24)); if (a) { a.group.userData.roof = a; own(qd, a.group); } }
       const drones = mission.def.noDrones ? 0 : 2 + (mission.index >= 5 ? 1 : 0);
       for (let i = 0; i < drones; i++) spawnDrone(qd, i);
       spawnGuards(qd, 2 + Math.floor(mission.index / 5));
     },
-    target(qd) { return qd.orb ? { x: qd.orb.position.x, z: qd.orb.position.z, label: "SNEAK TO " + qd.partName.toUpperCase() } : null; },
+    target(qd) { return qd.orb ? { x: qd.orb.position.x, z: qd.orb.position.z, label: qd.stash && dist2(koda.pos, qd.orb.position) < 7 ? "SEARCH " + SEARCHABLE[qd.stash.prop].replace("the ", "").toUpperCase() : "SNEAK TO " + qd.partName.toUpperCase() } : null; },
     objective(qd) { return `Sneak to ${qd.partName}. Stay out of the searchlights. Hide under the awnings.`; }
   },
 
@@ -1396,7 +1673,7 @@ const FOCUS = {
       const c = zoneCenter(qd.q);
       qd.arena = { x: c.x, z: c.y, r: 10, wave: 0, waves: 2 + (mission.index >= 5 ? 1 : 0), open: true, started: false };
       const ring = new THREE.Mesh(new THREE.RingGeometry(9.6, 10, 64), new THREE.MeshBasicMaterial({ color: 0xff5a46, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
-      ring.rotation.x = -Math.PI / 2; ring.position.set(c.x, 0.05, c.y); own(qd, ring);
+      ring.rotation.x = -Math.PI / 2; ring.position.set(c.x, terrainAt(c.x, c.y) + 0.05, c.y); own(qd, ring);
     },
     update(qd, dt) {
       const A = qd.arena; if (!A || qd.done) return;
@@ -1415,7 +1692,7 @@ const FOCUS = {
         else {
           A.open = true;
           for (const w of A.walls) removeBlock(qd, w);
-          qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(A.x, 0, A.z);
+          qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(A.x, terrainAt(A.x, A.z), A.z);
           toast(`The gate opens. Grab ${qd.partName}!`, 3);
           refreshObjective();
         }
@@ -1456,7 +1733,7 @@ const FOCUS = {
       const course = [[0, 14, 0.9, 2.6], [0, 10, 1.8, 3], [1.5, 6, 1.8, 3], [1.5, 2, 2.4, 3], [-1, -3.5, 2.4, 3], [-1, -7.5, 1.8, 3], [0.5, -11.5, 1.8, 3], [0.5, -15.5, 0.9, 2.6]];
       qd.course = course.map(([x, z, h, s]) => {
         const b = addBlock(qd, boxBlock(c.x + x, c.y + z * dir, s, s, h, h < 1 ? PROPS[1].mat : roofTopMat));
-        return { x: c.x + x, z: c.y + z * dir, top: h };
+        return { x: c.x + x, z: c.y + z * dir, top: b.top };
       });
       qd.start = freeSpot(c.x, c.y + 18.5 * dir, 1);
       qd.ring = ringAt(qd.start.x, qd.start.z, 1.8); own(qd, qd.ring);
@@ -1467,18 +1744,18 @@ const FOCUS = {
       if (qd.done) return;
       if (!race && qd.ring.visible && dist2(koda.pos, qd.ring.position) < 1.9) {
         qd.ring.visible = false; qd.cp = 0;
-        race = { qd, deadline: nextSection(songTime() + 10) };
+        race = { qd, deadline: songClock() + (nextSection(songTime() + 10) - songTime()) };
         qd.cps[0].ring.visible = true;
         toast("Go! Reach the first rooftop ring before the song changes.", 2.5); tip("race");
         refreshObjective();
       }
       if (!race || race.qd !== qd) return;
-      const left = race.deadline - songTime();
+      const left = race.deadline - songClock();
       $("race").textContent = Math.max(0, left).toFixed(1);
       const cp = qd.cps[qd.cp];
       if (cp && Math.hypot(koda.pos.x - cp.x, koda.pos.z - cp.z) < 1.5 && Math.abs(koda.pos.y - cp.top) < 0.6) {
         cp.ring.visible = false; qd.cp++; sfxUnlock();
-        race.deadline = nextSection(songTime() + 7);
+        race.deadline = songClock() + (nextSection(songTime() + 7) - songTime());
         if (qd.cp < qd.cps.length) { qd.cps[qd.cp].ring.visible = true; popText("CHECKPOINT"); }
         else {
           const last = qd.course[qd.course.length - 1];
@@ -1523,7 +1800,7 @@ const FOCUS = {
           m.position.set((qd.r() - 0.5) * 2, sz * 0.3, (qd.r() - 0.5) * 2); m.rotation.set(qd.r(), qd.r() * 3, qd.r());
           m.castShadow = true; group.add(m);
         }
-        group.position.set(x, 0, z);
+        group.position.set(x, terrainAt(x, z), z);
         const b = addBlock(qd, { minX: x - 1.4, maxX: x + 1.4, minZ: z - 1.4, maxZ: z + 1.4, top: 1.3, walk: true, mesh: group, mats: [] });
         qd.piles.push({ x, z, b, left: 1 });
       }
@@ -1544,7 +1821,7 @@ const FOCUS = {
         if (p.left <= 0) {
           removeBlock(qd, p.b); sfxHit(true); popText("CLEARED");
           if (qd.piles.every(x => x.left <= 0)) {
-            qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(p.x, 0, p.z);
+            qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(p.x, terrainAt(p.x, p.z), p.z);
             toast(`The way is clear. ${qd.partName} was under there!`, 3);
           }
           refreshObjective();
@@ -1572,14 +1849,14 @@ const FOCUS = {
       const s = hiddenSpot(qd);
       const box = new THREE.Group();
       const m = new THREE.Mesh(propGeo, PROPS[1].mat); m.scale.set(0.6, 0.45, 0.6); m.position.y = 0.23; m.castShadow = true; box.add(m);
-      box.position.set(s.x, 0, s.z); box.visible = false; own(qd, box);
+      box.position.set(s.x, terrainAt(s.x, s.z), s.z); box.visible = false; own(qd, box);
       qd.parcel = box; qd.parcelSpot = describeSpot(qd, s.x, s.z);
     },
     talk(qd, n) {
       if (!qd.asked) { qd.asked = true; qd.parcel.visible = true; qd.parcelRing = own(qd, ringAt(qd.parcel.position.x, qd.parcel.position.z, 1)); setObjective(`Fetch the box ${qd.parcelSpot}.`); return; }
       if (carrying === qd.parcel) {
         carrying = null; scene.remove(qd.parcel); koda.root.remove(qd.parcel);
-        qd.orb = makeOrb(PART_COLOURS[qd.k]); const s = freeSpot(n.a.pos.x + 1.5, n.a.pos.z, 0.6); qd.orb.position.set(s.x, 0, s.z);
+        qd.orb = makeOrb(PART_COLOURS[qd.k]); const s = freeSpot(n.a.pos.x + 1.5, n.a.pos.z, 0.6); qd.orb.position.set(s.x, terrainAt(s.x, s.z), s.z);
         n.a.play(n.a.has("cheer") ? "cheer" : "idle");
         toast(`"Thank you. Here. They dropped this when they took her."`, 3.5);
       }
@@ -1606,7 +1883,7 @@ const FOCUS = {
   blind: {
     spawn(qd) {
       const s = hiddenSpot(qd);
-      qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(s.x, 0, s.z);
+      qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(s.x, terrainAt(s.x, s.z), s.z);
       const e = entrySpot(qd);
       spawnPerson(qd, TOWNSFOLK[Math.floor(qd.r() * TOWNSFOLK.length)], e.x, e.z, "You can't see them, but they're here. Look quick, I'll show you where they walk.").then(n => { if (n) { n.reveal = true; qd.giver = n; } });
       spawnGuards(qd, 3 + Math.floor(mission.index / 6), { hidden: true });
@@ -1614,7 +1891,7 @@ const FOCUS = {
     talk(qd) {
       qd.revealT = 6; qd.talked = true;
       for (const e of enemies.filter(e => e.qd === qd)) {
-        const pts = e.route.concat([e.route[0]]).map(p => new THREE.Vector3(p.x, 0.08, p.z));
+        const pts = e.route.concat([e.route[0]]).map(p => new THREE.Vector3(p.x, p.y + 0.08, p.z));
         const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.6, gapSize: 0.4, transparent: true, opacity: 0.9 }));
         line.computeLineDistances(); own(qd, line); (qd.chalk || (qd.chalk = [])).push(line);
       }
@@ -1664,7 +1941,7 @@ const FOCUS = {
       if (qd.listened !== zz) { qd.listened = zz; this.hum(qd, zz.i); popText("LISTEN"); return; }
       if (zz.i === qd.real) {
         for (const o of qd.zoras) if (o !== zz) { o.gone = true; o.z.root.visible = false; }
-        qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(zz.z.pos.x + 1.2, 0, zz.z.pos.z);
+        qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(zz.z.pos.x + 1.2, terrainAt(zz.z.pos.x + 1.2, zz.z.pos.z), zz.z.pos.z);
         zz.z.root.visible = false; zz.gone = true;
         toast(`It was her, for a moment. She left ${qd.partName} behind.`, 3.5);
       } else {
@@ -1712,16 +1989,16 @@ const FOCUS = {
       }
       const eye = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), new THREE.MeshBasicMaterial({ color: 0x7fffe0 })); eye.position.set(0, 0.2, 0.9); g.add(eye);
       const s = hiddenSpot(qd);
-      g.position.set(s.x, 1.3, s.z);
+      g.position.set(s.x, terrainAt(s.x, s.z) + 1.3, s.z);
       own(qd, g); qd.thing = g; qd.thingV = new THREE.Vector2();
     },
     update(qd, dt, now) {
       const g = qd.thing; if (!g || qd.done || qd.orb) return;
       const o = zoneOrigin(qd.q);
       const dx = g.position.x - koda.pos.x, dz = g.position.z - koda.pos.z, d = Math.hypot(dx, dz) || 1;
-      g.position.y = 1.3 + Math.sin(now / 300) * 0.3;
+      g.position.y = terrainAt(g.position.x, g.position.z) + 1.3 + Math.sin(now / 300) * 0.3;
       if (d < 2.4) {
-        qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(g.position.x, 0, g.position.z);
+        qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(g.position.x, terrainAt(g.position.x, g.position.z), g.position.z);
         g.visible = false; sfxHit(true);
         toast(`It let go of ${qd.partName} and slipped into the dark.`, 3);
         refreshObjective(); return;
@@ -1732,10 +2009,10 @@ const FOCUS = {
       for (let k = 0; k < 8; k++) {
         const ang = Math.atan2(az, ax) + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.5;
         const nx = g.position.x + Math.cos(ang) * 1.5, nz = g.position.z + Math.sin(ang) * 1.5;
-        if (!blocked(nx, nz, 0.8) && nx > o.x + 3 && nx < o.x + ZONE - 3 && nz > o.y + 3 && nz < o.y + ZONE - 3) { ax = Math.cos(ang); az = Math.sin(ang); break; }
+        if (!blocked(nx, nz, 0.8) && nx > o.x + 3 && nx < o.x + qd.q.w - 3 && nz > o.y + 3 && nz < o.y + qd.q.d - 3) { ax = Math.cos(ang); az = Math.sin(ang); break; }
       }
       const nx = g.position.x + ax * speed * dt, nz = g.position.z + az * speed * dt;
-      if (!blocked(nx, nz, 0.6)) { g.position.x = clamp(nx, o.x + 2, o.x + ZONE - 2); g.position.z = clamp(nz, o.y + 2, o.y + ZONE - 2); }
+      if (!blocked(nx, nz, 0.6)) { g.position.x = clamp(nx, o.x + 2, o.x + qd.q.w - 2); g.position.z = clamp(nz, o.y + 2, o.y + qd.q.d - 2); }
       g.rotation.y = Math.atan2(ax, az);
     },
     target(qd) {
@@ -1757,7 +2034,7 @@ function buildPads(qd, n, kind) {
     const z = piano ? c.y : c.y + (i < 2 ? -1.3 : 1.3);
     const col = piano ? 0xf4efe6 : padColours[i];
     const mat = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.15, roughness: 0.5 });
-    const m = new THREE.Mesh(propGeo, mat); m.scale.set(piano ? 1.4 : 2.4, 0.08, piano ? 3 : 2.4); m.position.set(x, 0.04, z); m.receiveShadow = true;
+    const m = new THREE.Mesh(propGeo, mat); m.scale.set(piano ? 1.4 : 2.4, 0.08, piano ? 3 : 2.4); m.position.set(x, terrainAt(x, z) + 0.04, z); m.receiveShadow = true;
     own(qd, m);
     qd.pads.push({ x, z, w: piano ? 1.4 : 2.4, d: piano ? 3 : 2.4, mat, note: scale[i], lit: 0 });
   }
@@ -1779,7 +2056,7 @@ function updatePads(qd, dt) {
   const near = Math.hypot(koda.pos.x - c.x, koda.pos.z - c.y) < 10;
   if (near && !qd.started) { qd.started = true; qd.playing = 0; tip("pads"); toast("Watch and listen. Then step on the pads in the same order.", 3.5); }
   if (!qd.started || qd.playing >= 0) return;
-  const on = qd.pads.findIndex(p => Math.abs(koda.pos.x - p.x) < p.w / 2 && Math.abs(koda.pos.z - p.z) < p.d / 2 && koda.pos.y < 0.3);
+  const on = qd.pads.findIndex(p => Math.abs(koda.pos.x - p.x) < p.w / 2 && Math.abs(koda.pos.z - p.z) < p.d / 2 && kUp() < 0.3);
   if (on === qd.onPad) return;
   qd.onPad = on;
   if (on < 0) return;
@@ -1788,7 +2065,7 @@ function updatePads(qd, dt) {
     qd.step++;
     if (qd.step >= qd.seq.length) {
       qd.solved = true; sfxUnlock();
-      qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(c.x, 0, c.y + (qd.kind === "piano" ? 3 : 3.5));
+      qd.orb = makeOrb(PART_COLOURS[qd.k]); { const oz = c.y + (qd.kind === "piano" ? 3 : 3.5); qd.orb.position.set(c.x, terrainAt(c.x, oz), oz); }
       const clue = (mission.def.puzzleClues || [])[mission.quads.filter(x => x.solved).length - 1] || "Scratched into the pads: \"The water remembers.\"";
       toast(clue, 5);
       refreshObjective();
@@ -1871,16 +2148,17 @@ function updateQuads(dt, now) {
     refreshObjective();
   }
   for (const qd of mission.quads) {
-    if (!qd.done) { const c = zoneCenter(qd.q); if (Math.hypot(c.x - koda.pos.x, c.y - koda.pos.z) < ZONE * 1.1) spawnQuad(qd); }
+    if (!qd.done) { const q = qd.q, ex = Math.max(0, q.x0 - koda.pos.x, koda.pos.x - q.x0 - q.w), ez = Math.max(0, q.z0 - koda.pos.z, koda.pos.z - q.z0 - q.d); if (Math.hypot(ex, ez) < 35) spawnQuad(qd); }
     if (!qd.spawned) continue;
     const F = FOCUS[qd.focus];
     if (F && F.update) F.update(qd, dt, now);
     if (qd.orb) {
       const u = qd.orb.userData, d = dist2(koda.pos, qd.orb.position);
       // A hidden part shows itself only when you're close.
-      if (qd.hidden) { const show = d < 6; u.gem.visible = show; u.beam.visible = false; u.ring.visible = show; }
+      if (qd.stash) qd.orb.visible = false;
+      else if (qd.hidden) { const show = d < 6; u.gem.visible = show; u.beam.visible = false; u.ring.visible = show; }
       u.gem.rotation.y += dt * 1.6; u.gem.position.y = 1.2 + Math.sin(now / 380) * 0.15;
-      if (!qd.done && d < 1.5 && Math.abs(koda.pos.y - qd.orb.position.y) < 1.2) unlockPart(qd);
+      if (!qd.done && !qd.stash && d < 1.5 && Math.abs(koda.pos.y - qd.orb.position.y) < 1.2) unlockPart(qd);
     }
   }
   // The part you're near plays a little louder before you have it: find it by ear.
@@ -1913,20 +2191,20 @@ const objectiveTarget = () => currentTarget();
 function refreshObjective() {
   if (!mission) return;
   const m = mission, left = m.quads.filter(q => !q.done);
-  if (escape) return setObjective("Get Zora out. Reach the gold light before the song ends!");
+  if (escape) return setObjective("Get Zora out. Reach the gold light at East Gate!");
   if (zora && zora.waiting) return setObjective("Find Zora in the Old Tower.");
   if (!left.length) return setObjective("The song is complete.");
   if (race) return setObjective(FOCUS.race.objective(race.qd));
   const here = currentQuad && m.quads.find(q => q.q === currentQuad && !q.done && q.spawned);
   if (here) return setObjective(FOCUS[here.focus].objective(here));
-  setObjective(`Mission ${m.index + 1}: ${m.def.song}. Unlock the parts in the lit quadrants (${m.quads.length - left.length}/${m.quads.length}).`);
+  setObjective(`Mission ${m.index + 1}: ${m.def.song}. Unlock the parts in the lit places (${m.quads.length - left.length}/${m.quads.length}).`);
 }
 
 /* ---------- mission looks: the wobble, the grey, the water ---------- */
 const themeState = { roll: 0 };
 let waterSurface = null;
 const WATER_Y = 1.05;
-const swimming = () => !!(mission && mission.def.theme === "water" && koda && koda.has("swim") && koda.pos.y < 0.6);
+const swimming = () => !!(mission && mission.def.theme === "water" && koda && koda.has("swim") && kUp() < 0.6);
 function applyTheme(theme, dt, reset) {
   const cv = renderer.domElement;
   if (reset) {
@@ -1958,9 +2236,10 @@ function applyTheme(theme, dt, reset) {
       scene.add(waterSurface);
     }
     waterSurface.visible = true;
+    if (koda) waterSurface.position.set(koda.pos.x, terrainAt(koda.pos.x, koda.pos.z) + WATER_Y, koda.pos.z);
     waterSurface.material.opacity = 0.62 + Math.sin(t * 1.3) * 0.04;
     // Thinking of You: dark water that gets darker as the song goes on.
-    const p = mission && mission.limit ? clamp(mission.t / mission.limit, 0, 1) : 0;
+    const p = mission ? mission.quads.filter(q => q.done).length / mission.quads.length : 0;
     scene.fog.color.setRGB(0.02, 0.12 - p * 0.08, 0.16 - p * 0.1); scene.background.copy(scene.fog.color);
     scene.fog.near = 6 - p * 3; scene.fog.far = 34 - p * 14;
     $("tint").style.opacity = (0.55 + p * 0.35).toFixed(2);
@@ -2006,12 +2285,12 @@ function updateBoost(dt) {
 /* ---------- score ---------- */
 function scoreFor(m) {
   const parts = m.quads.filter(q => q.done).length * 1000;
-  const time = Math.max(0, Math.round((m.limit ? m.limit - m.t : 0) * 15));
+  const time = Math.max(0, Math.round((m.limit ? m.limit * 2 - m.t : 0) * 8));
   const stealth = m.quads.filter(q => q.done && !q.seen).length * 400;
   const takedowns = m.stats.takedowns * 200, kos = m.stats.kos * 100, hurt = -m.stats.hurt * 150, beats = (m.stats.onBeat || 0) * 50;
   const total = Math.max(0, parts + time + stealth + takedowns + kos + beats + hurt);
   const grade = total >= 7500 ? "S" : total >= 6000 ? "A" : total >= 4500 ? "B" : "C";
-  return { rows: [["Parts unlocked", parts], ["Time bonus", time], ["Unseen quadrants", stealth], ["Takedowns", takedowns], ["Guards put down", kos], ["Hits on the beat", beats], ["Hits taken", hurt]], total, grade };
+  return { rows: [["Parts unlocked", parts], ["Quick work", time], ["Unseen quadrants", stealth], ["Takedowns", takedowns], ["Guards put down", kos], ["Hits on the beat", beats], ["Hits taken", hurt]], total, grade };
 }
 function failMission() {
   const m = mission;
@@ -2080,6 +2359,13 @@ $("replayBtn").addEventListener("click", () => {
 });
 
 /* ---------- the final escape ---------- */
+// Everyone who doesn't climb walks on the land (and bridges), up and down the hills.
+function settleCrowd() {
+  for (const e of enemies) e.a.pos.y = floorAt(e.a.pos.x, e.a.pos.z);
+  for (const n of npcs) n.a.pos.y = floorAt(n.a.pos.x, n.a.pos.z);
+  if (zora && zora.pos) zora.pos.y = floorAt(zora.pos.x, zora.pos.z);
+  if (mission) for (const qd of mission.quads) if (qd.zoras) for (const z of qd.zoras) if (z.z && z.z.pos) z.z.pos.y = floorAt(z.z.pos.x, z.z.pos.z);
+}
 function updateZora(dt) {
   if (!zora) return;
   zora.update(dt);
@@ -2087,7 +2373,7 @@ function updateZora(dt) {
     if (dist2(koda.pos, zora.pos) < 2.2) {
       zora.waiting = false;
       showCard({ kicker: "CUTSCENE", title: "Zora", lines: S.cutscenes.found, button: "Run" }).then(() => {
-        const ex = new THREE.Vector2(WORLD_W + ROAD - 3, zoneCenter(Q("q12")).y);
+        const ex = new THREE.Vector2(Q("q12").x0 + Q("q12").w - 4, zoneCenter(Q("q12")).y);
         escape = { exit: ex, mesh: ringAt(ex.x, ex.y, 3) };
         for (const e of enemies) if (e.state !== "ko") alertEnemy(e);
         refreshObjective();
@@ -2113,6 +2399,7 @@ function updateZora(dt) {
 /* ---------- Koda ---------- */
 const CONTACT = 1.05;      // how close a hit lands: fists meet faces
 const lastSafe = new THREE.Vector3();
+const kUp = () => koda.pos.y - terrainAt(koda.pos.x, koda.pos.z);
 function startSink() {
   if (koda.sinking) return;
   koda.sinking = { t: 0.7 }; air = null;
@@ -2127,7 +2414,7 @@ function updateKoda(dt) {
   if (koda.sinking) {
     koda.sinking.t -= dt; koda.pos.y -= dt * 1.4;
     if (koda.sinking.t <= 0) {
-      koda.sinking = null; koda.pos.copy(lastSafe); koda.pos.y = Math.max(0, groundAt(lastSafe.x, lastSafe.z));
+      koda.sinking = null; koda.pos.copy(lastSafe); koda.pos.y = groundAt(lastSafe.x, lastSafe.z);
       popText("WASHED BACK", "bad");
     }
     koda.update(dt);
@@ -2140,6 +2427,7 @@ function updateKoda(dt) {
     air.vy -= 22 * dt; koda.pos.y += air.vy * dt;
     let mx = 0, mz = 0;
     if (air.vault) { const f = forward(koda); mx = f.x; mz = f.y; }
+    else if (air.back) { mx = air.back.x; mz = air.back.z; }
     else if (input.mag) { mx = input.x; mz = input.z; koda.face(Math.atan2(input.x, input.z), Math.min(1, dt * 8)); }
     if (mx || mz) {
       const bx = koda.pos.x, bz = koda.pos.z;
@@ -2157,8 +2445,8 @@ function updateKoda(dt) {
       }
     }
     const g = groundAt(koda.pos.x, koda.pos.z);
-    if (air.vy <= 0 && koda.pos.y <= Math.max(g, 0)) {
-      if (g < 0) { koda.pos.y = 0; air = null; startSink(); koda.update(dt); return; }
+    if (air.vy <= 0 && koda.pos.y <= (g === MUD ? terrainAt(koda.pos.x, koda.pos.z) : g)) {
+      if (g === MUD) { koda.pos.y = terrainAt(koda.pos.x, koda.pos.z); air = null; startSink(); koda.update(dt); return; }
       koda.pos.y = g;
       if (air.kick) landKick();
       air = null; attackLock = Math.max(attackLock, 0.08);
@@ -2202,7 +2490,7 @@ function updateKoda(dt) {
   koda.moving = speed > 0; koda.sprinting = sprint || boost.on; koda.sneaking = sneaking;
   // Crouched beside a crate, wall or dumpster: he presses his back to it and is much harder to see.
   koda.inCover = null;
-  if (sneaking && koda.pos.y < 0.3) {
+  if (sneaking && kUp() < 0.3) {
     for (const b of blockers) {
       if (b.mud || b.top < 0.75) continue;
       const cx = clamp(koda.pos.x, b.minX, b.maxX), cz = clamp(koda.pos.z, b.minZ, b.maxZ);
@@ -2217,7 +2505,7 @@ function updateKoda(dt) {
 // After moving on the ground: step off an edge and fall, step into the mud and sink.
 function settle() {
   const g = groundAt(koda.pos.x, koda.pos.z);
-  if (g < 0) { if (koda.pos.y <= 0.05) startSink(); else air = { vy: 0, speed: 3, kick: false, fall: true }; return; }
+  if (g === MUD) { if (koda.pos.y <= terrainAt(koda.pos.x, koda.pos.z) + 0.05) startSink(); else air = { vy: 0, speed: 3, kick: false, fall: true }; return; }
   if (koda.pos.y > g + 0.05) { air = { vy: 0, speed: koda.moving ? 4 : 0, kick: false, fall: true }; return; }
   koda.pos.y = g;
   // Remember solid ground a step back from any mud, to come back to after a dunk.
@@ -2236,6 +2524,8 @@ function jump() {
   let low = null;
   for (let i = 4; i <= 16 && !low; i += 2) { const b = blocked(koda.pos.x + f.x * i * 0.1, koda.pos.z + f.y * i * 0.1, 0.3, koda.pos.y); if (b && b.low && b.top - koda.pos.y < 1.1 && Math.min(b.maxX - b.minX, b.maxZ - b.minZ) < 0.9) low = b; }   // thin things only: jump onto crates, vault over barriers
   if (low && koda.has("vault")) { air.speed = Math.max(speed, 5.5); air.vault = true; input.x = f.x; input.z = f.y; koda.play("vault", { once: true, speed: 1.6 }); }
+  else if (speed >= 7.5 && koda.has("frontflip")) koda.play("frontflip", { once: true, speed: 1.35, from: 0.25 });
+  else if (!input.mag && fightFoe() && koda.has("backflip")) { koda.play("backflip", { once: true, speed: 1.5, from: 0.35 }); const f = forward(koda); air.speed = 3; air.back = { x: -f.x, z: -f.y }; }
   else koda.play("jump", { once: true, speed: 1.3 });
   tip("jump");
 }
@@ -2258,7 +2548,8 @@ function attack() {
   if (air) {
     if (air.kick) return;
     air.kick = true; air.vy = Math.max(air.vy, 3);
-    koda.play(koda.has("flykick") ? "flykick" : "kick", { once: true, speed: 1.4 });
+    const alt = koda.has("crescent") && (comboStep++ % 2);
+    koda.play(alt ? "crescent" : koda.has("flykick") ? "flykick" : "kick", alt ? { once: true, speed: 1.6, from: 0.7 } : { once: true, speed: 1.4 });
     const t = strikeTarget(4);
     if (t) { koda.faceTo(t.a.pos.x, t.a.pos.z); air.speed = 6; input.x = Math.sin(koda.yaw); input.z = Math.cos(koda.yaw); }
     return;
@@ -2270,24 +2561,54 @@ function attack() {
     const dx = t.a.pos.x - koda.pos.x, dz = t.a.pos.z - koda.pos.z, d = Math.hypot(dx, dz) || 1;
     if (d > CONTACT) lunge = { x: t.a.pos.x - dx / d * CONTACT, z: t.a.pos.z - dz / d * CONTACT, t: 0.14 };
   }
-  // A three-hit string: jab, punch combo, kick. Each blow lands where the move's fist or foot does.
-  const STRING = koda.native
-    ? [{ clip: "punch", speed: 1.5, lock: 0.5, hits: [0.22], dmg: 1 }, { clip: "combo", speed: 1.6, lock: 0.8, hits: [0.24, 0.55], dmg: 1 }, { clip: "kick", speed: 1.4, lock: 0.7, hits: [0.42], dmg: 2, body: true }]
-    : [{ clip: "punch", speed: 1.5, lock: 0.42, hits: [0.17], dmg: 1 }, { clip: "punch", speed: 1.5, lock: 0.42, hits: [0.17], dmg: 1 }, { clip: "kick", speed: 1.5, lock: 0.5, hits: [0.17], dmg: 2 }];
-  const mv = STRING[comboStep++ % 3];
+  // The ninja string: cross, jab-to-elbow, elbow-uppercut, roundhouse. Land the finisher on
+  // the beat and it becomes a hurricane kick that hits everyone around him. Sprinting in, the
+  // first blow is a flying knee. Times are seconds into each move, where the fist or foot lands.
+  const ninja = koda.has("roundhouse");
+  const STRING = ninja
+    ? [{ clip: "punch", from: 0.6, speed: 1.6, lock: 0.45, hits: [0.93], dmg: 1 },
+       { clip: "combo", from: 0.5, speed: 1.7, lock: 0.75, hits: [0.87, 1.35], dmg: 1 },
+       { clip: "elbowup", from: 0.3, speed: 1.6, lock: 0.7, hits: [0.6, 1.0], dmg: 1, body: true },
+       { clip: "roundhouse", from: 0.45, speed: 1.5, lock: 0.7, hits: [0.9], dmg: 2, push: 2.6 }]
+    : koda.native
+      ? [{ clip: "punch", speed: 1.5, lock: 0.5, hits: [0.22], dmg: 1 }, { clip: "combo", speed: 1.6, lock: 0.8, hits: [0.24, 0.55], dmg: 1 }, { clip: "kick", speed: 1.4, lock: 0.7, hits: [0.42], dmg: 2, body: true }]
+      : [{ clip: "punch", speed: 1.5, lock: 0.42, hits: [0.17], dmg: 1 }, { clip: "punch", speed: 1.5, lock: 0.42, hits: [0.17], dmg: 1 }, { clip: "kick", speed: 1.5, lock: 0.5, hits: [0.17], dmg: 2 }];
   // On the beat: double damage.
   const onBeatHit = nearBeat(0.12);
   if (onBeatHit) { popText("ON BEAT x2", "good"); mission.stats.onBeat++; }
-  koda.play(mv.clip, { once: true, speed: mv.speed });
+  let mv = STRING[comboStep++ % STRING.length];
+  if (ninja && koda.sprinting && comboStep === 1 && koda.has("knee")) mv = { clip: "knee", from: 0.4, speed: 1.5, lock: 0.9, hits: [0.97, 1.5], dmg: 1, dash: 3.2 };
+  if (ninja && mv.clip === "roundhouse" && onBeatHit && koda.has("hurricane")) mv = { clip: "hurricane", from: 0.05, speed: 1.3, lock: 1.0, hits: [0.4, 0.8, 1.15], dmg: 1, radial: 2.4, push: 1.8 };
+  koda.play(mv.clip, { once: true, speed: mv.speed, from: mv.from || 0 });
   attackLock = mv.lock;
-  for (const at of mv.hits) later(at, () => {
+  if (mv.dash) { const f = forward(koda); lunge = { x: koda.pos.x + f.x * mv.dash, z: koda.pos.z + f.y * mv.dash, t: 0.35 }; }
+  for (const at of mv.hits) later((at - (mv.from || 0)) / mv.speed, () => {
     const f = forward(koda);
     for (const e of enemies) {
       if (e.state === "ko") continue;
       const dx = e.a.pos.x - koda.pos.x, dz = e.a.pos.z - koda.pos.z, d = Math.hypot(dx, dz);
-      if (d < 1.6 && Math.abs(koda.pos.y) < 0.7 && (dx * f.x + dz * f.y) / (d || 1) > 0.3) hitEnemy(e, mv.dmg * (onBeatHit ? 2 : 1), dx / (d || 1), dz / (d || 1), mv.body);
+      const inFront = (dx * f.x + dz * f.y) / (d || 1) > 0.3;
+      if (Math.abs(kUp()) < 0.7 && (mv.radial ? d < mv.radial : d < 1.7 && inFront)) {
+        hitEnemy(e, mv.dmg * (onBeatHit ? 2 : 1), dx / (d || 1), dz / (d || 1), mv.body);
+        if (mv.push && e.state !== "ko") moveWithCollision(e.a.pos, dx / (d || 1) * mv.push * 0.5, dz / (d || 1) * mv.push * 0.5, 0.4);
+      }
     }
   });
+}
+// Dodge: in a fight, the sneak button rolls him out of the way (forward if he's moving,
+// a jump back if he isn't). He can't be hit while he rolls.
+function dodge() {
+  if (!koda || attackLock > 0 || air || koda.sinking) return false;
+  if (!fightFoe() || !koda.has("roll")) return false;
+  readInput();
+  const moving = input.mag > 0.2, f = forward(koda);
+  const dir = moving ? { x: input.x, z: input.z } : { x: -f.x, z: -f.y };
+  if (moving) koda.face(Math.atan2(input.x, input.z), 1);
+  const len = moving ? 4.2 : 2.8;
+  lunge = { x: koda.pos.x + dir.x * len, z: koda.pos.z + dir.z * len, t: moving ? 0.45 : 0.4 };
+  koda.play(moving ? "roll" : (koda.has("dodge") ? "dodge" : "roll"), { once: true, speed: moving ? 1.3 : 1.7, from: moving ? 0 : 0.45 });
+  attackLock = moving ? 0.55 : 0.5; invuln = Math.max(invuln, 0.6);
+  return true;
 }
 function landKick() {
   for (const e of enemies) {
@@ -2299,6 +2620,7 @@ function landKick() {
 function action() {
   if (!koda || attackLock > 0 || air) return;
   if (npcs.some(n => dist2(koda.pos, n.a.pos) < 2.6) || (mission && mission.quads.some(q => q.focus === "copies" && q.zoras && q.zoras.some(z => !z.gone && dist2(z.z.pos, koda.pos) < 2.4)))) return talkOrListen();
+  if (searchNear()) return;
   // A takedown: from behind, unseen.
   for (const e of enemies) {
     if (e.state === "ko" || e.state === "alert") continue;
@@ -2360,8 +2682,8 @@ function hurtKoda(n, fromX, fromZ) {
 function respawn() {
   const qd = mission.quads.find(q => !q.done) || mission.quads[0];
   const c = zoneCenter(qd.q);
-  const s = freeSpot(c.x, c.y + ZONE / 2 - 3);
-  koda.pos.set(s.x, 0, s.z); lastSafe.set(s.x, 0, s.z); air = null; koda.sinking = null;
+  const s = freeSpot(c.x, c.y + qd.q.d / 2 - 6);
+  koda.pos.set(s.x, groundAt(s.x, s.z), s.z); lastSafe.copy(koda.pos); air = null; koda.sinking = null;
   health = 5; drawHearts();
   for (const q of mission.quads) if (q.focus === "fight" && q.arena) FOCUS.fight.reset(q);
   for (const e of enemies) if (e.state !== "ko") { e.state = "patrol"; e.meter = 0; }
@@ -2436,7 +2758,7 @@ function updateEnemies(dt) {
     const f = forward(a), dx = koda.pos.x - a.pos.x, dz = koda.pos.z - a.pos.z;
     // Under a roof or sneaking: much harder to spot. Up on a rooftop: guards look along the street, not up.
     const covered = underRoof(koda.pos.x, koda.pos.z);
-    const range = (koda.sneaking ? 4 : 7.5) * (covered ? 0.5 : 1) * (koda.pos.y > 1.5 ? 0.6 : 1) * (koda.inCover ? 0.6 : 1);
+    const range = (koda.sneaking ? 4 : 7.5) * (covered ? 0.5 : 1) * (kUp() > 1.5 ? 0.6 : 1) * (koda.inCover ? 0.6 : 1) * (litBy(koda.pos.x, koda.pos.z) ? 1 : 0.65);
     const inCone = d < range && (dx * f.x + dz * f.y) / (d || 1) > 0.55;
     const heard = (koda.sprinting || air) && d < 4;
     // Crouched, anything waist-high hides him; standing, it has to be chest-high.
@@ -2502,7 +2824,7 @@ function updateEnemies(dt) {
       if (e.state !== "alert") return;
       const ddx = koda.pos.x - a.pos.x, ddz = koda.pos.z - a.pos.z, dd = Math.hypot(ddx, ddz);
       const ef = forward(a);
-      if (dd < 1.6 && koda.pos.y < 0.6 && (ddx * ef.x + ddz * ef.y) / (dd || 1) > 0.5) hurtKoda(1, a.pos.x, a.pos.z);
+      if (dd < 1.6 && kUp() < 0.6 && (ddx * ef.x + ddz * ef.y) / (dd || 1) > 0.5) hurtKoda(1, a.pos.x, a.pos.z);
     });
   }
   // Guards don't stand inside each other.
@@ -2513,7 +2835,7 @@ function updateEnemies(dt) {
     if (d > 0 && d < 0.9) { const push = (0.9 - d) / 2; p.x -= dx / d * push; p.z -= dz / d * push; q.x += dx / d * push; q.z += dz / d * push; }
   }
   // Koda and the guards are solid to each other.
-  if (!air && koda.pos.y < 0.5) for (const e of enemies) {
+  if (!air && kUp() < 0.5) for (const e of enemies) {
     if (e.state === "ko") continue;
     const p = e.a.pos, dx = koda.pos.x - p.x, dz = koda.pos.z - p.z, d = Math.hypot(dx, dz);
     if (d > 0.001 && d < 0.85) {
@@ -2602,7 +2924,7 @@ function updateFightMarks(now) {
     const waiting = e.state === "alert" && attacker && attacker !== e && dist2(a.pos, koda.pos) < 8;
     if (waiting) {
       if (!e.ring) { e.ring = new THREE.Mesh(queueRingGeo, queueRingMat); e.ring.rotation.x = -Math.PI / 2; scene.add(e.ring); }
-      e.ring.visible = a.root.visible; e.ring.position.set(a.pos.x, 0.06, a.pos.z);
+      e.ring.visible = a.root.visible; e.ring.position.set(a.pos.x, a.pos.y + 0.06, a.pos.z);
     } else if (e.ring) e.ring.visible = false;
     // The one coming at you burns red; a hit flashes white for a moment.
     if (e.flash > 0) { e.flash -= 1 / 60; tintActor(a, 1, 1, 1, 1.2 * Math.max(0, e.flash) / 0.12); e.tinted = true; }
@@ -2688,7 +3010,8 @@ function buildPathLine(points) {
     const p = pts[i], q = pts[Math.min(pts.length - 1, i + 1)], o = pts[Math.max(0, i - 1)];
     let dx = q[0] - o[0], dz = q[1] - o[1]; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
     const w = 0.07;   // a fine line, not a road marking
-    pos.set([p[0] - dz * w, 0.07, p[1] + dx * w, p[0] + dz * w, 0.07, p[1] - dx * w], i * 6);
+    const py = groundAt(p[0], p[1]); const ly = (py === MUD ? terrainAt(p[0], p[1]) : py) + 0.07;
+    pos.set([p[0] - dz * w, ly, p[1] + dx * w, p[0] + dz * w, ly, p[1] - dx * w], i * 6);
     al[i * 2] = al[i * 2 + 1] = along[i];
     if (i < pts.length - 1) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
   }
@@ -2840,9 +3163,9 @@ function drawMinimap() {
     const qd = mission && mission.quads.find(x => x.q === q);
     const col = qd ? "#" + PART_COLOURS[qd.k].toString(16).padStart(6, "0") : null;
     mm.fillStyle = qd ? (qd.done ? "rgba(255,255,255,.18)" : col + "88") : "rgba(255,255,255,.06)";
-    mm.fillRect(ox + o.x * k, oz + o.y * k, ZONE * k, ZONE * k);
-    if (q === currentQuad) { mm.strokeStyle = "#fff"; mm.lineWidth = 1.5; mm.strokeRect(ox + o.x * k + 1, oz + o.y * k + 1, ZONE * k - 2, ZONE * k - 2); }
-    if (qd && qd.done) { mm.fillStyle = "#7fe39a"; mm.font = "bold 12px sans-serif"; mm.textAlign = "center"; mm.fillText("✓", ox + (o.x + ZONE / 2) * k, oz + (o.y + ZONE / 2) * k + 4); }
+    mm.fillRect(ox + o.x * k, oz + o.y * k, q.w * k, q.d * k);
+    if (q === currentQuad) { mm.strokeStyle = "#fff"; mm.lineWidth = 1.5; mm.strokeRect(ox + o.x * k + 1, oz + o.y * k + 1, q.w * k - 2, q.d * k - 2); }
+    if (qd && qd.done) { mm.fillStyle = "#7fe39a"; mm.font = "bold 12px sans-serif"; mm.textAlign = "center"; mm.fillText("✓", ox + (o.x + q.w / 2) * k, oz + (o.y + q.d / 2) * k + 4); }
   }
   mm.fillStyle = "rgba(140,96,56,.9)";
   for (const m of muds) mm.fillRect(ox + m.minX * k, oz + m.minZ * k, (m.maxX - m.minX) * k, (m.maxZ - m.minZ) * k);
@@ -2872,14 +3195,15 @@ function drawRadar(dt) {
   for (const q of S.quadrants) {
     const o = zoneOrigin(q), qd = mission && mission.quads.find(x => x.q === q);
     rc.fillStyle = qd ? (qd.done ? "rgba(255,255,255,.10)" : hexCol(PART_COLOURS[qd.k]) + "44") : "rgba(255,255,255,.05)";
-    rc.fillRect(o.x, o.y, ZONE, ZONE);
+    rc.fillRect(o.x, o.y, q.w, q.d);
   }
+  rc.strokeStyle = "rgba(255,255,255,.16)"; rc.lineCap = "round"; rc.lineJoin = "round";
+  for (const r of WD.roads) { rc.lineWidth = r.width; rc.beginPath(); r.points.forEach(([x, z], i) => i ? rc.lineTo(x, z) : rc.moveTo(x, z)); rc.stroke(); }
   rc.fillStyle = "rgba(140,96,56,.95)";
   for (const m of muds) rc.fillRect(m.minX, m.minZ, m.maxX - m.minX, m.maxZ - m.minZ);
-  for (const b of blockers) {
+  for (const b of nearBlocks(koda.pos.x, koda.pos.z, range + 10)) {
     if (b.mud) continue;
-    if (Math.abs((b.minX + b.maxX) / 2 - koda.pos.x) > range + 10 || Math.abs((b.minZ + b.maxZ) / 2 - koda.pos.z) > range + 10) continue;
-    rc.fillStyle = b.top >= 3 ? "rgba(190,190,200,.55)" : "rgba(190,190,200,.22)";
+    rc.fillStyle = b.top - b.base >= 3 ? "rgba(190,190,200,.55)" : "rgba(190,190,200,.22)";
     rc.fillRect(b.minX, b.minZ, b.maxX - b.minX, b.maxZ - b.minZ);
   }
   rc.fillStyle = "rgba(255,210,122,.25)";
@@ -2932,16 +3256,18 @@ function drawBigMap() {
   for (const q of S.quadrants) {
     const o = zoneOrigin(q), qd = mission && mission.quads.find(x => x.q === q);
     g.fillStyle = qd ? (qd.done ? "#2c3a30" : hexCol(PART_COLOURS[qd.k]) + "40") : "#1a1920";
-    g.fillRect(X(o.x), Z(o.y), ZONE * k, ZONE * k);
-    if (qd) { g.strokeStyle = qd.done ? "#7fe39a" : hexCol(PART_COLOURS[qd.k]); g.lineWidth = 1 * dpr; g.strokeRect(X(o.x) + dpr, Z(o.y) + dpr, ZONE * k - 2 * dpr, ZONE * k - 2 * dpr); }
+    g.fillRect(X(o.x), Z(o.y), q.w * k, q.d * k);
+    if (qd) { g.strokeStyle = qd.done ? "#7fe39a" : hexCol(PART_COLOURS[qd.k]); g.lineWidth = 1 * dpr; g.strokeRect(X(o.x) + dpr, Z(o.y) + dpr, q.w * k - 2 * dpr, q.d * k - 2 * dpr); }
   }
   g.fillStyle = "#8c6038"; for (const m of muds) g.fillRect(X(m.minX), Z(m.minZ), (m.maxX - m.minX) * k, (m.maxZ - m.minZ) * k);
   g.fillStyle = "#b08850"; for (const f of floats) g.fillRect(X(f.x - f.w / 2), Z(f.z - f.d / 2), f.w * k, f.d * k);
-  for (const b of blockers) { if (b.mud) continue; g.fillStyle = b.top >= 3 ? "#5a5866" : "#3a3944"; g.fillRect(X(b.minX), Z(b.minZ), (b.maxX - b.minX) * k, (b.maxZ - b.minZ) * k); }
+  g.strokeStyle = "#3a3840"; g.lineCap = "round"; g.lineJoin = "round";
+  for (const r of WD.roads) { g.lineWidth = Math.max(2, r.width * k); g.beginPath(); r.points.forEach(([x, z], i) => i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z))); g.stroke(); }
+  for (const b of blockers) { if (b.mud || (b.top - b.base) < 3) continue; g.fillStyle = "#5a5866"; g.fillRect(X(b.minX), Z(b.minZ), (b.maxX - b.minX) * k, (b.maxZ - b.minZ) * k); }
   g.fillStyle = "rgba(255,210,122,.35)"; for (const a of roofs) g.fillRect(X(a.x - a.w / 2), Z(a.z - a.d / 2), a.w * k, a.d * k);
   // Names and what each lit quadrant holds.
   g.textAlign = "center"; g.textBaseline = "middle";
-  const fs = Math.min(11 * dpr, ZONE * k * 0.13), fs2 = Math.min(10 * dpr, ZONE * k * 0.115);
+  const fs = Math.min(11 * dpr, 90 * k * 0.13), fs2 = Math.min(10 * dpr, 90 * k * 0.115);
   for (const q of S.quadrants) {
     const c = zoneCenter(q), qd = mission && mission.quads.find(x => x.q === q);
     g.font = `800 ${fs}px Inter, sans-serif`; g.fillStyle = qd ? "#fff" : "rgba(255,255,255,.45)";
@@ -2983,22 +3309,53 @@ function fightFoe() {
   }
   return best;
 }
+/* ---------- day and night ----------
+   The city has its own clock: a full day passes every 16 minutes of play. The sun
+   swings across the sky, the street lamps come on at dusk, and at night guards see
+   less unless you're under a lamp. Each mission starts at its own hour. */
+const DAY = { hour: 18, speed: 24 / (16 * 60), light: 1, dir: new THREE.Vector3(14, 30, 8) };
+const C_NIGHT = new THREE.Color(0x0b0d18), C_DUSK = new THREE.Color(0x3f2a45), C_DAY = new THREE.Color(0x7d93ad);
+const S_NIGHT = new THREE.Color(0x8fa6ff), S_DUSK = new THREE.Color(0xff9a5a), S_DAY = new THREE.Color(0xfff0d8);
+const tmpC = new THREE.Color();
+function updateDayNight(dt) {
+  DAY.hour = (DAY.hour + dt * DAY.speed + 24) % 24;
+  const h = DAY.hour, up = Math.sin((h - 6) / 12 * Math.PI);   // 1 at noon, 0 at 6:00 and 18:00, below 0 at night
+  const day = clamp(up * 1.8 + 0.25, 0, 1), dusk = clamp(1 - Math.abs(up) * 3, 0, 1);
+  DAY.light = day;
+  // Sun by day, moon by night: always some light to play by.
+  const az = (h / 24) * Math.PI * 2;
+  DAY.dir.set(Math.cos(az) * 22, 14 + Math.max(0, up) * 22, Math.sin(az) * 12 + 8);
+  if (up > 0) tmpC.copy(S_DUSK).lerp(S_DAY, clamp(up * 2.5, 0, 1)); else tmpC.copy(S_DUSK).lerp(S_NIGHT, clamp(-up * 4, 0, 1));
+  sun.color.copy(tmpC); sun.intensity = 0.55 + 2.3 * day;
+  hemi.intensity = 0.32 + 0.5 * day;
+  if (up > 0) tmpC.copy(C_DUSK).lerp(C_DAY, clamp(up * 2.2, 0, 1)); else tmpC.copy(C_DUSK).lerp(C_NIGHT, clamp(-up * 4, 0, 1));
+  scene.fog.color.copy(tmpC); scene.background.copy(tmpC);
+  scene.fog.near = 30 + 10 * day; scene.fog.far = 75 + 35 * day;
+  lampBulbMat.emissiveIntensity = 0.15 + 2.6 * (1 - day);
+  renderer.toneMappingExposure = 0.42 + 0.63 * day;
+  lampBulbMat.emissiveIntensity *= 1.6 - 0.6 * day;
+  const hh = Math.floor(h), mm = Math.floor((h - hh) * 60 / 10) * 10;
+  const el = $("dayClock"); if (el) { el.textContent = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`; el.dataset.night = day < 0.35 ? "1" : ""; }
+}
+// Near a lit lamp at night you're as easy to see as by day.
+const litBy = (x, z) => DAY.light > 0.6 || lamps.some(l => Math.abs(l.x - x) < 7 && Math.abs(l.z - z) < 7);
 function updateCamera(dt, snap) {
+  if (window.GILL_NOCAM) return;
   // In a fight the camera moves in on the two of them, and pulls back out once he's down.
   const foe = state === "play" ? fightFoe() : null;
   camZoom += ((foe ? 0.5 : 1) - camZoom) * Math.min(1, dt * (foe ? 3 : 1.5));
   if (snap) camZoom = foe ? 0.5 : 1;
   const lead = koda.moving && !foe ? 1.6 : 0;
   if (foe) camTarget.set((koda.pos.x + foe.a.pos.x) / 2, 0.9, (koda.pos.z + foe.a.pos.z) / 2);
-  else camTarget.set(koda.pos.x + Math.sin(koda.yaw) * lead, 0.8 + Math.max(0, koda.pos.y) * 0.7, koda.pos.z + Math.cos(koda.yaw) * lead);
+  else camTarget.set(koda.pos.x + Math.sin(koda.yaw) * lead, terrainAt(koda.pos.x, koda.pos.z) + 0.8 + Math.max(0, kUp()) * 0.7, koda.pos.z + Math.cos(koda.yaw) * lead);
   camOff.copy(CAM_OFFSET).multiplyScalar(camZoom);
   const want = camTarget.clone().add(camOff);
   if (snap) camera.position.copy(want); else camera.position.lerp(want, Math.min(1, dt * 5));
   camera.lookAt(camera.position.clone().sub(camOff));
   if (themeState.roll) camera.rotation.z += themeState.roll;
   if (shake > 0) { shake = Math.max(0, shake - dt); camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake * 0.6; }
-  sun.position.set(koda.pos.x + 14, 30, koda.pos.z + 8);
-  sun.target.position.set(koda.pos.x, 0, koda.pos.z);
+  sun.position.set(koda.pos.x + DAY.dir.x, koda.pos.y + DAY.dir.y, koda.pos.z + DAY.dir.z);
+  sun.target.position.set(koda.pos.x, terrainAt(koda.pos.x, koda.pos.z), koda.pos.z);
 }
 
 /* ---------- debug readout (?debug=1) ---------- */
@@ -3030,16 +3387,17 @@ function frame(now) {
 // Time left on the song. Red for the last 20 seconds.
 function drawClock() {
   const el = $("timer");
-  if (!mission.limit) { el.textContent = "0:00"; return; }
-  const left = Math.max(0, Math.ceil(mission.limit - mission.t));
-  el.textContent = Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0");
-  el.classList.toggle("low", left <= 20);
+  // How long you've been at it. There's no time limit: the song loops until it's complete.
+  const t = Math.floor(mission.t);
+  el.textContent = Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0");
+  el.classList.remove("low");
 }
 function tick(dt, now) {
   if (hitStop > 0) { hitStop -= dt; updateSparks(dt); updateCamera(dt); return; }
   mission.t += dt;
   runTimers(dt);
   updateBeat();
+  updateDayNight(dt);
   if (mission.def.theme) applyTheme(mission.def.theme, dt);
   updateFloats(mission.t);
   updateBoost(dt);
@@ -3053,6 +3411,7 @@ function tick(dt, now) {
   updateNpcs(dt);
   updateQuads(dt, now);
   updateZora(dt);
+  settleCrowd();
   updateOcclusion();
   updateGuide(now, dt);
   updateMarker();
@@ -3061,10 +3420,6 @@ function tick(dt, now) {
   if (toastT > 0 && (toastT -= dt) <= 0) $("toast").classList.remove("show");
   if (tipT > 0 && (tipT -= dt) <= 0) nextTip();
   drawClock();
-  if (mission.limit && !mission.finished && mission.t >= mission.limit) {
-    const allIn = mission.quads.every(q => q.done);
-    if (!allIn || (mission.def.final && !mission.homeFree)) failMission();
-  }
   updateCamera(dt);
 }
 
@@ -3099,6 +3454,8 @@ function goLandscape() {
   if (req && !document.fullscreenElement) { try { const r = req.call(el); if (r && r.then) r.then(lock).catch(() => {}); else lock(); } catch (e) { /* not allowed */ } }
   else lock();
 }
+// Held upright, the game pauses behind the "turn your phone" card.
+if (phone && window.matchMedia) { const mq = matchMedia("(orientation: portrait)"); const onTurn = () => { if (mq.matches) pause(); }; mq.addEventListener ? mq.addEventListener("change", onTurn) : mq.addListener(onTurn); }
 // No pinch or double-tap zoom anywhere in the game.
 for (const ev of ["gesturestart", "gesturechange", "dblclick"]) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
 document.addEventListener("touchmove", e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
@@ -3124,8 +3481,8 @@ $("playBtn").addEventListener("click", () => begin(save.unlocked));
     koda = await makeActor("koda.glb", 1.62);
     scene.add(koda.root);
     koda.play("idle");
-    const c = zoneCenter(S.quadrants[0]);
-    koda.pos.set(c.x, 0, c.y + ZONE / 2 - 4); koda.face(Math.PI, 1);
+    const q0 = S.quadrants[0], c = zoneCenter(q0);
+    koda.pos.set(c.x, terrainAt(c.x, c.y + q0.d / 2 - 6), c.y + q0.d / 2 - 6); koda.face(Math.PI, 1);
     updateCamera(0, true);
   } catch (e) {
     $("loading").textContent = "Koda couldn't load. Check your connection and reload.";
@@ -3141,7 +3498,7 @@ $("playBtn").addEventListener("click", () => begin(save.unlocked));
   $("playBtn").disabled = false;
   toTitle();
   window.GILL_FLOATS = () => floats; window.GILL_DRONES = () => drones;
-  window.GILL = { pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
+  window.GILL = { scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
     enemies, npcs, get state() { return state; }, save: () => save, blockers, keys, input, cardContinue, pause, resume, drawBigMap, pathNext, stick, FOCUS, beat, songTime, boost, get lastSafe() { return lastSafe; }, fightFoe, get camZoom() { return camZoom; }, attack, jump, action, objectiveTarget, get health() { return health; }, get music() { return music; },
     sim(seconds) { let t = performance.now(); for (let i = 0; i < seconds * 30; i++) { t += 33; tick(1 / 30, t); } } };
 })();

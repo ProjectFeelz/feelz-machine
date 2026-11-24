@@ -191,7 +191,7 @@ window.GILL_STORY = {
 
   // One-line tips, each shown once, the first time it matters.
   tips: {
-    start:    "Each lit quadrant holds a part of the song. Go in, do its task, and the part joins the mix.",
+    start:    "Each lit place on the map holds a part of the song. Go there, do its task, and the part joins the mix. No rush: the song plays until it's complete.",
     guard:    "Guards see in front of them. SNEAK keeps you quiet. Get behind one and press ACTION for a takedown.",
     seen:     "You've been seen. Fight with HIT, or run and break their line of sight.",
     explore:  "Talk to the people here. Follow their clue, and listen: the part gets louder as you get close.",
