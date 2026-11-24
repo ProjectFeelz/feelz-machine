@@ -28,6 +28,7 @@
         <div class="timer" id="timer" title="Time on this mission">0:00</div>
         <div class="dayclock" id="dayClock" title="Time of day in the city">18:00</div>
         <div class="beat" id="beat" aria-hidden="true"></div>
+        <button class="view-btn" id="btnView" aria-label="Switch camera view (V)">Distance</button>
         <button class="icon-btn" id="pauseBtn" aria-label="Pause">II</button>
       </div>
       <div class="hearts" id="hearts"></div>
@@ -56,6 +57,25 @@
     </div>
   </div>
 
+  <!-- Build mode: pick a piece, walk to the spot, drop it -->
+  <div id="build" class="build hidden">
+    <div class="build-head">
+      <b id="buildName"></b>
+      <span id="buildSave" aria-live="polite"></span>
+    </div>
+    <div class="build-cats" id="buildCats"></div>
+    <div class="build-items" id="buildItems"></div>
+    <div class="build-actions">
+      <button id="bTurn" title="R">Turn</button>
+      <button id="bPlace" class="go" title="F or Enter">Place</button>
+      <button id="bPickUp" title="X" disabled>Pick up</button>
+      <button id="bInside" title="I">Inside on/off</button>
+      <button id="bUndo" title="Z">Undo</button>
+      <button id="bView" title="V">View</button>
+      <button id="bDone" title="Esc">Done</button>
+    </div>
+  </div>
+
   <!-- Title -->
   <div id="title" class="screen">
     <div class="title-card">
@@ -65,6 +85,7 @@
       <p class="blurb">Zora was taken when the Veil fell. Every mission is a song. Each lit place in the city holds one part of it: unlock them in the order you choose and you mix the track, at your own pace. Finish the album and bring her home.</p>
       <div class="title-buttons">
         <button class="primary" id="playBtn">Play</button>
+        <button class="ghost hidden" id="buildBtn">Build the city</button>
       </div>
       <p class="loading" id="loading">Loading the city…</p>
       <div class="missions" id="missionList"></div>
@@ -128,6 +149,7 @@
   </div>
 
   <div class="turn" id="turn" aria-live="polite"><div class="turn-phone" aria-hidden="true"></div><p>Turn your phone sideways to play.</p><small>G.I.L.L. plays in landscape.</small></div>
+  <script src="../run/vendor/supabase-2.45.4/supabase.js"></script>
   <script src="world.js"></script>
   <script src="story.js"></script>
   <script type="module" src="game.js"></script>

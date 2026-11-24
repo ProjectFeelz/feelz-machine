@@ -290,3 +290,29 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @keyframes turnphone { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
 @media (pointer: coarse) and (orientation: portrait) { .turn { display: flex; } }
 @media (prefers-reduced-motion: reduce) { .turn-phone { animation: none; transform: rotate(-90deg); } }
+
+/* Camera view switch, beside pause. */
+.view-btn { font: 700 11px/1 Inter, system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #ece8f4; background: rgba(12,10,18,.72); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 8px 11px; cursor: pointer; }
+.view-btn:hover { border-color: #ffd27a; }
+
+/* Build mode */
+body.building .hud-zone, body.building .hud-objective, body.building #timer, body.building #beat, body.building #pauseBtn, body.building #btnView,
+body.building #hearts, body.building #mixer, body.building #race, body.building #tip, body.building #cover, body.building #touch .tbtn:not(#btnJump) { display: none !important; }
+.build { position: fixed; left: 50%; bottom: max(10px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(920px, calc(100vw - 24px)); z-index: 30;
+  background: rgba(14,12,20,.88); border: 1px solid rgba(255,255,255,.14); border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 8px; font-family: Inter, system-ui, sans-serif; color: #ece8f4; }
+.build.hidden { display: none; }
+.build-head { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+.build-head span { color: #a59fb3; font-size: 12px; }
+.build-cats { display: flex; gap: 6px; flex-wrap: wrap; }
+.bcat { font: 700 12px Inter, sans-serif; padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.16); background: transparent; color: #ece8f4; cursor: pointer; }
+.bcat.on { background: #ffd27a; color: #2a1f05; border-color: #ffd27a; }
+.build-items { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.bitem { flex: 0 0 auto; width: 74px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 5px 3px; border-radius: 10px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); color: #ece8f4; cursor: pointer; font: 600 10.5px/1.15 Inter, sans-serif; }
+.bitem img { width: 48px; height: 48px; object-fit: contain; }
+.bitem i { font-style: normal; font-size: 26px; height: 48px; display: grid; place-items: center; color: #ffd27a; }
+.bitem.on { border-color: #ffd27a; box-shadow: 0 0 0 1px #ffd27a inset; }
+.build-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.build-actions button { flex: 1 1 auto; font: 700 12.5px Inter, sans-serif; padding: 9px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.06); color: #ece8f4; cursor: pointer; }
+.build-actions button.go { background: #ffd27a; color: #2a1f05; border-color: #ffd27a; }
+.build-actions button:disabled { opacity: .4; cursor: default; }
+@media (pointer: coarse) { .build { left: auto; right: 10px; transform: none; width: min(560px, 58vw); } .bitem { width: 62px; } .bitem img, .bitem i { width: 40px; height: 40px; } }

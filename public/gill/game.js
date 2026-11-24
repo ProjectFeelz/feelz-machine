@@ -375,8 +375,8 @@ const nearBlocks = (x, z, r) => inBox(x - r, z - r, x + r, z + r);
 
 // Square to the streets only, so a building's collision box is its real footprint.
 // `maxFoot` caps how wide it can be. It sits on the land at its lowest corner.
-async function placeBuilding(name, x, z, yaw, height, maxFoot = 13) {
-  if (ridgeAt(x, z) > 0.3 || ridgeAt(x - 5, z - 5) > 0.6 || ridgeAt(x + 5, z + 5) > 0.6 || ridgeAt(x - 5, z + 5) > 0.6 || ridgeAt(x + 5, z - 5) > 0.6) return;
+async function placeBuilding(name, x, z, yaw, height, maxFoot = 13, force = false) {
+  if (!force && ridgeAt(x, z) > 0.3 || ridgeAt(x - 5, z - 5) > 0.6 || ridgeAt(x + 5, z + 5) > 0.6 || ridgeAt(x - 5, z + 5) > 0.6 || ridgeAt(x + 5, z - 5) > 0.6) return;
   const src = await staticModel(name);
   if (!src) return;
   const m = src.clone(true);
@@ -388,7 +388,7 @@ async function placeBuilding(name, x, z, yaw, height, maxFoot = 13) {
   const box2 = new THREE.Box3().setFromObject(m);
   const c = box2.getCenter(new THREE.Vector3());
   const hx = (box2.max.x - box2.min.x) / 2, hz = (box2.max.z - box2.min.z) / 2;
-  const base = Math.min(terrainAt(x - hx, z - hz), terrainAt(x + hx, z - hz), terrainAt(x - hx, z + hz), terrainAt(x + hx, z + hz)) - 0.15;
+  const base = (force ? terrainAt(x, z) : Math.min(terrainAt(x - hx, z - hz), terrainAt(x + hx, z - hz), terrainAt(x - hx, z + hz), terrainAt(x + hx, z + hz))) - 0.15;
   m.position.set(x - c.x, base - box2.min.y, z - c.z);
   const mats = [];
   m.traverse(o => {
@@ -602,7 +602,7 @@ function floatAt(x, z) { for (const f of floats) if (Math.abs(x - f.x) < f.w / 2
 function groundAt(x, z) {
   let g = terrainAt(x, z);
   if (inMud(x, z)) { const f = floatAt(x, z); g = f ? f.top : MUD; }
-  for (const b of nearBlocks(x, z, 0.1)) if (b.walk && x > b.minX - 0.05 && x < b.maxX + 0.05 && z > b.minZ - 0.05 && z < b.maxZ + 0.05) g = Math.max(g, b.top);
+  for (const b of nearBlocks(x, z, 0.1)) if (b.walk && x > b.minX - 0.05 && x < b.maxX + 0.05 && z > b.minZ - 0.05 && z < b.maxZ + 0.05) g = Math.max(g, b.ramp ? rampTop(b, x, z) : b.top);
   return g;
 }
 // The land and bridges only, for people who don't climb: guards and townsfolk.
@@ -615,8 +615,8 @@ function floorAt(x, z) {
 const awningMat = new THREE.MeshStandardMaterial({ color: 0x7a2f2f, roughness: 0.8, side: THREE.DoubleSide, transparent: true });
 const postMat = new THREE.MeshStandardMaterial({ color: 0x222228, roughness: 0.6, metalness: 0.4 });
 const postGeo = new THREE.CylinderGeometry(0.07, 0.07, 3, 6);
-function addAwning(x, z, w = 4.5, d = 3.2, colour) {
-  if (blocked(x, z, Math.max(w, d) / 2 + 0.6) || onRoad(x, z, 2)) return null;
+function addAwning(x, z, w = 4.5, d = 3.2, colour, force = false) {
+  if (!force && (blocked(x, z, Math.max(w, d) / 2 + 0.6) || onRoad(x, z, 2))) return null;
   const g = new THREE.Group();
   const mat = awningMat.clone(); if (colour) mat.color.setHex(colour);
   const roof = new THREE.Mesh(propGeo, mat); roof.scale.set(w, 0.12, d); roof.position.y = 3; roof.castShadow = true;
@@ -650,15 +650,21 @@ function updateAwnings() {
   }
 }
 
-/* Fade any building standing between the camera and Koda. */
+/* Fade any building standing between the camera and Koda, whichever way the camera looks. */
 const fadedNow = new Set();
 function updateOcclusion() {
   if (!koda) return;
-  const kx = koda.pos.x, kz = koda.pos.z, ky = koda.pos.y;
-  const hit = new Set();
-  for (const b of inBox(kx - 8, kz - 1, kx + 8, kz + 14)) {
-    if (b.mud || b.top - b.base < 3 || b.top < ky + 2) continue;
-    if (b.minZ > kz - 1 && b.minZ < kz + 12 && kx > b.minX - 2 && kx < b.maxX + 2) hit.add(b);
+  const ax = camera.position.x, az = camera.position.z, bx = koda.pos.x, bz = koda.pos.z, ky = koda.pos.y;
+  const hit = new Set(), dx = bx - ax, dz = bz - az;
+  for (const b of inBox(Math.min(ax, bx) - 1, Math.min(az, bz) - 1, Math.max(ax, bx) + 1, Math.max(az, bz) + 1)) {
+    if (b.mud || b.top - b.base < 2.5 || b.top < ky + 1.2) continue;
+    let t0 = 0, t1 = 1, ok = true;
+    for (const [p, d, mn, mx] of [[ax, dx, b.minX - 0.6, b.maxX + 0.6], [az, dz, b.minZ - 0.6, b.maxZ + 0.6]]) {
+      if (Math.abs(d) < 1e-6) { if (p < mn || p > mx) { ok = false; break; } continue; }
+      let ta = (mn - p) / d, tb = (mx - p) / d; if (ta > tb) [ta, tb] = [tb, ta];
+      t0 = Math.max(t0, ta); t1 = Math.min(t1, tb); if (t0 > t1) { ok = false; break; }
+    }
+    if (ok && t0 < 0.97) hit.add(b);
   }
   for (const b of new Set([...fadedNow, ...hit])) {
     const hides = hit.has(b);
@@ -679,7 +685,7 @@ function blocked(x, z, r, y = null, isKoda = false) {
   if (ridgeAt(x, z) > 1.1) return RIDGE;
   for (const b of nearBlocks(x, z, r + 0.1)) {
     if (b.mud) { if (isKoda) continue; if (b.bridgeOver) continue; if (onBridge(x, z)) continue; }
-    else if (b.top <= y + 0.35) continue;
+    else if ((b.ramp ? rampTop(b, x, z) : b.top) <= y + 0.35) continue;
     if (x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r) return b;
   }
   return null;
@@ -919,6 +925,7 @@ addEventListener("keydown", e => {
   keys.add(e.code);
   if (state === "card" && (e.code === "Space" || e.code === "Enter" || e.code === "KeyJ")) return cardContinue();
   if (state === "paused" && (e.code === "Escape" || e.code === "KeyP")) return resume();
+  if (e.code === "KeyV" && (state === "play" || state === "build")) return setView(cam.view + 1);
   if (state !== "play") return;
   if (e.code === "KeyC" || e.code === "ControlLeft") toggleSneak();
   if (e.code === "KeyJ" || e.code === "KeyK") attack();
@@ -984,14 +991,42 @@ function pollPad() {
     if (press(1)) toggleSneak();
     if (press(9)) pause();
   }
+  if ((state === "play" || state === "build") && press(8)) setView(cam.view + 1);
+  const rx = g.axes[2] || 0;
+  if (cam.view === 1 && Math.abs(rx) > 0.25) { cam.heading -= rx * 0.05; cam.look = 1.2; }
   pad.action = btn(3); pad.boost = btn(4) || btn(6);
   pad.prev = g.buttons.map((b, i) => btn(i));
 }
 function readInput() {
   const k = keyVector();
   const s = stick.mag ? stick : pad.mag ? pad : k;
-  input.x = s.x; input.z = s.z; input.mag = s.mag;
+  // Up on the stick is always away from the camera, whichever way it faces.
+  const a = cam.heading - Math.PI, c = Math.cos(a), sn = Math.sin(a);
+  input.x = s.x * c + s.z * sn; input.z = -s.x * sn + s.z * c; input.mag = s.mag;
 }
+/* ---------- camera views ----------
+   V (or the VIEW button, or the controller's View button) switches between:
+     Distance  the 3/4 view from above and behind, zooming in for fights
+     Close     low behind Koda's shoulder, turning with him; drag or use the right stick to look round
+     Top       straight down from high above, to see the whole neighbourhood   */
+const VIEWS = ["Distance", "Close", "Top"];
+const cam = { view: 0, heading: Math.PI, look: 0 };
+function setView(i) {
+  cam.view = ((i % VIEWS.length) + VIEWS.length) % VIEWS.length;
+  if (cam.view !== 1) cam.heading = Math.PI;
+  else if (koda) cam.heading = koda.yaw;
+  try { save.view = cam.view; writeSave(); } catch (e) { /* no save yet */ }
+  const b = $("btnView"); if (b) b.textContent = VIEWS[cam.view];
+  if (state === "play" || state === "build") popText(VIEWS[cam.view].toUpperCase() + " VIEW");
+  if (koda) updateCamera(0, true);
+}
+// Close view: drag anywhere on the game (not on a button) to look round.
+(() => {
+  let drag = null;
+  addEventListener("pointerdown", e => { if (cam.view === 1 && e.target === renderer.domElement && e.pointerId !== stick.id) drag = { id: e.pointerId, x: e.clientX }; });
+  addEventListener("pointermove", e => { if (drag && e.pointerId === drag.id) { cam.heading -= (e.clientX - drag.x) * 0.008; cam.look = 1.2; drag.x = e.clientX; } });
+  addEventListener("pointerup", e => { if (drag && e.pointerId === drag.id) drag = null; });
+})();
 function toggleSneak() { if (state === "play" && dodge()) return; input.sneak = !input.sneak; $("btnSneak").classList.toggle("on", input.sneak); }
 
 /* ---------- save ---------- */
@@ -1193,7 +1228,7 @@ function runTimers(dt) {
 }
 
 /* ---------- game state ---------- */
-let state = "title";            // title | card | play | paused | score
+let state = "title";            // title | card | play | paused | score | build
 let koda = null, zora = null, mission = null, currentQuad = null, race = null, escape = null;
 const enemies = [], npcs = [];
 let health = 5, invuln = 0, attackLock = 0, comboStep = 0, lunge = null, air = null;
@@ -3348,10 +3383,26 @@ function updateCamera(dt, snap) {
   const lead = koda.moving && !foe ? 1.6 : 0;
   if (foe) camTarget.set((koda.pos.x + foe.a.pos.x) / 2, 0.9, (koda.pos.z + foe.a.pos.z) / 2);
   else camTarget.set(koda.pos.x + Math.sin(koda.yaw) * lead, terrainAt(koda.pos.x, koda.pos.z) + 0.8 + Math.max(0, kUp()) * 0.7, koda.pos.z + Math.cos(koda.yaw) * lead);
-  camOff.copy(CAM_OFFSET).multiplyScalar(camZoom);
+  if (cam.view === 1) {
+    // Close: follow behind him. When he runs, the camera swings round behind him; after you look
+    // round yourself it waits a moment first.
+    cam.look = Math.max(0, cam.look - dt);
+    if (koda.moving && !cam.look && !foe) { const d = angleLerp(cam.heading, koda.yaw, 1) - cam.heading; if (Math.abs(d) < 2.4) cam.heading = angleLerp(cam.heading, koda.yaw, Math.min(1, dt * 1.6)); }
+    const dist = 4.6 + (foe ? 0.8 : 0), fx = Math.sin(cam.heading), fz = Math.cos(cam.heading);
+    const ty = terrainAt(koda.pos.x, koda.pos.z) + Math.max(0, kUp()) + 1.5;
+    camTarget.set(koda.pos.x + fx * 2.2, ty, koda.pos.z + fz * 2.2);
+    camOff.set(-fx * (dist + 2.2), 1.3, -fz * (dist + 2.2));
+    // Don't sit inside a hill or a building behind him.
+    const cx = camTarget.x + camOff.x, cz = camTarget.z + camOff.z;
+    const floor = Math.max(terrainAt(cx, cz), ...nearBlocks(cx, cz, 0.5).filter(b => !b.mud && cx > b.minX && cx < b.maxX && cz > b.minZ && cz < b.maxZ).map(b => b.top));
+    if (ty + camOff.y < floor + 1.2) camOff.y = floor + 1.2 - ty;
+  } else if (cam.view === 2) {
+    camOff.set(0, 46, 0.6);
+  } else camOff.copy(CAM_OFFSET).multiplyScalar(camZoom);
   const want = camTarget.clone().add(camOff);
-  if (snap) camera.position.copy(want); else camera.position.lerp(want, Math.min(1, dt * 5));
+  if (snap) camera.position.copy(want); else camera.position.lerp(want, Math.min(1, dt * (cam.view === 1 ? 8 : 5)));
   camera.lookAt(camera.position.clone().sub(camOff));
+  if (cam.view === 2) { scene.fog.near = Math.max(scene.fog.near, 60); scene.fog.far = Math.max(scene.fog.far, 140); }
   if (themeState.roll) camera.rotation.z += themeState.roll;
   if (shake > 0) { shake = Math.max(0, shake - dt); camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake * 0.6; }
   sun.position.set(koda.pos.x + DAY.dir.x, koda.pos.y + DAY.dir.y, koda.pos.z + DAY.dir.z);
@@ -3379,6 +3430,8 @@ function frame(now) {
   if (debugOn) drawDebug(real);
   if (state === "play" && koda && mission && !window.GILL_HOLD) {
     if (real > 0.05) { tick(real / 2, now); tick(real / 2, now); } else tick(real, now);
+  } else if (state === "build" && koda) {
+    updateBuild(real);
   } else if (koda && (state === "card" || state === "score")) {
     koda.update(real); if (zora) zora.update(real);
   }
@@ -3436,6 +3489,7 @@ function toTitle() {
   stopMusic();
   $("hud").classList.add("hidden"); $("touch").classList.add("hidden"); $("score").classList.add("hidden");
   $("title").classList.remove("hidden");
+  $("buildBtn").classList.toggle("hidden", !canBuild);
   const next = save.unlocked;
   $("playBtn").textContent = next > 0 ? `Continue: Mission ${next + 1}` : "Play";
   $("missionList").innerHTML = S.missions.map((m, i) => {
@@ -3471,6 +3525,274 @@ function begin(i) {
   startMission(i);
 }
 $("playBtn").addEventListener("click", () => begin(save.unlocked));
+$("btnView").addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); setView(cam.view + 1); });
+
+/* ---------- the city's own pieces, and build mode ----------
+   Pieces placed in build mode are kept on Feelz Machine (table gill_world_pieces) and
+   built into everyone's city when the game loads. Only Feelz Machine admins can build.
+
+   Build mode: walk around as Koda. A see-through copy of the chosen piece sits a few
+   metres in front of him, on the ground. Turn it, drop it, or pick up the piece it's
+   touching. Pieces snap to half-metre steps and quarter turns. */
+const ONLINE = (() => {
+  const hosts = ["www.feelzmachine.com", "feelzmachine.com"];
+  if (!hosts.includes(location.hostname) || !window.supabase || !window.supabase.createClient) return null;
+  return window.supabase.createClient("https://bycdnwenbjusxpowojdb.supabase.co",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5Y2Rud2VuYmp1c3hwb3dvamRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MjIzOTYsImV4cCI6MjA4NTA5ODM5Nn0.ixUISqTydgNOKJn9w_p7po15mG9kE25yL0HbHprRHj4",
+    { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
+})();
+let canBuild = false;
+async function checkBuilder() {
+  if (/[?&]build=1/.test(location.search) && !ONLINE) return (canBuild = true);   // trying it out offline: nothing is saved
+  if (!ONLINE) return false;
+  try {
+    const { data: s } = await ONLINE.auth.getSession();
+    if (!s || !s.session) return false;
+    const { data } = await ONLINE.rpc("is_platform_admin");
+    canBuild = data === true;
+  } catch (e) { canBuild = false; }
+  return canBuild;
+}
+
+const stoneMat = new THREE.MeshStandardMaterial({ color: 0x7a736b, roughness: 1, flatShading: true });
+const barkMat = new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 1 });
+const leafMat = new THREE.MeshStandardMaterial({ color: 0x3f6a34, roughness: 0.9, flatShading: true });
+const palmMat = new THREE.MeshStandardMaterial({ color: 0x5b8a3a, roughness: 0.9, flatShading: true, side: THREE.DoubleSide });
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x8a8279, roughness: 0.95 });
+const fenceMat = new THREE.MeshStandardMaterial({ color: 0x3b3a40, metalness: 0.5, roughness: 0.5 });
+const stepMat = new THREE.MeshStandardMaterial({ color: 0x8d8a86, roughness: 0.9 });
+const lampPoleMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1f, metalness: 0.6, roughness: 0.4 });
+
+// Everything you can place. w, d, h in metres.
+const PIECES = [
+  ...BUILDINGS.map(m => ({ kind: "building", model: m, name: { tenement: "Tenement", hostel: "Hostel", "kodas-building": "Koda's building" }[m] || m.toUpperCase(), cat: "Buildings", w: 12, d: 12, h: 11 })),
+  { kind: "crate", name: "Crate", cat: "Cover", w: 1.1, d: 1.1, h: 0.95, prop: "crate" },
+  { kind: "stack", name: "Crate stack", cat: "Cover", w: 1.2, d: 1.2, h: 2, prop: "stack" },
+  { kind: "bin", name: "Bin", cat: "Cover", w: 0.7, d: 0.7, h: 1, prop: "bin" },
+  { kind: "dumpster", name: "Dumpster", cat: "Cover", w: 2.2, d: 1.3, h: 1.5, prop: "dumpster" },
+  { kind: "barrier", name: "Barrier", cat: "Cover", w: 2.6, d: 0.6, h: 0.85, prop: "barrier" },
+  { kind: "bench", name: "Bench", cat: "Cover", w: 2, d: 0.7, h: 0.6, prop: "bench" },
+  { kind: "wall", name: "Wall", cat: "Cover", w: 6, d: 0.5, h: 2.4 },
+  { kind: "fence", name: "Fence", cat: "Cover", w: 6, d: 0.2, h: 1.8 },
+  { kind: "stairs", name: "Stairs", cat: "Climb", w: 3, d: 6, h: 3 },
+  { kind: "stairs", name: "Tall stairs", cat: "Climb", w: 3, d: 10, h: 6 },
+  { kind: "platform", name: "Platform", cat: "Climb", w: 6, d: 6, h: 3 },
+  { kind: "platform", name: "Ledge", cat: "Climb", w: 4, d: 2, h: 1.5 },
+  { kind: "awning", name: "Awning", cat: "Climb", w: 4.5, d: 3.2, h: 3 },
+  { kind: "rubble", name: "Rubble", cat: "Cover", w: 3, d: 3, h: 1.2 },
+  { kind: "tree", name: "Tree", cat: "Nature", w: 1, d: 1, h: 7 },
+  { kind: "palm", name: "Palm", cat: "Nature", w: 1, d: 1, h: 8 },
+  { kind: "bush", name: "Bush", cat: "Nature", w: 2, d: 2, h: 1.3 },
+  { kind: "rock", name: "Rock", cat: "Nature", w: 3, d: 2.5, h: 1.8 },
+  { kind: "boulder", name: "Boulder", cat: "Nature", w: 6, d: 5, h: 4 },
+  { kind: "lamp", name: "Street lamp", cat: "Nature", w: 0.4, d: 0.4, h: 4.4 }
+];
+const pieceDef = rec => PIECES.find(p => p.kind === rec.kind && (rec.kind !== "building" || p.model === rec.model)) || PIECES.find(p => p.kind === rec.kind);
+
+// Stairs: a slope you walk up. Height at (x, z) on them.
+function rampTop(b, x, z) {
+  const r = b.ramp, t = clamp(r.axis === "x" ? (x - b.minX) / (b.maxX - b.minX) : (z - b.minZ) / (b.maxZ - b.minZ), 0, 1);
+  return b.base + r.h * (r.up > 0 ? t : 1 - t);
+}
+
+// Build one piece into the world. Returns what it made, so it can be taken away again.
+async function makePiece(rec) {
+  const def = pieceDef(rec) || {};
+  const turn = Math.round((rec.rot || 0) / (Math.PI / 2)) & 3;
+  const w = turn % 2 ? rec.d : rec.w, d = turn % 2 ? rec.w : rec.d, h = rec.h;
+  const x = rec.x, z = rec.z, base = terrainAt(x, z);
+  const made = { rec, meshes: [], blocks: [], roofs: [], lamps: [] };
+  const box = (mat, bw, bh, bd, ox = 0, oy = 0, oz = 0) => {
+    const m = new THREE.Mesh(propGeo, mat); m.scale.set(bw, bh, bd); m.position.set(x + ox, base + oy + bh / 2, z + oz);
+    m.castShadow = true; m.receiveShadow = true; scene.add(m); made.meshes.push(m); return m;
+  };
+  const block = extra => { const b = Object.assign({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, top: base + h, base, mats: [], faded: false, piece: made }, extra); blockers.push(b); navMark(b); made.blocks.push(b); return b; };
+  if (rec.kind === "building") {
+    const before = blockers.length;
+    await placeBuilding(rec.model, x, z, rec.rot || 0, h, Math.max(w, d), true);
+    for (const b of blockers.slice(before)) { b.piece = made; made.blocks.push(b); made.meshes.push(b.mesh); navMark(b); if (rec.interior) b.interior = true; }
+  } else if (def.prop) {
+    const P = PROP(def.prop);
+    box(P.mat, w, h, d);
+    block({ walk: true, low: P.low, prop: def.prop });
+  } else if (rec.kind === "wall") { box(wallMat, w, h, d); block({ walk: true }); }
+  else if (rec.kind === "fence") { box(fenceMat, w, h, d); block({ walk: false }); }
+  else if (rec.kind === "platform") { box(roofTopMat, w, h, d); block({ walk: true }); }
+  else if (rec.kind === "rubble") { for (let i = 0; i < 6; i++) box(rubbleMat, w * (0.3 + (i % 3) * 0.15), h * (0.4 + (i % 2) * 0.5), d * (0.35 + (i % 2) * 0.2), (i % 3 - 1) * w * 0.25, 0, ((i >> 1) % 3 - 1) * d * 0.25); block({ walk: true, low: true }); }
+  else if (rec.kind === "stairs") {
+    // Steps rise along the piece's depth, toward where it faces.
+    const along = turn % 2 ? "x" : "z", up = turn === 0 || turn === 1 ? 1 : -1, n = Math.max(4, Math.round(h / 0.3));
+    for (let i = 0; i < n; i++) {
+      const t0 = i / n, sh = h * (i + 1) / n;
+      const off = ((t0 + 0.5 / n) - 0.5) * (along === "x" ? w : d) * up;
+      if (along === "x") box(stepMat, w / n, sh, d, off, 0, 0); else box(stepMat, w, sh, d / n, 0, 0, off);
+    }
+    block({ walk: true, ramp: { axis: along, up, h } });
+  } else if (rec.kind === "awning") {
+    const a = addAwning(x, z, w, d, 0x7a5a2f, true);
+    if (a) { made.roofs.push(a); made.meshes.push(a.group); }
+  } else if (rec.kind === "tree" || rec.kind === "palm") {
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, h * 0.6, 7), barkMat); trunk.position.set(x, base + h * 0.3, z); trunk.castShadow = true; scene.add(trunk); made.meshes.push(trunk);
+    const top = rec.kind === "tree" ? new THREE.Mesh(new THREE.IcosahedronGeometry(h * 0.32, 1), leafMat) : new THREE.Mesh(new THREE.ConeGeometry(h * 0.35, h * 0.18, 7), palmMat);
+    top.position.set(x, base + h * (rec.kind === "tree" ? 0.72 : 0.62), z); top.castShadow = true; scene.add(top); made.meshes.push(top);
+    block({ minX: x - 0.3, maxX: x + 0.3, minZ: z - 0.3, maxZ: z + 0.3, walk: false });
+  } else if (rec.kind === "bush") {
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), leafMat); m.scale.set(w / 2, h / 2, d / 2); m.position.set(x, base + h / 2, z); m.castShadow = true; scene.add(m); made.meshes.push(m);
+    block({ walk: true, low: true });
+  } else if (rec.kind === "rock" || rec.kind === "boulder") {
+    const m = new THREE.Mesh(new THREE.DodecahedronGeometry(1, 0), stoneMat); m.scale.set(w / 2, h / 1.6, d / 2); m.position.set(x, base + h * 0.35, z); m.rotation.y = (x * 7 + z * 3) % 6; m.castShadow = true; m.receiveShadow = true; scene.add(m); made.meshes.push(m);
+    block({ walk: true });
+  } else if (rec.kind === "lamp") {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 4.2, 8), lampPoleMat); pole.position.set(x, base + 2.1, z); pole.castShadow = true; scene.add(pole); made.meshes.push(pole);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8), lampBulbMat); bulb.position.set(x, base + 4.3, z); scene.add(bulb); made.meshes.push(bulb);
+    const l = { x, y: base + 4.3, z }; lamps.push(l); made.lamps.push(l);
+    block({ minX: x - 0.15, maxX: x + 0.15, minZ: z - 0.15, maxZ: z + 0.15, walk: false });
+  }
+  if (rec.interior && made.meshes.length) {
+    // A lit doorway marks a building you'll be able to go into.
+    const door = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.4), new THREE.MeshBasicMaterial({ color: 0x7fe39a, transparent: true, opacity: 0.75 }));
+    const fx = Math.sin(rec.rot || 0), fz = Math.cos(rec.rot || 0);
+    door.position.set(x + fx * (d / 2 + 0.05), base + 1.2, z + fz * (d / 2 + 0.05)); door.rotation.y = rec.rot || 0; scene.add(door); made.meshes.push(door);
+  }
+  return made;
+}
+function unmakePiece(made) {
+  for (const m of made.meshes) if (m && m.parent) m.parent.remove(m);
+  for (const b of made.blocks) { const i = blockers.indexOf(b); if (i >= 0) blockers.splice(i, 1); navMark(b); }
+  for (const a of made.roofs) { const i = roofs.indexOf(a); if (i >= 0) roofs.splice(i, 1); }
+  for (const l of made.lamps) { const i = lamps.indexOf(l); if (i >= 0) lamps.splice(i, 1); }
+}
+
+const placed = [];   // pieces from Feelz Machine and the ones placed this visit
+async function loadPieces() {
+  if (!ONLINE) return;
+  try {
+    const { data, error } = await ONLINE.from("gill_world_pieces").select("id,kind,model,label,x,z,rot,w,d,h,interior").limit(5000);
+    if (error || !data) return;
+    for (const rec of data) placed.push(await makePiece(rec));
+  } catch (e) { /* the city still plays without them */ }
+}
+
+/* Build mode itself. */
+const B = { on: false, cat: "Buildings", i: 0, rot: 0, ghost: null, ghostKey: "", spot: null, near: null, saving: 0, undo: [] };
+const ghostMat = new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.35, depthWrite: false });
+const ghostBad = new THREE.MeshBasicMaterial({ color: 0xff5a46, transparent: true, opacity: 0.35, depthWrite: false });
+const ghostEdge = new THREE.LineBasicMaterial({ color: 0xffd27a });
+const pickMat = new THREE.MeshBasicMaterial({ color: 0xff5a46, transparent: true, opacity: 0.25, depthWrite: false });
+const catList = () => [...new Set(PIECES.map(p => p.cat))];
+const catPieces = () => PIECES.filter(p => p.cat === B.cat);
+function startBuild() {
+  if (!canBuild) return;
+  audioCtx(); goLandscape();
+  $("title").classList.add("hidden"); $("hud").classList.remove("hidden"); document.body.classList.add("building");
+  $("build").classList.remove("hidden");
+  if (phone) $("touch").classList.remove("hidden");
+  mission = null; state = "build"; B.on = true;
+  applyTheme(null, 0, true); DAY.hour = 14; updateDayNight(0);
+  if (!koda.parent) scene.add(koda.root);
+  koda.pos.y = groundAt(koda.pos.x, koda.pos.z);
+  renderBuildBar(); updateCamera(0, true);
+  toast(ONLINE ? "Build mode. Everything you place is saved to the city." : "Build mode (trying it out: nothing is saved here).", 3.5);
+}
+function stopBuild() {
+  B.on = false; if (B.ghost) { scene.remove(B.ghost); B.ghost = null; B.ghostKey = ""; }
+  if (B.pick) { scene.remove(B.pick); B.pick = null; }
+  $("build").classList.add("hidden"); document.body.classList.remove("building");
+  toTitle();
+}
+function renderBuildBar() {
+  $("buildCats").innerHTML = catList().map(c => `<button class="bcat${c === B.cat ? " on" : ""}" data-c="${c}">${c}</button>`).join("");
+  $("buildItems").innerHTML = catPieces().map((p, i) => `<button class="bitem${i === B.i ? " on" : ""}" data-i="${i}">${p.model ? `<img src="thumbs/${p.model}.webp" alt="" onerror="this.remove()">` : `<i>${{ Cover: "▣", Climb: "☰", Nature: "♣" }[p.cat] || "■"}</i>`}<span>${p.name}</span></button>`).join("");
+  $("buildName").textContent = (catPieces()[B.i] || {}).name || "";
+}
+function buildPick(cat, i) { if (cat) B.cat = cat; B.i = i || 0; B.ghostKey = ""; renderBuildBar(); }
+function ghostFor(p) {
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(propGeo, ghostMat); m.scale.set(p.w, Math.max(0.2, p.h), p.d); m.position.y = Math.max(0.2, p.h) / 2; g.add(m);
+  const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), ghostEdge); e.scale.copy(m.scale); e.position.copy(m.position); g.add(e);
+  // A little arrow on the ground showing which way it faces (stairs climb that way, buildings open that way).
+  const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.9, 3), ghostMat); arrow.rotation.x = Math.PI / 2; arrow.position.set(0, 0.1, p.d / 2 + 0.7); g.add(arrow);
+  g.userData.box = m; return g;
+}
+function updateBuild(dt) {
+  readInput();
+  updateKoda(dt);
+  const p = catPieces()[B.i]; if (!p) return;
+  const key = p.kind + (p.model || "") + p.name;
+  if (B.ghostKey !== key) { if (B.ghost) scene.remove(B.ghost); B.ghost = ghostFor(p); scene.add(B.ghost); B.ghostKey = key; }
+  // A few metres in front of Koda, far enough that a building doesn't land on him.
+  const f = forward(koda), reach = Math.max(p.w, p.d) / 2 + 2.5;
+  const x = Math.round((koda.pos.x + f.x * reach) * 2) / 2, z = Math.round((koda.pos.z + f.y * reach) * 2) / 2;
+  const turn = Math.round(B.rot / (Math.PI / 2)) & 3, w = turn % 2 ? p.d : p.w, d = turn % 2 ? p.w : p.d;
+  const ok = !onRiver(x, z, Math.max(w, d) / 2) && ridgeAt(x, z) < 1 && x > 4 && z > 4 && x < WORLD_W - 4 && z < WORLD_H - 4;
+  B.spot = { x, z, ok };
+  B.ghost.position.set(x, terrainAt(x, z), z); B.ghost.rotation.y = B.rot;
+  B.ghost.userData.box.material = ok ? ghostMat : ghostBad;
+  // The placed piece the copy is touching, to pick up.
+  let near = null, nd = 1e9;
+  for (const m of placed) {
+    const r = m.rec, dd = Math.hypot(r.x - x, r.z - z);
+    if (dd < Math.max(r.w, r.d) / 2 + 1.5 && dd < nd) { nd = dd; near = m; }
+  }
+  if (near !== B.near) {
+    B.near = near;
+    if (B.pick) { scene.remove(B.pick); B.pick = null; }
+    if (near) { const r = near.rec, t = Math.round((r.rot || 0) / (Math.PI / 2)) & 3; B.pick = new THREE.Mesh(propGeo, pickMat); B.pick.scale.set((t % 2 ? r.d : r.w) + 0.4, r.h + 0.4, (t % 2 ? r.w : r.d) + 0.4); B.pick.position.set(r.x, terrainAt(r.x, r.z) + r.h / 2, r.z); scene.add(B.pick); }
+    $("bPickUp").disabled = !near;
+  }
+  $("bPlace").disabled = !ok;
+  updateDayNight(dt); updateAwnings(); updateOcclusion(); updateCamera(dt);
+}
+async function buildPlace() {
+  const p = catPieces()[B.i]; if (!p || !B.spot || !B.spot.ok) return;
+  const rec = { kind: p.kind, model: p.model || null, label: p.name, x: B.spot.x, z: B.spot.z, rot: B.rot, w: p.w, d: p.d, h: p.h, interior: false };
+  const made = await makePiece(rec); placed.push(made); B.near = undefined; sfxUnlock();
+  B.undo.push(made);
+  if (!ONLINE) return;
+  B.saving++; $("buildSave").textContent = "Saving…";
+  const { data, error } = await ONLINE.from("gill_world_pieces").insert(rec).select("id").single();
+  B.saving--;
+  if (error) { $("buildSave").textContent = "Couldn't save that piece. Check you're signed in to Feelz Machine."; unmakePiece(made); placed.splice(placed.indexOf(made), 1); return; }
+  rec.id = data.id; $("buildSave").textContent = B.saving ? "Saving…" : "Saved";
+}
+async function buildRemove(made) {
+  if (!made) return;
+  unmakePiece(made); placed.splice(placed.indexOf(made), 1); B.near = undefined; sfxHit(false);
+  if (ONLINE && made.rec.id) {
+    const { error } = await ONLINE.from("gill_world_pieces").delete().eq("id", made.rec.id);
+    $("buildSave").textContent = error ? "Couldn't remove it from the city. Try again." : "Saved";
+  }
+}
+async function buildToggleInterior() {
+  const made = B.near; if (!made || made.rec.kind !== "building") return;
+  const rec = Object.assign({}, made.rec, { interior: !made.rec.interior });
+  unmakePiece(made); placed.splice(placed.indexOf(made), 1);
+  const again = await makePiece(rec); placed.push(again); B.near = undefined;
+  popText(rec.interior ? "HAS AN INSIDE" : "NO INSIDE");
+  if (ONLINE && rec.id) { const { error } = await ONLINE.from("gill_world_pieces").update({ interior: rec.interior, updated_at: new Date().toISOString() }).eq("id", rec.id); $("buildSave").textContent = error ? "Couldn't save that. Try again." : "Saved"; }
+}
+function buildTurn() { B.rot = (B.rot + Math.PI / 2) % (Math.PI * 2); }
+function buildUndo() { const m = B.undo.pop(); if (m && placed.includes(m)) buildRemove(m); }
+(function buildControls() {
+  $("buildCats").addEventListener("click", e => { const b = e.target.closest("button"); if (b) buildPick(b.dataset.c, 0); });
+  $("buildItems").addEventListener("click", e => { const b = e.target.closest("button"); if (b) buildPick(null, +b.dataset.i); });
+  const tap = (id, fn) => $(id).addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); if (state === "build") fn(); });
+  tap("bTurn", buildTurn); tap("bPlace", buildPlace); tap("bPickUp", () => buildRemove(B.near)); tap("bInside", buildToggleInterior); tap("bUndo", buildUndo); tap("bDone", stopBuild); tap("bView", () => setView(cam.view + 1));
+  $("buildBtn").addEventListener("click", startBuild);
+  addEventListener("keydown", e => {
+    if (state !== "build" || e.repeat) return;
+    if (e.code === "KeyR") buildTurn();
+    else if (e.code === "Enter" || e.code === "KeyF") buildPlace();
+    else if (e.code === "KeyX" || e.code === "Delete" || e.code === "Backspace") buildRemove(B.near);
+    else if (e.code === "KeyI") buildToggleInterior();
+    else if (e.code === "KeyZ") buildUndo();
+    else if (e.code === "Space") jump();
+    else if (e.code === "Escape") stopBuild();
+    else if (e.code === "BracketRight" || e.code === "Period") buildPick(null, (B.i + 1) % catPieces().length);
+    else if (e.code === "BracketLeft" || e.code === "Comma") buildPick(null, (B.i - 1 + catPieces().length) % catPieces().length);
+    else if (/^Digit[1-9]$/.test(e.code)) { const c = catList()[+e.code.slice(5) - 1]; if (c) buildPick(c, 0); }
+  });
+})();
 
 /* ---------- boot ---------- */
 (async function boot() {
@@ -3489,16 +3811,20 @@ $("playBtn").addEventListener("click", () => begin(save.unlocked));
     console.error(e);
     return;
   }
+  cam.view = save.view || 0; $("btnView").textContent = VIEWS[cam.view];
   await buildCity(p => { $("loading").textContent = "Building the city… " + Math.round(p * 100) + "%"; });
   buildRivers();
   buildProps();
   buildAwnings();
   buildNav();
+  $("loading").textContent = "Adding the city's own pieces…";
+  await loadPieces();
+  checkBuilder().then(ok => $("buildBtn").classList.toggle("hidden", !ok));
   $("loading").textContent = "";
   $("playBtn").disabled = false;
   toTitle();
   window.GILL_FLOATS = () => floats; window.GILL_DRONES = () => drones;
-  window.GILL = { scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
+  window.GILL = { buildStep: dt => updateBuild(dt), scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
     enemies, npcs, get state() { return state; }, save: () => save, blockers, keys, input, cardContinue, pause, resume, drawBigMap, pathNext, stick, FOCUS, beat, songTime, boost, get lastSafe() { return lastSafe; }, fightFoe, get camZoom() { return camZoom; }, attack, jump, action, objectiveTarget, get health() { return health; }, get music() { return music; },
     sim(seconds) { let t = performance.now(); for (let i = 0; i < seconds * 30; i++) { t += 33; tick(1 / 30, t); } } };
 })();
