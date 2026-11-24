@@ -626,11 +626,19 @@ class Actor {
     restoreRest(this.model);
     this.mixer.update(dt);
     const name = this.current ? this.current.getClip().name : "";
+    if (this.native) return;   // rigged and animated for this body in Mixamo: no corrections needed
     if (/^(run|sprint)$/.test(name)) armSwing(this.model, ARM_SWING);
     if (!/^(punch|kick|takedown|hit|ko|alert|flykick|jump|spinkick)$/.test(name)) armClear(this.model, /^crouch/.test(name));
   }
 }
-async function makeActor(file, metres) { return new Actor(await loadGLB(MODELS + file), metres); }
+// Characters re-rigged in Mixamo with moves made for their own bodies live with the game.
+const NATIVE = { "koda.glb": "models/koda.glb", "guard.glb": "models/guard.glb" };
+async function makeActor(file, metres) {
+  const own = NATIVE[file];
+  const a = new Actor(await loadGLB(own || MODELS + file), metres);
+  a.native = !!own;
+  return a;
+}
 const forward = a => new THREE.Vector2(Math.sin(a.yaw), Math.cos(a.yaw));
 
 /* ---------- input ---------- */
@@ -1138,7 +1146,9 @@ async function startMission(i, { showIntro = true } = {}) {
 /* ---------- guards for a quadrant ---------- */
 function spawnGuards(qd, count, { radius = [8, 16], kinds, hidden = false, alert = false, near = null } = {}) {
   const m = mission, c = zoneCenter(qd.q), r = qd.r;
-  const names = kinds || Object.keys(ENEMIES).filter(n => n !== "gilded");
+  // ?enemies=guard (testing): only these kinds of enemy.
+  const only = (new URLSearchParams(location.search).get("enemies") || "").split(",").filter(k => ENEMIES[k]);
+  const names = only.length ? only : kinds || Object.keys(ENEMIES).filter(n => n !== "gilded");
   const made = [];
   for (let i = 0; i < count; i++) {
     const kind = names[Math.floor(r() * names.length)];
@@ -2089,6 +2099,8 @@ function updateKoda(dt) {
       koda.pos.y = g;
       if (air.kick) landKick();
       air = null; attackLock = Math.max(attackLock, 0.08);
+      // Land on his feet: straight into standing or running, never held in a mid-air pose.
+      koda.held = 1; koda.play(input.mag ? "run" : "idle", { fade: 0.08 });
     }
     koda.update(dt);
     return;
@@ -2109,11 +2121,16 @@ function updateKoda(dt) {
   let speed = input.mag === 0 ? 0 : sneaking ? 2.6 : sprint ? 8.2 : 5.4;
   if (boost.on && !sneaking) speed = 13;
   speed *= water;
+  // Running and you pull the stick the other way: a proper turn on the spot.
+  const want = Math.atan2(input.x, input.z);
+  if (speed > 5 && koda.moving && koda.has("turn180") && Math.abs(angleLerp(0, want - koda.yaw, 1)) > 2.5) {
+    koda.play("turn180", { once: true, speed: 1.5 }); koda.face(want, 1); attackLock = 0.22; koda.update(dt); return;
+  }
   if (speed > 0) {
     moveWithCollision(koda.pos, input.x * speed * dt, input.z * speed * dt, 0.45, true);
-    koda.face(Math.atan2(input.x, input.z), Math.min(1, dt * 14));
+    koda.face(want, Math.min(1, dt * 14));
     koda.play(sneaking ? "crouch_walk" : sprint || boost.on ? "sprint" : "run", { speed: boost.on ? 1.4 : 1 });
-  } else koda.play(sneaking ? "crouch_idle" : "idle");
+  } else koda.play(sneaking ? "crouch_idle" : koda.has("fight_idle") && fightFoe() ? "fight_idle" : "idle");
   koda.moving = speed > 0; koda.sprinting = sprint || boost.on; koda.sneaking = sneaking;
   // Crouched beside a crate, wall or dumpster: he presses his back to it and is much harder to see.
   koda.inCover = null;
@@ -2149,7 +2166,7 @@ function jump() {
   // Something low just ahead: vault it rather than a plain jump.
   const f = forward(koda);
   let low = null;
-  for (let i = 4; i <= 16 && !low; i += 2) { const b = blocked(koda.pos.x + f.x * i * 0.1, koda.pos.z + f.y * i * 0.1, 0.3, koda.pos.y); if (b && b.low && b.top - koda.pos.y < 1.1) low = b; }
+  for (let i = 4; i <= 16 && !low; i += 2) { const b = blocked(koda.pos.x + f.x * i * 0.1, koda.pos.z + f.y * i * 0.1, 0.3, koda.pos.y); if (b && b.low && b.top - koda.pos.y < 1.1 && Math.min(b.maxX - b.minX, b.maxZ - b.minZ) < 0.9) low = b; }   // thin things only: jump onto crates, vault over barriers
   if (low && koda.has("vault")) { air.speed = Math.max(speed, 5.5); air.vault = true; input.x = f.x; input.z = f.y; koda.play("vault", { once: true, speed: 1.6 }); }
   else koda.play("jump", { once: true, speed: 1.3 });
   tip("jump");
@@ -2185,17 +2202,22 @@ function attack() {
     const dx = t.a.pos.x - koda.pos.x, dz = t.a.pos.z - koda.pos.z, d = Math.hypot(dx, dz) || 1;
     if (d > CONTACT) lunge = { x: t.a.pos.x - dx / d * CONTACT, z: t.a.pos.z - dz / d * CONTACT, t: 0.14 };
   }
-  const move = comboStep++ % 3 === 2 ? "kick" : "punch";
+  // A three-hit string: jab, punch combo, kick. Each blow lands where the move's fist or foot does.
+  const STRING = koda.native
+    ? [{ clip: "punch", speed: 1.5, lock: 0.5, hits: [0.22], dmg: 1 }, { clip: "combo", speed: 1.6, lock: 0.8, hits: [0.24, 0.55], dmg: 1 }, { clip: "kick", speed: 1.4, lock: 0.7, hits: [0.42], dmg: 2, body: true }]
+    : [{ clip: "punch", speed: 1.5, lock: 0.42, hits: [0.17], dmg: 1 }, { clip: "punch", speed: 1.5, lock: 0.42, hits: [0.17], dmg: 1 }, { clip: "kick", speed: 1.5, lock: 0.5, hits: [0.17], dmg: 2 }];
+  const mv = STRING[comboStep++ % 3];
   // On the beat: double damage.
   const onBeatHit = nearBeat(0.12);
   if (onBeatHit) { popText("ON BEAT x2", "good"); mission.stats.onBeat++; }
-  attackLock = Math.min(0.5, koda.play(move, { once: true, speed: 1.5 }) || 0.42);
-  later(0.17, () => {
+  koda.play(mv.clip, { once: true, speed: mv.speed });
+  attackLock = mv.lock;
+  for (const at of mv.hits) later(at, () => {
     const f = forward(koda);
     for (const e of enemies) {
       if (e.state === "ko") continue;
       const dx = e.a.pos.x - koda.pos.x, dz = e.a.pos.z - koda.pos.z, d = Math.hypot(dx, dz);
-      if (d < 1.6 && Math.abs(koda.pos.y) < 0.7 && (dx * f.x + dz * f.y) / (d || 1) > 0.3) hitEnemy(e, (move === "kick" ? 2 : 1) * (onBeatHit ? 2 : 1), dx / (d || 1), dz / (d || 1));
+      if (d < 1.6 && Math.abs(koda.pos.y) < 0.7 && (dx * f.x + dz * f.y) / (d || 1) > 0.3) hitEnemy(e, mv.dmg * (onBeatHit ? 2 : 1), dx / (d || 1), dz / (d || 1), mv.body);
     }
   });
 }
@@ -2278,14 +2300,15 @@ function alertEnemy(e) {
   seenIn(e.qd);
   tip("seen");
 }
-function hitEnemy(e, dmg, nx, nz) {
+function hitEnemy(e, dmg, nx, nz, body = false) {
   e.hp -= dmg;
   sfxHit(dmg > 1);
   // Knocked back a step, and turned to face his attacker.
   moveWithCollision(e.a.pos, nx * 0.5, nz * 0.5, 0.45);
   e.a.faceTo(koda.pos.x, koda.pos.z);
   if (e.hp <= 0) return knockOut(e);
-  e.a.play("hit", { once: true }); e.hitT = 0.4; e.holdT = 0; e.cool = Math.max(e.cool, 0.6);
+  // Head shots snap the head back; kicks and body blows fold him at the middle.
+  e.a.play(body && e.a.has("hit_body") ? "hit_body" : "hit", { once: true, speed: e.a.native ? 1.6 : 1 }); e.hitT = 0.4; e.holdT = 0; e.cool = Math.max(e.cool, 0.6);
   if (e.state !== "alert") alertEnemy(e);
 }
 function knockOut(e) {
@@ -2370,7 +2393,9 @@ function updateEnemies(dt) {
     if (closing) moveWithCollision(a.pos, dx / d * 2.5 * dt, dz / d * 2.5 * dt, 0.45);
     if (e.cool <= 0 && swingGap > 0) e.cool = 0.25;
     if (e.cool > 0) { a.play(closing ? "walk" : a.has("fight_idle") ? "fight_idle" : "walk"); continue; }
-    e.holdT = Math.min(0.7, a.play("punch", { once: true, speed: 1.1 }) || 0.6); e.cool = 1.35;
+    // Guards mix it up: a jab, a combo or a kick.
+    const roll = Math.random(), gm = a.native ? (roll < 0.5 ? "punch" : roll < 0.8 ? "combo" : "kick") : "punch";
+    e.holdT = Math.min(gm === "combo" ? 1.1 : 0.8, a.play(gm, { once: true, speed: a.native ? 1.4 : 1.1 }) || 0.6); e.cool = gm === "combo" ? 1.7 : 1.35;
     swingGap = mission.index < 3 ? 1.1 : mission.index < 8 ? 0.8 : 0.55;
     later(0.36, () => {
       if (e.state !== "alert") return;
@@ -2509,7 +2534,7 @@ function buildPathLine(points) {
   for (let i = 0; i < pts.length; i++) {
     const p = pts[i], q = pts[Math.min(pts.length - 1, i + 1)], o = pts[Math.max(0, i - 1)];
     let dx = q[0] - o[0], dz = q[1] - o[1]; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
-    const w = 0.2;
+    const w = 0.07;   // a fine line, not a road marking
     pos.set([p[0] - dz * w, 0.07, p[1] + dx * w, p[0] + dz * w, 0.07, p[1] - dx * w], i * 6);
     al[i * 2] = al[i * 2 + 1] = along[i];
     if (i < pts.length - 1) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
@@ -2737,7 +2762,7 @@ function drawRadar(dt) {
   // Koda: an arrow in the middle, always pointing up.
   rc.fillStyle = "#fff"; rc.beginPath();
   rc.moveTo(R0, R0 - 7 * dpr); rc.lineTo(R0 + 5 * dpr, R0 + 5 * dpr); rc.lineTo(R0, R0 + 2 * dpr); rc.lineTo(R0 - 5 * dpr, R0 + 5 * dpr); rc.closePath(); rc.fill();
-  rc.strokeStyle = "rgba(255,255,255,.35)"; rc.lineWidth = 2 * dpr; rc.beginPath(); rc.arc(R0, R0, R0 - 2, 0, 7); rc.stroke();
+  rc.strokeStyle = "rgba(255,255,255,.3)"; rc.lineWidth = 1 * dpr; rc.beginPath(); rc.arc(R0, R0, R0 - 1, 0, 7); rc.stroke();
 }
 
 /* ---------- the big map (pause) ---------- */
@@ -2755,7 +2780,7 @@ function drawBigMap() {
     const o = zoneOrigin(q), qd = mission && mission.quads.find(x => x.q === q);
     g.fillStyle = qd ? (qd.done ? "#2c3a30" : hexCol(PART_COLOURS[qd.k]) + "40") : "#1a1920";
     g.fillRect(X(o.x), Z(o.y), ZONE * k, ZONE * k);
-    if (qd) { g.strokeStyle = qd.done ? "#7fe39a" : hexCol(PART_COLOURS[qd.k]); g.lineWidth = 2 * dpr; g.strokeRect(X(o.x) + dpr, Z(o.y) + dpr, ZONE * k - 2 * dpr, ZONE * k - 2 * dpr); }
+    if (qd) { g.strokeStyle = qd.done ? "#7fe39a" : hexCol(PART_COLOURS[qd.k]); g.lineWidth = 1 * dpr; g.strokeRect(X(o.x) + dpr, Z(o.y) + dpr, ZONE * k - 2 * dpr, ZONE * k - 2 * dpr); }
   }
   g.fillStyle = "#8c6038"; for (const m of muds) g.fillRect(X(m.minX), Z(m.minZ), (m.maxX - m.minX) * k, (m.maxZ - m.minZ) * k);
   g.fillStyle = "#b08850"; for (const f of floats) g.fillRect(X(f.x - f.w / 2), Z(f.z - f.d / 2), f.w * k, f.d * k);

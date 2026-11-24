@@ -254,3 +254,20 @@ button { font: inherit; color: inherit; cursor: pointer; }
 /* phones: the round radar does the job of the square map, and the objective leaves room for the hearts */
 @media (pointer: coarse) { #minimap { display: none; } }
 @media (max-height: 520px) { .hud-objective { max-width: 30vw; font-size: 11px; padding: 6px 12px; } }
+
+/* hearts under the clock; the objective gets the top centre to itself */
+.hud-right { flex-direction: column; align-items: flex-end; gap: 6px; }
+.hud-right > .hud-row { display: flex; gap: 8px; align-items: center; background: none; border: 0; }
+.hud-row > .timer, .hud-row > .icon-btn { background: var(--glass); border: 1px solid var(--line); border-radius: 999px; }
+.hud-objective { max-width: min(560px, 52vw); }
+@media (max-height: 520px) { .hud-objective { max-width: 44vw; } .hearts { font-size: 13px; padding: 4px 10px; } }
+
+/* one map on screen: the round one, bottom left (top left on phones, where the stick isn't) */
+#minimap { display: none !important; }
+#radar { top: auto; bottom: calc(16px + var(--sab)); left: calc(16px + var(--sal)); width: 150px; height: 150px; }
+.tip { left: calc(12px + var(--sal)); top: calc(66px + var(--sat)); }
+@media (pointer: coarse) {
+  #radar { bottom: auto; top: calc(56px + var(--sat)); width: 104px; height: 104px; }
+  .tip { left: calc(124px + var(--sal)); }
+}
+@media (max-height: 520px) and (pointer: fine) { #radar { width: 116px; height: 116px; } }
