@@ -188,3 +188,30 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .marker.edge .arrow { display: block; }
 .marker.edge .pin { display: none; }
 .marker.edge .text { bottom: 18px; font-size: 11px; }
+
+/* ---------- the beat, pops, boost ---------- */
+.beat { width: 14px; height: 14px; border-radius: 50%; background: rgba(242, 181, 68, .25); border: 1px solid rgba(242, 181, 68, .6); }
+.beat.hit { animation: beatHit .28s ease-out; }
+.beat.hit.bar { animation-name: barHit; }
+@keyframes beatHit { 0% { transform: scale(1.5); background: var(--gold-hi); } 100% { transform: scale(1); } }
+@keyframes barHit { 0% { transform: scale(1.9); background: #fff; } 100% { transform: scale(1); } }
+.pop { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%) scale(.8); font-weight: 900; font-size: 26px; letter-spacing: .08em;
+  color: var(--gold-hi); text-shadow: 0 3px 14px #000; opacity: 0; transition: opacity .15s, transform .15s; pointer-events: none; white-space: nowrap; }
+.pop.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.pop.good { color: #7fe39a; }
+.pop.bad { color: #ff7a66; }
+.tbtn.boost { --m: 1; grid-column: 1 / span 2; grid-row: 3; width: auto; height: 44px; border-radius: 22px;
+  background: linear-gradient(90deg, rgba(90, 209, 255, .55) calc(var(--m) * 100%), rgba(20, 20, 26, .62) calc(var(--m) * 100%)); }
+
+/* mission tints */
+.tint { position: fixed; inset: 0; pointer-events: none; opacity: 0; }
+.tint.water { background: radial-gradient(ellipse 70% 60% at 50% 45%, rgba(20, 90, 110, .05), rgba(2, 20, 34, .85)); }
+
+/* ---------- danger glow at the screen edge ---------- */
+.edge { position: fixed; inset: 0; pointer-events: none; z-index: 3; }
+.edge i { position: absolute; opacity: 0; transition: opacity .25s; --c: 242, 181, 68; }
+.edge i.red { --c: 255, 70, 50; }
+.edge .t { left: 0; right: 0; top: 0; height: 22vh; background: linear-gradient(to bottom, rgba(var(--c), .85), rgba(var(--c), 0)); }
+.edge .b { left: 0; right: 0; bottom: 0; height: 22vh; background: linear-gradient(to top, rgba(var(--c), .85), rgba(var(--c), 0)); }
+.edge .l { top: 0; bottom: 0; left: 0; width: 18vw; background: linear-gradient(to right, rgba(var(--c), .85), rgba(var(--c), 0)); }
+.edge .r { top: 0; bottom: 0; right: 0; width: 18vw; background: linear-gradient(to left, rgba(var(--c), .85), rgba(var(--c), 0)); }

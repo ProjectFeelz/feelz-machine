@@ -17,6 +17,19 @@
              mission `stems: [{ name: "Drums", src: "url" }, ...]`, one per
              quadrant, all the same length.
 
+   FOCUS     a mission can set what each of its quadrants asks for (`focus`, one per
+             quadrant). Kinds: explore (a townsperson's clue), sneak (drones and
+             searchlights), fight (an arena with waves), race (over the rooftops),
+             rubble (clear it with the townsfolk), help (fetch what someone needs),
+             blind (patrols you can't see), copies (find the real Zora), pads and
+             piano (music puzzles), chase (catch what took her, in the water).
+
+   THEME     wobble (Selina), grey (That Juice), water (Thinking of You).
+
+   BEAT      bpm, offset (seconds to the first beat) and sections (seconds where
+             the song changes section). Left out, they are worked out from the
+             song when it loads; the guesses show in the browser console.
+
    QUADRANTS the 12 blocks of the city. `grid` is (column, row) on the map.
              `focus` is the kind of task the quadrant gives:
                explore  find the part somewhere in the quadrant
@@ -58,33 +71,58 @@ window.GILL_STORY = {
 
   missions: [
     { song: "Hold Me Down",    trackId: "87704d25-a756-4810-a3b2-e9463d8eb97b", quadrants: ["q01", "q02", "q07", "q08"],
+      focus: ["explore", "sneak", "race", "fight"],
       cutscene: "opening",
+      bpm: null, offset: null, sections: null,
       goal: "Zora is gone. Search the first four quadrants and bring the song back together." },
     { song: "Selina",          trackId: "b1be1034-20f0-4829-a12d-23200e805d69", quadrants: ["q03", "q04", "q05", "q06"],
+      focus: ["sneak", "sneak", "sneak", "sneak"], theme: "wobble",
+      bpm: null, offset: null, sections: null,
       goal: "You keep seeing her everywhere. The streets won't hold still. Get through without being detected." },
     { song: "Put It On Me",    trackId: "476e10c7-8465-4c14-9345-81be91aafa8a", quadrants: ["q09", "q10", "q11", "q12"],
+      focus: ["rubble", "rubble", "rubble", "rubble"], grants: "superspeed", noBoost: true,
+      bpm: null, offset: null, sections: null,
       goal: "The Veil came down in pieces. Clear the way to her trail and help the people stuck behind the rubble." },
     { song: "Free ride",       trackId: "9becf0b9-dd08-4c2b-afac-503f9462c3f0", quadrants: ["q02", "q03", "q06", "q07"],
-      goal: "The streets are open. Race the song." },
+      focus: ["race", "race", "race", "race"],
+      bpm: null, offset: null, sections: null,
+      goal: "The streets are open and you're faster than ever. Race the song." },
     { song: "Where You Dey",   trackId: "de00fb92-df32-40cc-9b64-23818efedc68", quadrants: ["q04", "q05", "q11", "q12"],
+      focus: ["explore", "explore", "explore", "explore"],
       cutscene: "vision",
+      bpm: null, offset: null, sections: null,
       goal: "Search for her. Every clue counts." },
     { song: "Baddest",         trackId: "871cfb08-a17b-46ed-a1f8-624810a66087", quadrants: ["q06", "q08", "q09", "q11"],
+      focus: ["fight", "fight", "fight", "fight"],
+      bpm: null, offset: null, sections: null,
       goal: "The Circle's wardens hold this ground. Fight your way through." },
     { song: "To My Angels",    trackId: "8811396e-9f2d-47ac-970f-e9c645348f8d", quadrants: ["q01", "q07", "q09", "q10"],
+      focus: ["help", "help", "help", "help"], calm: true,
       cutscene: "neighbours",
-      goal: "The people of the city have your back. Find the safe place and listen to them." },
+      bpm: null, offset: null, sections: null,
+      goal: "The people of the city have your back. Help them and they'll help you." },
     { song: "Not at All",      trackId: "ba0c4b70-7da8-475f-9fa8-a3a83e1979b4", quadrants: ["q02", "q05", "q08", "q12"],
+      focus: ["blind", "blind", "blind", "blind"], noDrones: true,
+      bpm: null, offset: null, sections: null,
       goal: "You can't see the patrols here. Follow what the neighbours tell you and slip through." },
     { song: "Can't Copy You",  trackId: "f82186d2-8a76-4377-b7d8-e50837459d9c", quadrants: ["q03", "q06", "q10", "q11"],
+      focus: ["copies", "pads", "piano", "copies"], motif: [0, 4, 7, 9, 7],
+      puzzleClues: ["Scratched into the pads: \"Where the river runs grey, follow the colour.\"", "Inside the piano lid, in her handwriting: \"The water remembers.\""],
+      bpm: null, offset: null, sections: null,
       goal: "The Veil sends copies of her. They look like Zora, but they aren't. Trust what you know." },
     { song: "That Juice",      trackId: "70dc6426-0b9a-4209-85f5-1ce7016a8774", quadrants: ["q04", "q09", "q10", "q12"],
+      focus: ["race", "explore", "fight", "sneak"], theme: "grey", outro: "sink",
+      bpm: null, offset: null, sections: null,
       goal: "The closer you get, the more colour comes back. Keep going." },
     { song: "Thinking of You", trackId: "effed5a5-cc3a-431f-943e-8546863df254", quadrants: ["q05", "q07", "q11", "q12"],
+      focus: ["chase", "chase", "chase", "chase"], theme: "water", calm: true, noBoost: true,
       cutscene: "tower",
+      bpm: null, offset: null, sections: null,
       goal: "The water goes dark. Chase what took her." },
     { song: "Run",             trackId: "7305e3c4-d143-44c1-9c87-d8fc54564942", quadrants: ["q09", "q10", "q11", "q12"],
+      focus: ["sneak", "race", "fight", "explore"],
       cutscene: "finalOpen", final: true,
+      bpm: null, offset: null, sections: null,
       goal: "Bring the last song together and get Zora out." }
   ],
 
@@ -112,7 +150,12 @@ window.GILL_STORY = {
       { who: "Koda", say: "I'll ask everybody." }
     ],
     tower: [
-      { who: "Koda", say: "The tower. She's there, I can feel it." }
+      { who: "Koda", say: "The water's cold. I can't see her. But I know she's down here." }
+    ],
+    sink: [
+      { who: "", say: "A blow from behind. Koda goes under." },
+      { who: "", say: "Through the murk he sees it: something takes Zora down into the dark." },
+      { who: "Koda", say: "Zora!" }
     ],
     finalOpen: [
       { who: "Handler", say: "You don't stop, do you." },
@@ -143,10 +186,22 @@ window.GILL_STORY = {
     start:    "Each lit quadrant holds a part of the song. Go in, do its task, and the part joins the mix.",
     guard:    "Guards see in front of them. SNEAK keeps you quiet. Get behind one and press ACTION for a takedown.",
     seen:     "You've been seen. Fight with HIT, or run and break their line of sight.",
-    explore:  "Find the glowing part somewhere in this quadrant.",
-    sneak:    "Reach the part without being seen. If they spot you, the part moves.",
-    fight:    "Put every guard here down. The part drops when the last one falls.",
-    race:     "Step into the gold ring, then reach the part before the clock runs out.",
-    jump:     "JUMP, then HIT in the air for a flying kick."
+    explore:  "Talk to the people here. Follow their clue, and listen: the part gets louder as you get close.",
+    sneak:    "Stay out of the searchlights and the guards' sight. Hide under awnings. If they spot you, the part moves.",
+    fight:    "The arena gate shuts behind you. Survive every wave. Hit on the beat for double damage.",
+    race:     "Step into the gold ring, then climb the rooftops. Reach each ring before the song moves into its next section.",
+    jump:     "JUMP, then HIT in the air for a flying kick. Jump onto crates and rooftops to get up high.",
+    shift:    "The guards change shift on the beat. While they look away, move.",
+    mud:      "Mud washes you back. Jump from crate to crate to cross the river.",
+    copies:   "Press ACTION by a Zora to hear her hum. Press it again to take her hand.",
+    pads:     "The melody plays on the beat. Step on the pads in the same order.",
+    rubble:   "Hold ACTION by a pile of rubble to clear it. With a helper close by it goes faster.",
+    help:     "Talk to the people here. Do what they ask and they'll give you the part.",
+    blind:    "You can't see these patrols. Ask the neighbour, remember the routes, then go.",
+    chase:    "Something is moving in the water. Sprint to catch it.",
+    theme_wobble: "Nothing holds still. Trust the guide arrow and keep low.",
+    theme_grey:   "The colour comes back with every part you unlock.",
+    theme_water:  "The water slows you down, and it gets darker as the song goes on.",
+    boost:    "Hold BOOST to run at superspeed. It refills while you walk."
   }
 };

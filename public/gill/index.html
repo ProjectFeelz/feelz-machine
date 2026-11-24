@@ -13,6 +13,8 @@
 </head>
 <body>
   <div id="stage"></div>
+  <div class="tint" id="tint"></div>
+  <div class="edge" aria-hidden="true"><i id="edge-top" class="t"></i><i id="edge-right" class="r"></i><i id="edge-bottom" class="b"></i><i id="edge-left" class="l"></i></div>
 
   <!-- HUD -->
   <div id="hud" class="hidden">
@@ -21,6 +23,7 @@
     <div class="hud-right">
       <div class="hearts" id="hearts"></div>
       <div class="timer" id="timer">0:00</div>
+      <div class="beat" id="beat" aria-hidden="true"></div>
       <button class="icon-btn" id="pauseBtn" aria-label="Pause">II</button>
     </div>
     <div class="alert" id="alert" aria-live="polite"></div>
@@ -29,6 +32,7 @@
     <div class="mixer" id="mixer" aria-label="The parts of the song you have unlocked"></div>
     <div class="tip" id="tip"></div>
     <div class="toast" id="toast"></div>
+    <div class="pop" id="pop"></div>
   </div>
   <div class="marker hidden" id="marker"><span class="arrow" id="markerArrow">➤</span><span class="text" id="markerText"></span><span class="pin"></span></div>
 
@@ -40,6 +44,7 @@
       <button class="tbtn" id="btnAction" aria-label="Action">ACTION</button>
       <button class="tbtn" id="btnJump" aria-label="Jump">JUMP</button>
       <button class="tbtn big" id="btnAttack" aria-label="Hit">HIT</button>
+      <button class="tbtn boost hidden" id="btnBoost" aria-label="Boost">BOOST</button>
     </div>
   </div>
 
@@ -58,8 +63,9 @@
       <details class="how">
         <summary>How to play</summary>
         <p><b>Phone:</b> left thumb moves (push far to sprint). JUMP, HIT (jump then HIT for a flying kick), SNEAK to crouch, ACTION to talk and to take a guard down from behind.</p>
-        <p><b>Keyboard:</b> WASD or arrows to move, Shift to sprint, Space to jump, J to hit, E for action, C to sneak, Esc to pause.</p>
-        <p><b>Controller:</b> left stick or d-pad to move, RT to sprint, A to jump, X to hit, Y for action, B to sneak, Start to pause.</p>
+        <p><b>Keyboard:</b> WASD or arrows to move, Shift to sprint, Space to jump, J to hit, E for action (hold to clear rubble), C to sneak, Q to boost once you've earned it, Esc to pause.</p>
+        <p><b>Controller:</b> left stick or d-pad to move, RT to sprint, A to jump, X to hit, Y for action, B to sneak, LB to boost, Start to pause.</p>
+        <p><b>The beat:</b> the dot by the clock pulses with the song. Hits on the beat do double damage, and the guards change shift every 8 bars.</p>
       </details>
     </div>
   </div>
