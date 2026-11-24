@@ -137,8 +137,12 @@ async function loadGLB(url) {
   return loader.parseAsync(buf.slice(0), new URL(url, location.href).href);
 }
 const staticCache = {};
+// G.I.L.L.'s own pieces (from the F.I.L.L. kit) live with the game; the rest come from Feelz Run.
+const OWN_MODELS = new Set(["stall", "booth", "billboard", "container", "carriage", "hedge", "mast", "turnstile", "valve", "filter", "shrine", "cage", "scanner", "glass",
+  "mc-b3", "uc-b5", "de-b2", "generator", "handcart", "washline", "chimney", "vent", "hauler", "shuttle", "skiff", "conveyor", "fountain", "firepit", "rocks",
+  "commtower", "lockup", "shelter", "station", "elevator", "skydeck", "tenement2", "hostel2"]);
 function staticModel(name) {
-  if (!staticCache[name]) staticCache[name] = loadGLB(MODELS + "world/" + name + ".glb").then(g => g.scene).catch(() => null);
+  if (!staticCache[name]) staticCache[name] = loadGLB((OWN_MODELS.has(name) ? "models/world/" : MODELS + "world/") + name + ".glb").then(g => g.scene).catch(() => null);
   return staticCache[name];
 }
 
@@ -239,11 +243,11 @@ function groundTexture(kind) {
 const districtOf = q => q.district || "mc";
 // Buildings by district, from the Feelz Run kits.
 const DISTRICT_BUILDINGS = {
-  lc: ["tenement", "hostel", "kodas-building", "lc-b1", "lc-b2", "lc-b4", "lc-b5", "lc-b6", "lc-b7"],
-  mc: ["mc-b2", "mc-b4", "mc-b6", "mc-b7", "mc-b8"],
-  uc: ["uc-b1", "uc-b2", "uc-b3", "uc-b4"],
-  rc: ["rc-b1", "rc-b3", "rc-b4", "rc-b5"],
-  de: ["de-b1", "de-b3", "de-b4"]
+  lc: ["tenement", "hostel", "kodas-building", "lc-b1", "lc-b2", "lc-b4", "lc-b5", "lc-b6", "lc-b7", "tenement2", "hostel2"],
+  mc: ["mc-b2", "mc-b3", "mc-b4", "mc-b6", "mc-b7", "mc-b8", "station", "lockup"],
+  uc: ["uc-b1", "uc-b2", "uc-b3", "uc-b4", "uc-b5", "skydeck"],
+  rc: ["rc-b1", "rc-b3", "rc-b4", "rc-b5", "uc-b5"],
+  de: ["de-b1", "de-b2", "de-b3", "de-b4", "shelter"]
 };
 const pads = {};   // place id -> its ground material (lit up when it is part of the mission)
 const DCOLOUR = { lc: 0x8c7556, mc: 0x8d9096, uc: 0x9a90a6, rc: 0x6f8a58, de: 0xcfb07a };
@@ -652,6 +656,8 @@ function mudTexture() {
 const mudMap = mudTexture();
 const floatMat = new THREE.MeshStandardMaterial({ map: woodTexture(), roughness: 0.8 });
 const deckMat = new THREE.MeshStandardMaterial({ color: 0x6b6259, roughness: 0.85 });
+const causewayMat = new THREE.MeshStandardMaterial({ color: 0x7fb3aa, roughness: 0.18, metalness: 0.25, emissive: 0x0b2320, emissiveIntensity: 0.6 });
+const kerbStoneMat = new THREE.MeshStandardMaterial({ color: 0xd8c49c, roughness: 0.9 });
 function buildRivers() {
   for (const [x0, z0, x1, z1] of WD.river) {
     const w = x1 - x0, d = z1 - z0, along = d > w ? "z" : "x";
@@ -682,15 +688,17 @@ function buildRivers() {
   }
   for (const [x0, z0, x1, z1] of WD.bridges) {
     const top = Math.max(terrainAt(x0 - 2, (z0 + z1) / 2), terrainAt(x1 + 2, (z0 + z1) / 2), terrainAt((x0 + x1) / 2, z0 - 2), terrainAt((x0 + x1) / 2, z1 + 2)) + 0.07;   // flush with the road: it carries straight on
-    const deck = new THREE.Mesh(propGeo, deckMat);
+    // The road carries straight over the river as a causeway: same glass as the road, low stone kerbs.
+    const deck = new THREE.Mesh(propGeo, causewayMat);
     deck.scale.set(x1 - x0, 0.5, z1 - z0); deck.position.set((x0 + x1) / 2, top - 0.25, (z0 + z1) / 2); deck.castShadow = true; deck.receiveShadow = true; scene.add(deck);
     blockers.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, top, base: top - 0.5, walk: true, bridge: true, mesh: deck, mats: [] });
     // Rails along the long sides.
     const along = (x1 - x0) > (z1 - z0) ? "x" : "z";
     for (const side of [0, 1]) {
-      const rail = new THREE.Mesh(propGeo, deckMat);
-      if (along === "x") { rail.scale.set(x1 - x0, 0.9, 0.2); rail.position.set((x0 + x1) / 2, top + 0.45, side ? z1 - 0.1 : z0 + 0.1); }
-      else { rail.scale.set(0.2, 0.9, z1 - z0); rail.position.set(side ? x1 - 0.1 : x0 + 0.1, top + 0.45, (z0 + z1) / 2); }
+      const rail = new THREE.Mesh(propGeo, kerbStoneMat);
+      if (along === "x") { rail.scale.set(x1 - x0, 0.4, 0.5); rail.position.set((x0 + x1) / 2, top + 0.2, side ? z1 - 0.25 : z0 + 0.25); }
+      else { rail.scale.set(0.5, 0.4, z1 - z0); rail.position.set(side ? x1 - 0.25 : x0 + 0.25, top + 0.2, (z0 + z1) / 2); }
+      rail.castShadow = true; rail.receiveShadow = true;
       scene.add(rail);
       // Rails stop you: you can't walk off the side of a bridge.
       const rb = new THREE.Box3().setFromObject(rail);
@@ -991,7 +999,7 @@ function stripRootMotion(clip, rest) {
 // How fast a walking or running clip carries the body, in metres a second at this body's size:
 // the speed a planted foot slides back while it is on the ground. Playing the clip at
 // (ground speed / this) keeps the feet locked to the ground instead of skating.
-const STRIDE_CLIPS = /^(walk|run|sprint|crouch_walk|jog|push)$/;
+const STRIDE_CLIPS = /^(walk|run|sprint|crouch_walk|jog)$/;
 function measureStride(actor, name) {
   const act = actor.clips[name], clip = act.getClip(), feet = [];
   actor.model.traverse(o => { if (o.isBone && /(Left|Right)Foot$/.test(o.name)) feet.push(o); });
@@ -1084,10 +1092,38 @@ class Actor {
     restoreRest(this.model);
     this.mixer.update(dt);
     const name = this.current ? this.current.getClip().name : "";
-    if (this.native) return;   // rigged and animated for this body in Mixamo: no corrections needed
+    if (this.native) { if (this.armIn) armsIn(this.model, this.armIn); if (this.reach > 0.01) armsReach(this.model, this.reach); return; }   // rigged and animated in Mixamo: only the arm width is tuned
     if (/^(run|sprint)$/.test(name)) armSwing(this.model, ARM_SWING);
     if (!/^(punch|kick|takedown|hit|ko|alert|flykick|jump|spinkick)$/.test(name)) armClear(this.model, /^crouch/.test(name));
   }
+}
+// The moves were downloaded with wide arm space so the arms clear his jacket. That reads a little
+// too wide on his frame, so each upper arm is brought in toward the body by this much (radians).
+const KODA_ARM_IN = 0.2;
+const _ai = { f: new THREE.Vector3(), q: new THREE.Quaternion(), pq: new THREE.Quaternion(), rq: new THREE.Quaternion() };
+function armsIn(root, ang) {
+  if (!root.userData.armsIn) root.userData.armsIn = ["Left", "Right"].map(sd => { let f = null; root.traverse(o => { if (!f && o.isBone && new RegExp("mixamorig:?" + sd + "Arm$").test(o.name)) f = o; }); return f; });
+  root.updateMatrixWorld(true);
+  root.getWorldQuaternion(_ai.rq);
+  _ai.f.set(0, 0, 1).applyQuaternion(_ai.rq).normalize();   // the way he faces
+  root.userData.armsIn.forEach((bone, i) => {
+    if (!bone) return;
+    bone.parent.getWorldQuaternion(_ai.pq);
+    _ai.q.setFromAxisAngle(_ai.f, (i === 0 ? -1 : 1) * ang);
+    bone.quaternion.premultiply(_ai.pq.clone().invert().multiply(_ai.q).multiply(_ai.pq));
+  });
+}
+// Hands out in front on the cart's handles while he walks it: upper arms swing forward,
+// elbows bend a little. `amt` 0 to 1 eases in and out.
+function armsReach(root, amt) {
+  if (!root.userData.reach) root.userData.reach = ["Arm", "ForeArm"].map(part => ["Left", "Right"].map(sd => { let f = null; root.traverse(o => { if (!f && o.isBone && new RegExp("mixamorig:?" + sd + part + "$").test(o.name)) f = o; }); return f; }));
+  root.updateMatrixWorld(true);
+  root.getWorldQuaternion(_ai.rq);
+  _ai.f.set(1, 0, 0).applyQuaternion(_ai.rq).normalize();   // across his body
+  const [uppers, fores] = root.userData.reach;
+  const turn = (bone, ang) => { if (!bone) return; bone.parent.getWorldQuaternion(_ai.pq); _ai.q.setFromAxisAngle(_ai.f, ang); bone.quaternion.premultiply(_ai.pq.clone().invert().multiply(_ai.q).multiply(_ai.pq)); bone.updateMatrixWorld(true); };
+  for (const b of uppers) turn(b, -0.3 * amt);
+  for (const b of fores) turn(b, -0.85 * amt);
 }
 // Characters re-rigged in Mixamo with moves made for their own bodies live with the game.
 const NATIVE = { "koda.glb": "models/koda.glb", "guard.glb": "models/guard.glb" };
@@ -1156,6 +1192,7 @@ const stick = { id: null, x: 0, z: 0, mag: 0 };
    screen, A presses the highlighted one. With nothing highlighted yet, A presses the main
    button (Play, Start, Next, Resume). */
 const MENU_OF = { title: "title", card: "card", score: "score", paused: "pause" };
+const menuId = () => (state === "title" && !$("coop").classList.contains("hidden")) ? "coop" : MENU_OF[state];
 const padNav = { dir: "", t: 0, el: null, last: 0 };
 function menuButtons(id) {
   return [...$(id).querySelectorAll("button")].filter(b => !b.disabled && b.offsetParent !== null && !b.closest(".hidden"));
@@ -1195,7 +1232,7 @@ function padMenu(id, x, z, mag, pressA) {
   }
   if (!dir) padNav.dir = "", padNav.rep = false; else padNav.dir = dir;
   if (pressA) {
-    const b = padNav.el || { title: $("playBtn"), card: $("cardBtn"), score: $("nextBtn"), pause: $("resumeBtn") }[id];
+    const b = padNav.el || { title: $("playBtn"), card: $("cardBtn"), score: $("nextBtn"), pause: $("resumeBtn"), coop: $("coopMake") }[id];
     if (b && !b.disabled) b.click();
   }
 }
@@ -1214,7 +1251,7 @@ function pollPad() {
   const m = Math.hypot(x, z);
   if (m > 0.22) { pad.x = x / m; pad.z = z / m; pad.mag = btn(7) || btn(10) ? 1 : Math.min(0.9, m); }
   const press = i => btn(i) && !pad.prev[i];
-  const menu = MENU_OF[state];
+  const menu = menuId();
   if (menu) padMenu(menu, x, z, m, press(0));
   if (state === "title") { if (press(9) && !$("playBtn").disabled) $("playBtn").click(); }
   else if (state === "card") { if (press(9) || press(2)) cardContinue(); }
@@ -1925,7 +1962,7 @@ function makeCart(x, z) {
   const tray = new THREE.Mesh(propGeo, cartMat); tray.scale.set(0.9, 0.45, 1.2); tray.position.set(0, 0.6, 0.1); tray.castShadow = true; group.add(tray);
   const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.14, 16), tyreMat); wheel.rotation.z = Math.PI / 2; wheel.position.set(0, 0.28, 0.75); wheel.castShadow = true; group.add(wheel);
   for (const sx of [-0.35, 0.35]) {
-    const h = new THREE.Mesh(propGeo, postMat); h.scale.set(0.06, 0.06, 1.1); h.position.set(sx, 0.75, -0.75); h.rotation.x = -0.25; group.add(h);
+    const h = new THREE.Mesh(propGeo, postMat); h.scale.set(0.06, 0.06, 1.1); h.position.set(sx, 0.92, -0.72); h.rotation.x = -0.45; group.add(h);
     const leg = new THREE.Mesh(propGeo, postMat); leg.scale.set(0.06, 0.45, 0.06); leg.position.set(sx, 0.22, -0.3); group.add(leg);
   }
   const load = new THREE.Group(); group.add(load);
@@ -2185,7 +2222,7 @@ const FOCUS = {
       // Pushing: the cart rolls just ahead of him and goes where he goes.
       if (cart && koda.pushing === cart && Math.hypot(koda.pos.x - cart.x, koda.pos.z - cart.z) > 3) koda.pushing = null;   // too far away: he's let go
       if (cart && koda.pushing === cart) {
-        const f = forward(koda), tx = koda.pos.x + f.x * 1.35, tz = koda.pos.z + f.y * 1.35;
+        const f = forward(koda), tx = koda.pos.x + f.x * 1.05, tz = koda.pos.z + f.y * 1.05;
         const before = { x: cart.x, z: cart.z };
         const pos = { x: cart.x, y: terrainAt(cart.x, cart.z), z: cart.z };
         moveWithCollision(pos, tx - cart.x, tz - cart.z, 0.7);
@@ -2586,6 +2623,7 @@ function currentTarget() {
 const objectiveTarget = () => currentTarget();
 function refreshObjective() {
   if (!mission) return;
+  if (mission.def.free) return setObjective("Free roam. Walk the city, light the prayer points, talk to people. Pause for the map.");
   const m = mission, left = m.quads.filter(q => !q.done);
   if (escape) return setObjective("Get Zora out. Reach the gold light at East Gate!");
   if (zora && zora.waiting) return setObjective("Find Zora in the Old Tower.");
@@ -2880,8 +2918,7 @@ function updateKoda(dt) {
     moveWithCollision(koda.pos, input.x * speed * dt, input.z * speed * dt, 0.45, true);
     koda.face(want, Math.min(1, dt * 14));
     if (swimming()) koda.play("swim", { speed: sprint ? 1.35 : 1 });
-    else if (koda.pushing && koda.has("push")) koda.play("push");
-    else koda.play(sneaking ? "crouch_walk" : sprint || boost.on ? "sprint" : walking || (koda.pushing && !koda.has("push")) ? "walk" : "run", { speed: boost.on ? 1.4 : 1 });
+    else koda.play(sneaking ? "crouch_walk" : sprint || boost.on ? "sprint" : walking || koda.pushing ? "walk" : "run", { speed: boost.on ? 1.4 : 1 });
   } else if (swimming()) koda.play(koda.has("tread") ? "tread" : "swim");
   // In cover he crouches with his back to the box (facing away from it, set below).
   else koda.play(sneaking ? "crouch_idle" : koda.has("fight_idle") && fightFoe() ? "fight_idle" : "idle");
@@ -2889,6 +2926,7 @@ function updateKoda(dt) {
   const lift = swimming() ? (speed > 0 ? WATER_Y - 0.8 : WATER_Y - 1.45) : 0;
   koda.model.position.y += (koda.baseY + lift - koda.model.position.y) * Math.min(1, dt * 6);
   koda.moving = speed > 0; koda.sprinting = sprint || boost.on; koda.sneaking = sneaking;
+  koda.reach += ((koda.pushing ? 1 : 0) - (koda.reach || 0)) * Math.min(1, dt * 8);
   // Crouched beside a crate, wall or dumpster: he presses his back to it and is much harder to see.
   koda.inCover = null;
   if (sneaking && kUp() < 0.3) {
@@ -2918,6 +2956,8 @@ function keepApart() {
   };
   for (const e of enemies) if (e.state !== "ko" && e.a.root.parent) push(e.a.pos, 0.72, 0);
   for (const n of npcs) if (n.a && n.a.root.parent) push(n.a.pos, 0.75, 0.3);
+  for (const p of ambient) push(p.a.pos, 0.75, p.job === "sell" ? 0 : 0.5);
+  for (const o of coop.others.values()) if (o.a) push(o.root.position, 0.8, 0);
   if (zora && zora.root.parent) push(zora.pos, 0.75, 1);
 }
 // After moving on the ground: step off an edge and fall, step into the mud and sink.
@@ -3042,6 +3082,7 @@ function action() {
   if (!koda || attackLock > 0 || air) return;
   if (mission) for (const qd of mission.quads) if (qd.focus === "rubble" && FOCUS.rubble.tap(qd)) return;
   if (prayNear()) return;
+  if (!npcs.some(n => dist2(koda.pos, n.a.pos) < 2.6) && talkToAmbient()) return;
   if (npcs.some(n => dist2(koda.pos, n.a.pos) < 2.6) || (mission && mission.quads.some(q => q.focus === "copies" && q.zoras && q.zoras.some(z => !z.gone && dist2(z.z.pos, koda.pos) < 2.4)))) return talkOrListen();
   if (searchNear()) return;
   // A takedown: from behind, unseen.
@@ -3103,7 +3144,7 @@ function hurtKoda(n, fromX, fromZ) {
   if (health <= 0) respawn();
 }
 function respawn() {
-  const qd = mission.quads.find(q => !q.done) || mission.quads[0];
+  const qd = mission.quads.find(q => !q.done) || mission.quads[0] || { q: S.quadrants[0] };
   const c = zoneCenter(qd.q);
   const s = freeSpot(c.x, c.y + qd.q.d / 2 - 6);
   koda.pos.set(s.x, groundAt(s.x, s.z), s.z); lastSafe.copy(koda.pos); air = null; koda.sinking = null;
@@ -3622,6 +3663,8 @@ function updateGuide(now, dt) {
   const sh = shrines.find(x => Math.hypot(koda.pos.x - x.x, koda.pos.z - x.z) < 3 && !(save.shrines && save.shrines[x.q.id]));
   if (sh && sh !== updateGuide.hinted) { updateGuide.hinted = sh; popText("ACTION: PRAY"); }
   for (const x of shrines) x.flame.rotation.y += dt * 1.2;
+  updateSway(now);
+  updateAmbient(dt);
   const goal = objectiveTarget();
   const d = goal ? Math.hypot(goal.x - koda.pos.x, goal.z - koda.pos.z) : 0;
   // The route shows on the radar, GTA style; nothing is drawn on the ground.
@@ -3874,7 +3917,7 @@ function drawBigMap() {
     g.moveTo(0, -12 * dpr); g.lineTo(8 * dpr, 8 * dpr); g.lineTo(0, 4 * dpr); g.lineTo(-8 * dpr, 8 * dpr); g.closePath(); g.stroke(); g.fill();
     g.restore();
   }
-  $("mapSong").textContent = mission ? `Mission ${mission.index + 1}: ${mission.def.song}  \u00b7  ${mission.quads.filter(q => q.done).length}/${mission.quads.length} parts` : "";
+  $("mapSong").textContent = mission && mission.def.free ? "Free roam" : mission ? `Mission ${mission.index + 1}: ${mission.def.song}  \u00b7  ${mission.quads.filter(q => q.done).length}/${mission.quads.length} parts` : "";
 }
 (function mapControls() {
   const cv = $("bigmap"), pts = new Map();
@@ -4043,6 +4086,8 @@ function frame(now) {
   } else if (koda && (state === "card" || state === "score")) {
     koda.update(real); if (zora) zora.update(real);
   }
+  if (state === "play" || state === "build") updateCoop(real);
+  if (state === "build") { updateSway(now); updateAmbient(real); }
   if (!window.GILL_NORENDER) renderer.render(scene, camera);
 }
 // Time left on the song. Red for the last 20 seconds.
@@ -4108,7 +4153,7 @@ function titleShowStep() {
 function titleShowStart() { if (!show.timer) titleShowStep(); }
 function showBuildBtn() {
   const b = $("buildBtn");
-  if (canBuild) { b.classList.remove("hidden"); b.disabled = false; b.textContent = "Build the city"; return; }
+  if (canBuild || (typeof coop !== "undefined" && coop.ch)) { b.classList.remove("hidden"); b.disabled = false; b.textContent = coop && coop.ch ? "Build together" : "Build the city"; return; }
   const why = /[?&]build=1/.test(location.search) && buildWhyNot;
   b.classList.toggle("hidden", !why); b.disabled = true; if (why) b.textContent = buildWhyNot;
 }
@@ -4154,6 +4199,27 @@ function begin(i) {
   startMission(i);
 }
 $("playBtn").addEventListener("click", () => begin(save.unlocked));
+// Free roam: the whole city, no mission. Walk, explore, light prayer points, meet people, build with a room.
+function startFreeRoam() {
+  audioCtx(); goLandscape();
+  $("title").classList.add("hidden"); $("hud").classList.remove("hidden");
+  if (phone) $("touch").classList.remove("hidden");
+  clearMission();
+  mission = { index: -1, def: { song: "Free roam", quadrants: [], free: true }, t: 0, limit: 1e9, quads: [], stats: { kos: 0, takedowns: 0, seenCount: 0, hurt: 0, onBeat: 0 }, order: [], finished: false };
+  health = 5; drawHearts(); drawMixer();
+  lunge = null; air = null; attackLock = 0; invuln = 0; comboStep = 0; race = null; currentQuad = null; koda.sinking = null; koda.pushing = null;
+  if (!koda.parent) scene.add(koda.root);
+  const q0 = S.quadrants[0], c = zoneCenter(q0), spot = freeSpot(c.x, c.y + q0.d / 2 - 6);
+  koda.pos.set(spot.x, groundAt(spot.x, spot.z), spot.z); koda.face(Math.PI, 1); koda.play("idle");
+  lastSafe.copy(koda.pos);
+  applyTheme(null, 0, true);
+  DAY.hour = 16; updateDayNight(0);
+  state = "play";
+  updateCamera(0, true);
+  refreshObjective();
+  toast("Free roam. The city is yours.", 3);
+}
+$("roamBtn").addEventListener("click", startFreeRoam);
 $("btnView").addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); setView(cam.view + 1); });
 
 /* ---------- the city's own pieces, and build mode ----------
@@ -4314,7 +4380,7 @@ const pickMat = new THREE.MeshBasicMaterial({ color: 0xff5a46, transparent: true
 const catList = () => [...new Set(PIECES.map(p => p.cat))];
 const catPieces = () => PIECES.filter(p => p.cat === B.cat);
 function startBuild() {
-  if (!canBuild) return;
+  if (!canBuild && !coop.ch) return;
   audioCtx(); goLandscape();
   $("title").classList.add("hidden"); $("hud").classList.remove("hidden"); document.body.classList.add("building");
   $("build").classList.remove("hidden");
@@ -4324,7 +4390,7 @@ function startBuild() {
   if (!koda.parent) scene.add(koda.root);
   koda.pos.y = groundAt(koda.pos.x, koda.pos.z);
   renderBuildBar(); updateCamera(0, true);
-  toast(ONLINE ? "Build mode. Everything you place is saved to the city." : "Build mode (trying it out: nothing is saved here).", 3.5);
+  toast(canBuild && ONLINE ? (coop.ch ? "Building together. Your pieces are saved to the city and the room sees them." : "Build mode. Everything you place is saved to the city.") : coop.ch ? "Building together. Everyone in the room sees what you place." : "Build mode (trying it out: nothing is saved here).", 3.5);
 }
 function stopBuild() {
   B.on = false; if (B.ghost) { scene.remove(B.ghost); B.ghost = null; B.ghostKey = ""; }
@@ -4380,7 +4446,9 @@ async function buildPlace() {
   const rec = { kind: p.kind, model: p.model || null, label: p.name, x: B.spot.x, z: B.spot.z, rot: B.rot, w: p.w, d: p.d, h: p.h, interior: false };
   const made = await makePiece(rec); placed.push(made); B.near = undefined; sfxUnlock();
   B.undo.push(made);
-  if (!ONLINE) return;
+  // In a room, everyone sees it straight away.
+  if (coop.ch) { coop.ch.send({ type: "broadcast", event: "piece", payload: { rec } }); coopPiece(rec, made); }
+  if (!ONLINE || !canBuild) return;
   B.saving++; $("buildSave").textContent = "Saving…";
   const { data, error } = await ONLINE.from("gill_world_pieces").insert(rec).select("id").single();
   B.saving--;
@@ -4390,7 +4458,8 @@ async function buildPlace() {
 async function buildRemove(made) {
   if (!made) return;
   unmakePiece(made); placed.splice(placed.indexOf(made), 1); B.near = undefined; sfxHit(false);
-  if (ONLINE && made.rec.id) {
+  if (coop.ch) { const key = coopPieceKey(made.rec); coop.ch.send({ type: "broadcast", event: "unpiece", payload: { key } }); const i = coop.pieces.findIndex(p => coopPieceKey(p.rec) === key); if (i >= 0) coop.pieces.splice(i, 1); }
+  if (ONLINE && canBuild && made.rec.id) {
     const { error } = await ONLINE.from("gill_world_pieces").delete().eq("id", made.rec.id);
     $("buildSave").textContent = error ? "Couldn't remove it from the city. Try again." : "Saved";
   }
@@ -4425,6 +4494,167 @@ function buildUndo() { const m = B.undo.pop(); if (m && placed.includes(m)) buil
     else if (/^Digit[1-9]$/.test(e.code)) { const c = catList()[+e.code.slice(5) - 1]; if (c) buildPick(c, 0); }
   });
 })();
+
+/* ---------- town planning ----------
+   Every place gets what a real neighbourhood has, set back from its open middle:
+   a market row with a seller at every stall, a kiosk, a billboard by the road, and
+   its district's own life: washing lines and hand carts in the Lower City, a freight
+   depot in the Middle City, fountains and planted beds up the hill, gardens in the
+   Restored City, rock spires and a fuel stop in the desert. */
+const stalls = [];      // { x, z, yaw, q }: someone stands behind each one
+const swayers = [];     // trees and plants that move in the wind
+const leafMats = [0x3f6a34, 0x4f7d3a, 0x5d8f43, 0x2f5a2c].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, flatShading: true }));
+const flowerMats = [0xd9475a, 0xf2b544, 0xe7e1f2, 0xb16cd9, 0xf58b3c].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 }));
+async function placeThing(name, x, z, yaw, size, { h = null, solid = true, walk = false, low = false, pad = 0.6 } = {}) {
+  if (onRoad(x, z, size * 0.45) || onRiver(x, z, size * 0.6) || ridgeAt(x, z) > 0.3 || blocked(x, z, size * 0.5 + pad)) return null;
+  const src = await staticModel(name);
+  if (!src) return null;
+  const m = src.clone(true);
+  m.rotation.y = yaw;
+  const box = new THREE.Box3().setFromObject(m), sz = box.getSize(new THREE.Vector3());
+  m.scale.setScalar(h ? h / Math.max(0.01, sz.y) : size / Math.max(0.01, sz.x, sz.z));
+  const b2 = new THREE.Box3().setFromObject(m), c = b2.getCenter(new THREE.Vector3());
+  const base = terrainAt(x, z);
+  m.position.set(x - c.x, base - b2.min.y, z - c.z);
+  m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  scene.add(m);
+  const bb = new THREE.Box3().setFromObject(m);
+  let blk = null;
+  if (solid) { blk = { minX: bb.min.x, maxX: bb.max.x, minZ: bb.min.z, maxZ: bb.max.z, top: bb.max.y, base, walk, low, mesh: m, mats: [], faded: false, prop: name }; blockers.push(blk); }
+  return { m, b: blk, x, z };
+}
+// A tree that sways: a trunk and a few overlapping leaf clumps, each its own green.
+function addTree(x, z, h, r) {
+  if (onRoad(x, z, 2) || onRiver(x, z, 3) || ridgeAt(x, z) > 0.3 || blocked(x, z, 1.2)) return;
+  const g = new THREE.Group(), base = terrainAt(x, z);
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16 * h / 6, 0.3 * h / 6, h * 0.6, 7), barkMat); trunk.position.y = h * 0.3; trunk.castShadow = true; g.add(trunk);
+  const n = 3 + Math.floor(r() * 3);
+  for (let i = 0; i < n; i++) {
+    const s = h * (0.2 + r() * 0.14), a = r() * Math.PI * 2, d = h * 0.12 * r();
+    const blob = new THREE.Mesh(new THREE.IcosahedronGeometry(s, 1), leafMats[Math.floor(r() * leafMats.length)]);
+    blob.position.set(Math.cos(a) * d, h * (0.62 + r() * 0.22), Math.sin(a) * d); blob.castShadow = true; g.add(blob);
+  }
+  g.position.set(x, base, z); scene.add(g);
+  blockers.push({ minX: x - 0.35, maxX: x + 0.35, minZ: z - 0.35, maxZ: z + 0.35, top: base + h, base, mats: [] });
+  swayers.push({ g, ph: r() * 6.28, amp: 0.025 + r() * 0.02 });
+}
+// A flower bed: a low bush with flowers dotted over it.
+function addBed(x, z, w, r) {
+  if (onRoad(x, z, w) || onRiver(x, z, 2) || ridgeAt(x, z) > 0.3 || blocked(x, z, w * 0.6)) return;
+  const g = new THREE.Group(), base = terrainAt(x, z);
+  const bush = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), leafMats[Math.floor(r() * leafMats.length)]); bush.scale.set(w / 2, 0.5, w / 3); bush.position.y = 0.35; bush.castShadow = true; g.add(bush);
+  const fm = flowerMats[Math.floor(r() * flowerMats.length)];
+  for (let i = 0; i < 9; i++) { const f = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 4), fm); f.position.set((r() - 0.5) * w * 0.85, 0.7 + r() * 0.15, (r() - 0.5) * w * 0.55); g.add(f); }
+  g.position.set(x, base, z); scene.add(g);
+  blockers.push({ minX: x - w / 2, maxX: x + w / 2, minZ: z - w / 3, maxZ: z + w / 3, top: base + 0.8, base, walk: true, low: true, mats: [] });
+  swayers.push({ g, ph: r() * 6.28, amp: 0.012 });
+}
+function updateSway(now) {
+  const t = now / 1000;
+  for (const s of swayers) { s.g.rotation.z = Math.sin(t * 1.3 + s.ph) * s.amp; s.g.rotation.x = Math.sin(t * 0.9 + s.ph * 1.7) * s.amp * 0.7; }
+}
+async function buildTownPlan() {
+  const jobs = [];
+  for (const q of S.quadrants) {
+    const r = rng(q.id.charCodeAt(2) * 911 + 31), cx = q.x0 + q.w / 2, cz = q.z0 + q.d / 2, dist = districtOf(q);
+    const face = (x, z) => Math.atan2(cx - x, cz - z);   // turned to look into the middle
+    // Market row along the south side of the middle, stalls facing in.
+    const mz = cz + 18, n = q.w > 100 ? 4 : 3;
+    for (let i = 0; i < n; i++) {
+      const x = cx + (i - (n - 1) / 2) * 6;
+      jobs.push(placeThing("stall", x, mz, Math.PI, 4.4, { pad: 0.3 }).then(t => { if (t) stalls.push({ x, z: mz - 2.6, yaw: Math.PI, q }); }));
+    }
+    jobs.push(placeThing("booth", cx + 20, cz - 15, face(cx + 20, cz - 15), 2.6));
+    jobs.push(placeThing("billboard", cx - 24, cz - 20, face(cx - 24, cz - 20), 7, { h: 6 }));
+    if (dist === "lc") {
+      for (let i = 0; i < 3; i++) { const x = q.x0 + 14 + r() * (q.w - 28), z = q.z0 + 14 + r() * (q.d - 28); if (Math.hypot(x - cx, z - cz) > 22) jobs.push(placeThing("washline", x, z, r() * 3, 5, { solid: false })); }
+      jobs.push(placeThing("handcart", cx - 14, cz + 10, r() * 6, 2.4, { walk: true, low: true }));
+      jobs.push(placeThing("chimney", cx + 24, cz + 8, 0, 1.2, { h: 6 }));
+      jobs.push(placeThing("vent", cx + 22, cz + 22, 0, 2.2, { walk: true, low: true }));
+      jobs.push(placeThing("generator", cx - 22, cz + 6, face(cx - 22, cz + 6), 2.6, { walk: true }));
+      jobs.push(placeThing("firepit", cx - 4, cz - 22, 0, 7, { solid: false }));
+      jobs.push(placeThing("cage", cx + 6, cz - 24, r() * 3, 2.2, { walk: true }));
+    } else if (dist === "mc") {
+      // A freight depot: stacked containers, a conveyor and a hauler parked up.
+      for (let i = 0; i < 4; i++) jobs.push(placeThing("container", cx - 26 + (i % 2) * 7, cz - 8 + Math.floor(i / 2) * 3.2, Math.PI / 2 * 0, 6.2, { walk: true, pad: 0.1 }));
+      jobs.push(placeThing("conveyor", cx - 18, cz + 4, 0, 4, { walk: true, low: true }));
+      jobs.push(placeThing("hauler", cx + 24, cz + 4, face(cx + 24, cz + 4), 9));
+      jobs.push(placeThing("turnstile", cx + 10, cz - 22, 0, 3.2));
+      jobs.push(placeThing("valve", cx + 24, cz - 6, 0, 2.2, { walk: true }));
+      jobs.push(placeThing("filter", cx - 6, cz - 24, 0, 2.2, { walk: true }));
+      jobs.push(placeThing("mast", cx + 2, cz + 26, 0, 1.4, { h: 8 }));
+    } else if (dist === "uc" || dist === "rc") {
+      jobs.push(placeThing("fountain", cx + 22, cz - 2, 0, 8, { walk: true }));
+      const trees = dist === "rc" ? 16 : 9, beds = dist === "rc" ? 12 : 8, hedges = dist === "rc" ? 6 : 8;
+      for (let i = 0; i < trees; i++) { const a = r() * Math.PI * 2, d = 18 + r() * Math.min(q.w, q.d) * 0.35; jobs.push(Promise.resolve(addTree(cx + Math.cos(a) * d, cz + Math.sin(a) * d, 5 + r() * 4, r))); }
+      for (let i = 0; i < beds; i++) { const a = r() * Math.PI * 2, d = 16 + r() * Math.min(q.w, q.d) * 0.35; jobs.push(Promise.resolve(addBed(cx + Math.cos(a) * d, cz + Math.sin(a) * d, 2 + r() * 1.5, r))); }
+      for (let i = 0; i < hedges; i++) { const a = i / hedges * Math.PI * 2, d = 15; jobs.push(placeThing("hedge", cx + Math.cos(a) * d, cz + Math.sin(a) * d, a, 3, { walk: true, low: true, pad: 0.2 })); }
+      if (dist === "uc") jobs.push(placeThing("commtower", cx - 26, cz + 22, 0, 3, { h: 16 }));
+    } else if (dist === "de") {
+      for (let i = 0; i < 4; i++) { const x = q.x0 + 10 + r() * (q.w - 20), z = q.z0 + 10 + r() * (q.d - 20); if (Math.hypot(x - cx, z - cz) > 24) jobs.push(placeThing("rocks", x, z, r() * 6, 3, { h: 6 + r() * 5 })); }
+      jobs.push(placeThing("skiff", cx - 22, cz + 8, r() * 6, 7));
+      jobs.push(placeThing("firepit", cx + 4, cz - 22, 0, 7, { solid: false }));
+      // A fuel stop: the shelter, a generator and two pumps, with a hauler filling up.
+      jobs.push(placeThing("shelter", cx + 24, cz + 6, face(cx + 24, cz + 6), 7));
+      jobs.push(placeThing("valve", cx + 18, cz + 12, 0, 1.6, { walk: true }));
+      jobs.push(placeThing("valve", cx + 18, cz + 16, 0, 1.6, { walk: true }));
+      jobs.push(placeThing("generator", cx + 28, cz + 16, 0, 2.4, { walk: true }));
+    }
+    // A few palms and shrubs out in the dry places too, so nowhere is bare.
+    if (dist === "de" || dist === "lc") for (let i = 0; i < 3; i++) { const a = r() * Math.PI * 2, d = 20 + r() * 18; jobs.push(Promise.resolve(addTree(cx + Math.cos(a) * d, cz + Math.sin(a) * d, 4 + r() * 2, r))); }
+  }
+  await Promise.all(jobs);
+}
+
+/* ---------- townsfolk at work ----------
+   The place Koda is in comes alive: a seller behind every stall and people walking
+   between spots, stopping to stand a while. Only nearby places are filled, to keep it smooth. */
+const ambient = [];   // { a, job: "sell" | "walk", q, to, wait, line }
+const SELLER_LINES = ["Fresh bread, still warm.", "Two for one, today only.", "You look hungry. Sit, eat.", "Best spice on the street.", "Mind the Veil wardens. They don't pay.", "Music's back on the radio. Good sign."];
+let ambientQ = null, ambientBusy = false;
+async function updateAmbient(dt) {
+  const q = zoneAt(koda.pos.x, koda.pos.z) || null;
+  if (q !== ambientQ && !ambientBusy) {
+    ambientBusy = true; ambientQ = q;
+    for (const p of ambient.splice(0)) scene.remove(p.a.root);
+    if (q) {
+      const r = rng(q.id.charCodeAt(2) * 77 + Math.floor(performance.now() / 60000));
+      const jobs = [];
+      for (const st of stalls.filter(s => s.q === q)) jobs.push(makeActor("townsfolk/" + TOWNSFOLK[Math.floor(r() * TOWNSFOLK.length)] + ".glb", 1.65).then(a => { if (!a || ambientQ !== q) return; a.pos.set(st.x, floorAt(st.x, st.z), st.z); a.face(st.yaw + Math.PI, 1); a.play("idle"); scene.add(a.root); ambient.push({ a, job: "sell", q, line: SELLER_LINES[Math.floor(r() * SELLER_LINES.length)] }); }).catch(() => null));
+      for (let i = 0; i < 4; i++) jobs.push(makeActor("townsfolk/" + TOWNSFOLK[Math.floor(r() * TOWNSFOLK.length)] + ".glb", 1.65).then(a => { if (!a || ambientQ !== q) return; const s = freeSpot(q.x0 + 10 + r() * (q.w - 20), q.z0 + 10 + r() * (q.d - 20), 0.8, r); a.pos.set(s.x, floorAt(s.x, s.z), s.z); a.play("idle"); scene.add(a.root); ambient.push({ a, job: "walk", q, to: null, wait: r() * 3 }); }).catch(() => null));
+      await Promise.all(jobs);
+    }
+    ambientBusy = false;
+  }
+  for (const p of ambient) {
+    const a = p.a;
+    if (p.job === "walk") {
+      if (p.wait > 0) { p.wait -= dt; a.play("idle"); }
+      else {
+        if (!p.to) { const s = freeSpot(p.q.x0 + 8 + Math.random() * (p.q.w - 16), p.q.z0 + 8 + Math.random() * (p.q.d - 16), 0.8); p.to = s; }
+        const dx = p.to.x - a.pos.x, dz = p.to.z - a.pos.z, d = Math.hypot(dx, dz);
+        if (d < 0.8) { p.to = null; p.wait = 2 + Math.random() * 5; }
+        else {
+          const before = a.pos.x + a.pos.z;
+          moveWithCollision(a.pos, dx / d * 1.3 * dt, dz / d * 1.3 * dt, 0.4);
+          a.pos.y = floorAt(a.pos.x, a.pos.z);
+          a.face(Math.atan2(dx, dz), Math.min(1, dt * 5)); a.play("walk");
+          p.stuck = Math.abs(a.pos.x + a.pos.z - before) < 0.002 ? (p.stuck || 0) + dt : 0;
+          if (p.stuck > 1) { p.to = null; p.stuck = 0; }
+        }
+      }
+    } else if (dist2(a.pos, koda.pos) < 4) a.faceTo(koda.pos.x, koda.pos.z, Math.min(1, dt * 3));
+    a.update(dt);
+  }
+}
+function talkToAmbient() {
+  const p = ambient.find(p => dist2(p.a.pos, koda.pos) < 2.8);
+  if (!p) return false;
+  p.a.faceTo(koda.pos.x, koda.pos.z);
+  toast(p.job === "sell" ? `"${p.line}"` : `"${["Evening.", "Stay out of the wardens' way.", "Heard the music tonight?", "Busy day."][Math.floor(Math.random() * 4)]}"`, 2.5);
+  if (p.job === "walk") { p.wait = 3; p.to = null; }
+  return true;
+}
 
 /* ---------- prayer points ----------
    One in every place. Find it and pray (ACTION) to light it; from then on the pause map
@@ -4482,6 +4712,113 @@ function renderTravel() {
 }
 $("pauseTravel") && $("pauseTravel").addEventListener("click", e => { const b = e.target.closest("button"); if (b) travelTo(shrines[+b.dataset.i]); });
 
+/* ---------- play together ----------
+   A room is a four-letter code. Everyone in it sees everyone else walking the city as
+   Koda with their own colour ring and name over their head, and can build together:
+   pieces anyone places show up for the whole room (an admin's are also kept in the city).
+   Runs over Feelz Machine's live connection, so it works on the real site. */
+const COOP_COLOURS = [0xf2b544, 0x5ad1ff, 0xff5a8a, 0x7fe39a, 0xb16cd9, 0xff8a3c];
+const coop = { ch: null, code: "", id: Math.random().toString(36).slice(2, 10), colour: 0, others: new Map(), sendT: 0, pieces: [] };
+try { coop.colour = +(localStorage.getItem("gill.coopColour") || 0) % COOP_COLOURS.length; } catch (e) { /* no storage */ }
+function coopName() { return ["Gold", "Sky", "Rose", "Mint", "Violet", "Flame"][coop.colour]; }
+function coopRender() {
+  $("coopColours").innerHTML = COOP_COLOURS.map((c, i) => `<button class="${i === coop.colour ? "on" : ""}" data-i="${i}" style="background:${hexCol(c)}" aria-label="${["Gold", "Sky", "Rose", "Mint", "Violet", "Flame"][i]}"></button>`).join("");
+  $("coopStatus").innerHTML = coop.ch ? `In room${"<big>" + coop.code + "</big>"}${coop.others.size} other${coop.others.size === 1 ? "" : "s"} here` : (ONLINE ? "" : "Playing together works on feelzmachine.com.");
+  $("coopPill").classList.toggle("hidden", !coop.ch);
+  $("coopPill").textContent = coop.ch ? `ROOM ${coop.code} · ${coop.others.size + 1}` : "";
+  showBuildBtn();
+}
+function nameTag(text, colour) {
+  const c = document.createElement("canvas"); c.width = 256; c.height = 64;
+  const g = c.getContext("2d"); g.fillStyle = "rgba(0,0,0,.75)"; g.beginPath(); g.roundRect(8, 8, 240, 48, 24); g.fill();
+  g.fillStyle = hexCol(colour); g.font = "900 30px Inter, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(text, 128, 33);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
+  sp.scale.set(1.6, 0.4, 1); sp.renderOrder = 5; return sp;
+}
+async function coopJoin(code) {
+  code = (code || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
+  if (!ONLINE) { coopRender(); return; }
+  if (code.length !== 4) { $("coopStatus").textContent = "A room code is four letters."; return; }
+  await coopLeave();
+  coop.code = code;
+  const ch = ONLINE.channel("gill-room-" + code, { config: { broadcast: { self: false }, presence: { key: coop.id } } });
+  ch.on("broadcast", { event: "pos" }, ({ payload: m }) => coopPos(m));
+  ch.on("broadcast", { event: "piece" }, ({ payload: m }) => coopPiece(m.rec, false));
+  ch.on("broadcast", { event: "unpiece" }, ({ payload: m }) => coopUnpiece(m.key));
+  ch.on("broadcast", { event: "pieces" }, ({ payload: m }) => { if (m.to === coop.id) for (const rec of m.list) coopPiece(rec, false); });
+  ch.on("presence", { event: "join" }, ({ key }) => {
+    // Whoever has been here longest hands the newcomer what the room has built so far.
+    if (key !== coop.id && coop.pieces.length) ch.send({ type: "broadcast", event: "pieces", payload: { to: key, list: coop.pieces.map(p => p.rec) } });
+  });
+  ch.on("presence", { event: "leave" }, ({ key }) => { const o = coop.others.get(key); if (o) { scene.remove(o.root); coop.others.delete(key); coopRender(); } });
+  ch.subscribe(async st => { if (st === "SUBSCRIBED") { await ch.track({ colour: coop.colour }); coopRender(); toast(`You're in room ${code}. Share the code to play together.`, 3); } });
+  coop.ch = ch;
+  coopRender();
+}
+async function coopLeave() {
+  if (!coop.ch) return;
+  try { await coop.ch.unsubscribe(); } catch (e) { /* gone already */ }
+  coop.ch = null; coop.code = "";
+  for (const o of coop.others.values()) scene.remove(o.root);
+  coop.others.clear();
+  for (const p of coop.pieces) if (!p.rec.id) unmakePiece(p.made);
+  coop.pieces = [];
+  coopRender();
+}
+async function coopPos(m) {
+  let o = coop.others.get(m.id);
+  if (!o) {
+    o = { loading: true, root: new THREE.Group(), tx: m.x, ty: m.y, tz: m.z, yaw: m.yaw };
+    coop.others.set(m.id, o); scene.add(o.root);
+    const a = await makeActor("koda.glb", 1.62).catch(() => null);
+    if (!a || !coop.others.has(m.id)) return;
+    a.armIn = KODA_ARM_IN; a.reach = 0; o.a = a; o.root.add(a.root); a.pos.set(0, 0, 0);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.72, 32), new THREE.MeshBasicMaterial({ color: COOP_COLOURS[m.c % COOP_COLOURS.length], transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; o.root.add(ring);
+    const tag = nameTag(["Gold", "Sky", "Rose", "Mint", "Violet", "Flame"][m.c % 6], COOP_COLOURS[m.c % COOP_COLOURS.length]); tag.position.y = 2.15; o.root.add(tag);
+    o.root.position.set(m.x, m.y, m.z); o.loading = false; coopRender();
+  }
+  o.tx = m.x; o.ty = m.y; o.tz = m.z; o.yaw = m.yaw; o.anim = m.an; o.seen = performance.now();
+}
+function updateCoop(dt) {
+  if (!coop.ch) return;
+  coop.sendT -= dt;
+  if (coop.sendT <= 0 && koda) {
+    coop.sendT = 0.12;
+    const an = koda.current ? koda.current.getClip().name : "idle";
+    coop.ch.send({ type: "broadcast", event: "pos", payload: { id: coop.id, c: coop.colour, x: +koda.pos.x.toFixed(2), y: +koda.pos.y.toFixed(2), z: +koda.pos.z.toFixed(2), yaw: +koda.yaw.toFixed(2), an } });
+  }
+  for (const [id, o] of coop.others) {
+    if (!o.a) continue;
+    const k = Math.min(1, dt * 10);
+    o.root.position.x += (o.tx - o.root.position.x) * k; o.root.position.y += (o.ty - o.root.position.y) * k; o.root.position.z += (o.tz - o.root.position.z) * k;
+    o.a.face(o.yaw, Math.min(1, dt * 10));
+    if (o.anim && o.a.has(o.anim)) o.a.play(o.anim, { once: /^(punch|combo|elbowup|knee|hurricane|roundhouse|spinflip|crescent|frontflip|backflip|roll|dodge|jump|vault|takedown|kick|flykick)$/.test(o.anim) && o.a.current && o.a.current.getClip().name !== o.anim });
+    o.a.update(dt);
+  }
+}
+function coopPieceKey(rec) { return rec.id || `${rec.kind}:${rec.x.toFixed(1)}:${rec.z.toFixed(1)}`; }
+async function coopPiece(rec, mine) {
+  if (coop.pieces.some(p => coopPieceKey(p.rec) === coopPieceKey(rec)) || placed.some(m => m.rec.id && m.rec.id === rec.id)) return;
+  const made = mine || await makePiece(rec);
+  coop.pieces.push({ rec, made });
+  if (!mine) placed.push(made);
+}
+function coopUnpiece(key) {
+  const i = coop.pieces.findIndex(p => coopPieceKey(p.rec) === key);
+  if (i < 0) return;
+  const p = coop.pieces.splice(i, 1)[0];
+  if (placed.includes(p.made)) { unmakePiece(p.made); placed.splice(placed.indexOf(p.made), 1); }
+}
+(function coopControls() {
+  $("coopBtn").addEventListener("click", () => { $("coop").classList.remove("hidden"); coopRender(); });
+  $("coopClose").addEventListener("click", () => $("coop").classList.add("hidden"));
+  $("coopColours").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; coop.colour = +b.dataset.i; try { localStorage.setItem("gill.coopColour", coop.colour); } catch (er) { /* no storage */ } if (coop.ch) coop.ch.track({ colour: coop.colour }); coopRender(); });
+  $("coopMake").addEventListener("click", () => { const L = "ABCDEFGHJKMNPQRSTUVWXYZ"; let c = ""; for (let i = 0; i < 4; i++) c += L[Math.floor(Math.random() * L.length)]; coopJoin(c); });
+  $("coopJoin").addEventListener("click", () => coopJoin($("coopCode").value));
+  $("coopCode").addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter") coopJoin($("coopCode").value); });
+})();
+
 /* ---------- boot ---------- */
 (async function boot() {
   $("playBtn").disabled = true;
@@ -4490,6 +4827,7 @@ $("pauseTravel") && $("pauseTravel").addEventListener("click", e => { const b = 
   requestAnimationFrame(frame);
   try {
     koda = await makeActor("koda.glb", 1.62);
+    koda.armIn = KODA_ARM_IN; koda.reach = 0;
     scene.add(koda.root);
     koda.play("idle");
     const q0 = S.quadrants[0], c = zoneCenter(q0);
@@ -4505,6 +4843,8 @@ $("pauseTravel") && $("pauseTravel").addEventListener("click", e => { const b = 
   buildRivers();
   buildShrines();
   buildProps();
+  $("loading").textContent = "Setting up the streets…";
+  await buildTownPlan();
   buildAwnings();
   buildNav();
   buildRoadNet();
@@ -4516,7 +4856,7 @@ $("pauseTravel") && $("pauseTravel").addEventListener("click", e => { const b = 
   $("playBtn").disabled = false;
   toTitle();
   window.GILL_FLOATS = () => floats; window.GILL_DRONES = () => drones;
-  window.GILL = { shrines, travelTo, prayNear, guideRoute, buildStep: dt => updateBuild(dt), scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
+  window.GILL = { zones: S.quadrants, ambientCount: () => ambient.map(p => p.job).join(","), moveWithCollision, shrines, travelTo, prayNear, guideRoute, buildStep: dt => updateBuild(dt), scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
     enemies, npcs, get state() { return state; }, save: () => save, blockers, keys, input, cardContinue, pause, resume, drawBigMap, pathNext, stick, FOCUS, beat, songTime, boost, get lastSafe() { return lastSafe; }, fightFoe, get camZoom() { return camZoom; }, attack, jump, action, objectiveTarget, get health() { return health; }, get music() { return music; },
     sim(seconds) { let t = performance.now(); for (let i = 0; i < seconds * 30; i++) { t += 33; tick(1 / 30, t); } } };
 })();

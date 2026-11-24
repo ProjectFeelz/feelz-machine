@@ -389,3 +389,15 @@ html, body, .screen { scrollbar-width: none; }
 .travel-label { font-size: 11px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
 .pause-bar.closed .pause-travel { display: none; }
 .lg-shrine { background: #ffd27a; border-radius: 50% !important; box-shadow: 0 0 6px #ffa83a; }
+
+/* Play together */
+.coop-card { text-align: center; }
+.coop-colours { display: flex; gap: 10px; justify-content: center; margin: 6px 0 16px; }
+.coop-colours button { width: 40px; height: 40px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; }
+.coop-colours button.on { border-color: #fff; box-shadow: 0 0 0 2px #000; }
+.coop-row { display: flex; gap: 10px; justify-content: center; margin: 8px 0; }
+.coop-or { color: var(--muted); font-size: 13px; margin: 12px 0 2px; }
+#coopCode { width: 130px; text-align: center; font: 900 24px/1 Inter, sans-serif; letter-spacing: .25em; text-transform: uppercase; background: #000; color: var(--gold-hi); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.coop-status { min-height: 1.2em; color: var(--gold-hi); font-weight: 800; letter-spacing: .06em; }
+.coop-status big { font-size: 34px; letter-spacing: .3em; display: block; margin-top: 6px; }
+.coop-pill { font: 800 11px/1 Inter, sans-serif; letter-spacing: .08em; color: #000; background: var(--gold); border-radius: 999px; padding: 7px 10px; }

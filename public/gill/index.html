@@ -28,6 +28,7 @@
         <div class="timer" id="timer" title="Time on this mission">0:00</div>
         <div class="dayclock" id="dayClock" title="Time of day in the city">18:00</div>
         <div class="beat" id="beat" aria-hidden="true"></div>
+        <span class="coop-pill hidden" id="coopPill"></span>
         <button class="view-btn" id="btnView" aria-label="Switch camera view (V)">Distance</button>
         <button class="icon-btn" id="pauseBtn" aria-label="Pause">II</button>
       </div>
@@ -78,6 +79,25 @@
     </div>
   </div>
 
+  <!-- Play together: a room code to share, a colour to be -->
+  <div id="coop" class="screen hidden">
+    <div class="card coop-card">
+      <p class="kicker">PLAY TOGETHER</p>
+      <h2 id="coopTitle">Make a room or join one</h2>
+      <div class="coop-colours" id="coopColours"></div>
+      <div class="coop-row">
+        <button class="primary" id="coopMake">Make a room</button>
+      </div>
+      <p class="coop-or">or type a friend's room code</p>
+      <div class="coop-row">
+        <input id="coopCode" maxlength="4" autocomplete="off" spellcheck="false" placeholder="CODE" aria-label="Room code">
+        <button class="ghost" id="coopJoin">Join</button>
+      </div>
+      <p class="coop-status" id="coopStatus"></p>
+      <div class="coop-row"><button class="ghost" id="coopClose">Done</button></div>
+    </div>
+  </div>
+
   <!-- Title -->
   <div id="title" class="screen">
     <div class="title-show" id="titleShow" aria-hidden="true"></div>
@@ -89,6 +109,8 @@
       <div class="title-buttons">
         <button class="primary" id="playBtn">Play</button>
         <button class="ghost hidden" id="buildBtn">Build the city</button>
+        <button class="ghost" id="roamBtn">Free roam</button>
+        <button class="ghost" id="coopBtn">Play together</button>
       </div>
       <p class="loading" id="loading">Loading the city…</p>
       <div class="missions" id="missionList"></div>
