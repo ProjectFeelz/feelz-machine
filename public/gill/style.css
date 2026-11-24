@@ -1,11 +1,11 @@
 :root {
   --gold: #f2b544;
   --gold-hi: #ffd27a;
-  --ink: #07060b;
-  --glass: rgba(12, 11, 16, .72);
+  --ink: #000000;
+  --glass: rgba(0, 0, 0, .72);
   --line: rgba(255, 255, 255, .14);
-  --text: #f4efe6;
-  --muted: rgba(244, 239, 230, .62);
+  --text: #ffffff;
+  --muted: rgba(255, 255, 255, .62);
   --danger: #ff5a46;
   --sat: env(safe-area-inset-top, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
@@ -44,9 +44,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .race { position: absolute; top: calc(92px + var(--sat)); left: 50%; transform: translateX(-50%); font-size: 30px; font-weight: 900;
   color: var(--gold-hi); text-shadow: 0 2px 12px #000; font-variant-numeric: tabular-nums; }
 #minimap { position: absolute; right: calc(12px + var(--sar)); top: calc(58px + var(--sat)); width: 160px; height: 120px;
-  border-radius: 12px; border: 1px solid var(--line); background: rgba(8, 8, 12, .7); }
+  border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, .7); }
 .toast { position: absolute; bottom: calc(150px + var(--sab)); left: 50%; transform: translateX(-50%); max-width: 80vw;
-  padding: 10px 16px; border-radius: 14px; background: rgba(12, 11, 16, .9); border: 1px solid rgba(242, 181, 68, .45);
+  padding: 10px 16px; border-radius: 14px; background: rgba(0, 0, 0, .9); border: 1px solid rgba(242, 181, 68, .45);
   font-size: 14px; text-align: center; opacity: 0; transition: opacity .25s; }
 .toast.show { opacity: 1; }
 
@@ -58,11 +58,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
   background: rgba(255, 255, 255, .22); border: 1px solid rgba(255, 255, 255, .35); }
 .buttons { position: absolute; right: calc(20px + var(--sar)); bottom: calc(22px + var(--sab)); display: grid;
   grid-template-columns: auto auto; grid-template-rows: auto auto; gap: 12px; pointer-events: auto; align-items: end; }
-.tbtn { width: 70px; height: 70px; border-radius: 50%; background: rgba(20, 20, 26, .62); border: 1px solid var(--line);
+.tbtn { width: 70px; height: 70px; border-radius: 50%; background: rgba(0, 0, 0, .62); border: 1px solid var(--line);
   font-weight: 800; font-size: 11px; letter-spacing: .06em; touch-action: none; }
 .tbtn.on { background: rgba(242, 181, 68, .3); border-color: var(--gold); }
 .tbtn.big { width: 92px; height: 92px; grid-row: 1 / span 2; grid-column: 2; align-self: center;
-  background: radial-gradient(circle at 50% 35%, var(--gold-hi), var(--gold) 60%, #b07a18); color: #1b1203; font-size: 15px; border: 0; }
+  background: radial-gradient(circle at 50% 35%, var(--gold-hi), var(--gold) 60%, #d99a1e); color: #000000; font-size: 15px; border: 0; }
 #btnSneak { grid-column: 1; grid-row: 1; }
 #btnAction { grid-column: 1; grid-row: 2; }
 #btnJump { grid-column: 2; grid-row: 1; }
@@ -71,17 +71,17 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* ---------- screens ---------- */
 .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px;
-  background: radial-gradient(ellipse 80% 70% at 50% 30%, rgba(242, 181, 68, .14), transparent 70%), rgba(7, 6, 11, .9); z-index: 20; }
+  background: rgba(0, 0, 0, .9); z-index: 20; }
 .title-card { max-width: 520px; text-align: center; }
 .kicker { font-size: 11px; letter-spacing: .26em; color: var(--gold); font-weight: 800; margin: 0 0 8px; }
 .title-card h1 { font-size: clamp(56px, 14vw, 96px); margin: 0; letter-spacing: .04em; font-weight: 900;
-  background: linear-gradient(180deg, #fff3d8, var(--gold) 70%, #a8711a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  background: linear-gradient(180deg, #fff3d8, var(--gold) 70%, #d99a1e); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .title-card h2 { font-size: 34px; margin: 0 0 16px; }
 .sub { margin: 0 0 14px; font-size: 18px; color: var(--muted); font-weight: 600; }
 .blurb { color: var(--muted); line-height: 1.5; margin: 0 auto 22px; max-width: 420px; }
 .title-buttons { display: flex; gap: 12px; justify-content: center; }
 .title-buttons.col { flex-direction: column; align-items: center; }
-.primary { padding: 14px 40px; border-radius: 999px; border: 0; font-weight: 900; font-size: 17px; color: #1b1203;
+.primary { padding: 14px 40px; border-radius: 999px; border: 0; font-weight: 900; font-size: 17px; color: #000000;
   background: linear-gradient(180deg, var(--gold-hi), var(--gold)); min-width: 180px; }
 .primary:disabled { opacity: .45; }
 .ghost { padding: 12px 26px; border-radius: 999px; background: rgba(255, 255, 255, .06); border: 1px solid var(--line); font-weight: 700; min-width: 180px; }
@@ -99,8 +99,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 .hud-objective.pulse { animation: objPulse 2.4s ease-out; }
 @keyframes objPulse {
-  0% { transform: translateX(-50%) scale(1.25); background: rgba(242, 181, 68, .9); color: #1b1203; }
-  40% { transform: translateX(-50%) scale(1.12); background: rgba(242, 181, 68, .9); color: #1b1203; }
+  0% { transform: translateX(-50%) scale(1.25); background: rgba(242, 181, 68, .9); color: #000000; }
+  40% { transform: translateX(-50%) scale(1.12); background: rgba(242, 181, 68, .9); color: #000000; }
   100% { transform: translateX(-50%) scale(1); }
 }
 
@@ -117,7 +117,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .mixer b { font-size: 10px; font-weight: 800; letter-spacing: .04em; color: var(--c); white-space: nowrap; }
 @media (pointer: coarse) { .mixer { bottom: calc(8px + var(--sab)); gap: 2px; padding: 4px 6px; } .mixer .ch { width: 46px; } .mixer b { font-size: 9px; } .mixer .bar { height: 18px; } }
 .tip { position: absolute; left: calc(12px + var(--sal)); top: calc(66px + var(--sat)); max-width: min(320px, 44vw); padding: 10px 14px;
-  border-radius: 14px; background: rgba(12, 11, 16, .9); border: 1px solid rgba(127, 227, 154, .45); font-size: 13px; line-height: 1.4;
+  border-radius: 14px; background: rgba(0, 0, 0, .9); border: 1px solid rgba(127, 227, 154, .45); font-size: 13px; line-height: 1.4;
   opacity: 0; transition: opacity .3s; }
 .tip.show { opacity: 1; }
 .tip::before { content: "TIP  "; color: #7fe39a; font-weight: 900; font-size: 11px; letter-spacing: .1em; }
@@ -133,12 +133,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .mission.locked em { color: var(--muted); font-weight: 600; }
 
 /* ---------- card ---------- */
-.card { background: rgba(10, 9, 14, .9); border: 1px solid var(--line); border-radius: 22px; padding: 24px 26px; width: min(560px, 94vw); }
+.card { background: rgba(0, 0, 0, .9); border: 1px solid var(--line); border-radius: 22px; padding: 24px 26px; width: min(560px, 94vw); }
 .card .placeholder { font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
 .card .lines { text-align: left; margin: 0 0 14px; }
 .card .lines p { margin: 0 0 8px; font-size: 16px; line-height: 1.45; }
 .card .lines b { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; margin-right: 6px; }
-.card .goal { margin: 0 0 18px; padding: 10px 14px; border-radius: 12px; background: rgba(242, 181, 68, .1); border: 1px solid rgba(242, 181, 68, .35);
+.card .goal { margin: 0 0 18px; padding: 10px 14px; border-radius: 12px; background: #000; border: 1px solid rgba(242, 181, 68, .35);
   font-size: 14px; line-height: 1.45; text-align: left; }
 .card .hint { margin: 10px 0 0; font-size: 11px; color: var(--muted); letter-spacing: .06em; }
 
@@ -181,7 +181,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .marker { position: fixed; left: 0; top: 0; z-index: 5; pointer-events: none; display: flex; flex-direction: column; align-items: center;
   will-change: transform; margin-left: 0; }
 .marker .text { transform: translateX(-50%); position: absolute; left: 0; bottom: 14px; white-space: nowrap; padding: 5px 11px; border-radius: 999px;
-  background: rgba(242, 181, 68, .95); color: #1b1203; font-weight: 900; font-size: 12px; letter-spacing: .06em; box-shadow: 0 4px 16px rgba(0, 0, 0, .45); }
+  background: rgba(242, 181, 68, .95); color: #000000; font-weight: 900; font-size: 12px; letter-spacing: .06em; box-shadow: 0 4px 16px rgba(0, 0, 0, .45); }
 .marker .pin { position: absolute; left: -6px; bottom: 2px; width: 12px; height: 12px; background: rgba(242, 181, 68, .95); transform: rotate(45deg); border-radius: 2px; }
 .marker .arrow { display: none; position: absolute; left: -12px; top: -12px; width: 24px; height: 24px; text-align: center; line-height: 24px;
   color: var(--gold-hi); font-size: 20px; text-shadow: 0 2px 8px #000; }
@@ -201,7 +201,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .pop.good { color: #7fe39a; }
 .pop.bad { color: #ff7a66; }
 .tbtn.boost { --m: 1; grid-column: 1 / span 2; grid-row: 3; width: auto; height: 44px; border-radius: 22px;
-  background: linear-gradient(90deg, rgba(90, 209, 255, .55) calc(var(--m) * 100%), rgba(20, 20, 26, .62) calc(var(--m) * 100%)); }
+  background: linear-gradient(90deg, rgba(90, 209, 255, .55) calc(var(--m) * 100%), rgba(0, 0, 0, .62) calc(var(--m) * 100%)); }
 
 /* mission tints */
 .tint { position: fixed; inset: 0; pointer-events: none; opacity: 0; }
@@ -234,7 +234,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* the big map on the pause screen */
 .pause-wrap { display: flex; gap: 22px; align-items: center; justify-content: center; width: min(1100px, 96vw); }
-.map-card { flex: 1 1 auto; min-width: 0; background: rgba(10, 9, 14, .9); border: 1px solid var(--line); border-radius: 20px; padding: 12px 14px; }
+.map-card { flex: 1 1 auto; min-width: 0; background: rgba(0, 0, 0, .9); border: 1px solid var(--line); border-radius: 20px; padding: 12px 14px; }
 .map-card .kicker { margin: 2px 0 8px; text-align: left; }
 #bigmap { display: block; width: 100%; aspect-ratio: 4 / 3; max-height: 70vh; border-radius: 12px; }
 .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 11px; color: var(--muted); }
@@ -277,7 +277,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @keyframes hitside { 0% { opacity: 1; } 100% { opacity: 0; } }
 
 /* The city's time of day, beside the mission timer. */
-.dayclock { font: 700 12px/1 Inter, system-ui, sans-serif; color: #ffd27a; background: rgba(12,10,18,.72); border: 1px solid rgba(255,255,255,.12); border-radius: 999px; padding: 6px 9px; font-variant-numeric: tabular-nums; }
+.dayclock { font: 700 12px/1 Inter, system-ui, sans-serif; color: #ffd27a; background: rgba(0, 0, 0,.72); border: 1px solid rgba(255,255,255,.12); border-radius: 999px; padding: 6px 9px; font-variant-numeric: tabular-nums; }
 .dayclock::before { content: "☀ "; }
 .dayclock[data-night="1"] { color: #b9c8ff; }
 .dayclock[data-night="1"]::before { content: "☾ "; }
@@ -292,14 +292,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .turn-phone { animation: none; transform: rotate(-90deg); } }
 
 /* Camera view switch, beside pause. */
-.view-btn { font: 700 11px/1 Inter, system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #ece8f4; background: rgba(12,10,18,.72); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 8px 11px; cursor: pointer; }
+.view-btn { font: 700 11px/1 Inter, system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #ece8f4; background: rgba(0, 0, 0,.72); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 8px 11px; cursor: pointer; }
 .view-btn:hover { border-color: #ffd27a; }
 
 /* Build mode */
 body.building .hud-zone, body.building .hud-objective, body.building #timer, body.building #beat, body.building #pauseBtn, body.building #btnView,
 body.building #hearts, body.building #mixer, body.building #race, body.building #tip, body.building #cover, body.building #touch .tbtn:not(#btnJump) { display: none !important; }
 .build { position: fixed; left: 50%; bottom: max(10px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(920px, calc(100vw - 24px)); z-index: 30;
-  background: rgba(14,12,20,.88); border: 1px solid rgba(255,255,255,.14); border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 8px; font-family: Inter, system-ui, sans-serif; color: #ece8f4; }
+  background: rgba(0, 0, 0,.88); border: 1px solid rgba(255,255,255,.14); border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 8px; font-family: Inter, system-ui, sans-serif; color: #ece8f4; }
 .build.hidden { display: none; }
 .build-head { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
 .build-head span { color: #a59fb3; font-size: 12px; }
@@ -316,3 +316,38 @@ body.building #hearts, body.building #mixer, body.building #race, body.building 
 .build-actions button.go { background: #ffd27a; color: #2a1f05; border-color: #ffd27a; }
 .build-actions button:disabled { opacity: .4; cursor: default; }
 @media (pointer: coarse) { .build { left: auto; right: 10px; transform: none; width: min(560px, 58vw); } .bitem { width: 62px; } .bitem img, .bitem i { width: 40px; height: 40px; } }
+
+/* Pause: the map fills the screen, the way a GTA map does. Buttons sit in a bar at the top centre. */
+#pause { padding: 0; overflow: hidden; background: #0c0b10; touch-action: none; }
+#pause #bigmap { position: absolute; inset: 0; width: 100%; height: 100%; max-height: none; aspect-ratio: auto; border-radius: 0; cursor: grab; }
+#pause #bigmap:active { cursor: grabbing; }
+.pause-bar { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: rgba(0, 0, 0, .82); border: 1px solid var(--line); border-radius: 16px; padding: 8px 12px 4px; max-width: calc(100vw - 24px); }
+.pause-bar .kicker { margin: 0; text-align: center; letter-spacing: .14em; }
+.pause-btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.pause-btns button { min-width: 0; padding: 8px 18px; font-size: 14px; }
+.pause-bar.closed .pause-btns { display: none; }
+.pause-toggle { background: none; border: 0; color: var(--muted); font-size: 11px; padding: 0 12px; line-height: 1.2; cursor: pointer; }
+.pause-bar.closed .pause-toggle { transform: rotate(180deg); }
+.map-zoom { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: 50px; display: flex; flex-direction: column; gap: 6px; }
+.map-zoom button { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .85); color: #fff; font-size: 20px; font-weight: 800; cursor: pointer; }
+.map-legend { position: absolute; left: max(12px, env(safe-area-inset-left)); bottom: 10px; margin: 0; background: rgba(0, 0, 0, .8); border-radius: 10px; padding: 6px 10px; color: #ddd; }
+.lg-route { background: #c86bff; height: 4px !important; width: 14px !important; }
+.lg-road { background: #e8e3d6; border: 1px solid #111; }
+.lg-hill { background: #6e6a62; }
+button.padfocus { outline: 3px solid #ffd27a; outline-offset: 3px; }
+
+/* Title: Koda's moves drift past behind, slowly zooming and fading; the menu sits on the left. */
+#title { justify-content: flex-start; align-items: stretch; padding: 0; background: #000; overflow: hidden; }
+.title-show { position: absolute; inset: 0; overflow: hidden; }
+.title-show img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0;
+  transform-origin: 60% 45%; animation: showZoom 10s linear forwards, showFade 10s ease-in-out forwards; }
+@keyframes showZoom { from { transform: scale(1.02); } to { transform: scale(1.16); } }
+@keyframes showFade { 0% { opacity: 0; } 16% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+.title-show::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, rgba(0,0,0,.94) 0%, rgba(0,0,0,.86) 30%, rgba(0,0,0,.35) 58%, rgba(0,0,0,.1) 100%); }
+#title .title-card { position: relative; z-index: 1; text-align: left; max-width: none; width: min(500px, 52vw); height: 100%; overflow-y: auto;
+  padding: max(22px, env(safe-area-inset-top)) 22px 22px max(28px, env(safe-area-inset-left)); display: flex; flex-direction: column; justify-content: safe center; }
+#title .title-buttons { justify-content: flex-start; flex-wrap: wrap; }
+#title .missions { margin-left: 0; margin-right: 0; }
+@media (max-height: 520px) { #title .title-card h1 { font-size: 40px; } #title .blurb { display: none; } }

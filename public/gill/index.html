@@ -78,6 +78,7 @@
 
   <!-- Title -->
   <div id="title" class="screen">
+    <div class="title-show" id="titleShow" aria-hidden="true"></div>
     <div class="title-card">
       <p class="kicker">A FEELZ MACHINE GAME · BIG FEELZ</p>
       <h1>G.I.L.L.</h1>
@@ -101,22 +102,23 @@
 
   <!-- Pause -->
   <div id="pause" class="screen hidden">
-    <div class="pause-wrap">
-      <div class="map-card">
-        <p class="kicker" id="mapSong"></p>
-        <canvas id="bigmap" aria-label="Map of the city"></canvas>
-        <div class="legend">
-          <span><i class="lg-you"></i>You</span><span><i class="lg-goal"></i>Next</span><span><i class="lg-mud"></i>Mud</span><span><i class="lg-roof"></i>Awnings</span><span><i class="lg-done"></i>Done</span>
-        </div>
-      </div>
-      <div class="title-card">
-      <h2>Paused</h2>
-      <div class="title-buttons col">
+    <canvas id="bigmap" aria-label="Map of the city"></canvas>
+    <div class="pause-bar">
+      <p class="kicker" id="mapSong"></p>
+      <div class="pause-btns" id="pauseBtns">
         <button class="primary" id="resumeBtn">Resume</button>
         <button class="ghost" id="muteBtn">Music: on</button>
         <button class="ghost" id="quitBtn">Back to title</button>
       </div>
-      </div>
+      <button class="pause-toggle" id="pauseToggle" aria-label="Show or hide the buttons">&#9650;</button>
+    </div>
+    <div class="map-zoom">
+      <button id="mapIn" aria-label="Zoom in">+</button>
+      <button id="mapOut" aria-label="Zoom out">&minus;</button>
+      <button id="mapMe" aria-label="Back to Koda">&#9678;</button>
+    </div>
+    <div class="legend map-legend">
+      <span><i class="lg-you"></i>You</span><span><i class="lg-goal"></i>Next</span><span><i class="lg-route"></i>Route</span><span><i class="lg-road"></i>Road</span><span><i class="lg-mud"></i>River</span><span><i class="lg-hill"></i>Hills</span><span><i class="lg-done"></i>Done</span>
     </div>
   </div>
 

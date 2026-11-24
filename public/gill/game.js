@@ -193,11 +193,12 @@ function groundTexture(kind) {
   const c = document.createElement("canvas"); c.width = c.height = 256;
   const g = c.getContext("2d");
   const r = rng(kind.length * 977 + kind.charCodeAt(0));
-  const base = { asphalt: "#3a3a3e", lc: "#6e5a45", mc: "#8e9094", uc: "#9c9488", rc: "#4f6a3a", de: "#d6b27a", sandroad: "#c9a46e" }[kind] || "#8a8a8a";
+  const base = { land: "#e6e2da", asphalt: "#3a3a3e", lc: "#6e5a45", mc: "#8e9094", uc: "#9c9488", rc: "#4f6a3a", de: "#d6b27a", sandroad: "#c9a46e" }[kind] || "#8a8a8a";
   g.fillStyle = base; g.fillRect(0, 0, 256, 256);
   const speck = (n, a, sz) => { for (let i = 0; i < n; i++) { const v = r() > 0.5; g.fillStyle = `rgba(${v ? 255 : 0},${v ? 255 : 0},${v ? 255 : 0},${r() * a})`; g.fillRect(r() * 256, r() * 256, 1 + r() * sz, 1 + r() * sz); } };
   const line = (x1, y1, x2, y2) => { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); };
   if (kind === "asphalt") speck(2600, 0.08, 3);
+  else if (kind === "land") { speck(4000, 0.1, 3); for (let i = 0; i < 30; i++) { g.fillStyle = `rgba(0,0,0,${0.03 + r() * 0.05})`; g.beginPath(); g.ellipse(r() * 256, r() * 256, 8 + r() * 24, 5 + r() * 14, r() * 3, 0, 7); g.fill(); } }
   else if (kind === "lc") {
     // Packed dirt, patches of old asphalt, cracks and dark wet sludge.
     for (let i = 0; i < 14; i++) { g.fillStyle = `rgba(40,36,34,${0.25 + r() * 0.3})`; g.beginPath(); g.ellipse(r() * 256, r() * 256, 12 + r() * 30, 8 + r() * 18, r() * 3, 0, 7); g.fill(); }
@@ -268,7 +269,11 @@ function ribbon(points, width, y, mat, step = 3) {
     run += L;
   }
   const rows = pos.length / 6;
-  for (let r = 0; r + 1 < rows; r++) { const a = r * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+  // Wind the triangles so they face up whichever way the strip runs.
+  const P = i => [pos[i * 3], pos[i * 3 + 2]];
+  const [ax0, az0] = P(0), [bx0, bz0] = P(2), [cx0, cz0] = P(1);
+  const up = (bz0 - az0) * (cx0 - ax0) - (bx0 - ax0) * (cz0 - az0) > 0;
+  for (let r = 0; r + 1 < rows; r++) { const a = r * 2; if (up) idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); else idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
@@ -281,21 +286,23 @@ function buildGround() {
   const pad = 120, W = WORLD_W + pad * 2, H = WORLD_H + pad * 2, sx = Math.round(W / 4), sz = Math.round(H / 4);
   const geo = new THREE.PlaneGeometry(W, H, sx, sz); geo.rotateX(-Math.PI / 2);
   const p = geo.attributes.position, col = [];
-  const cDirt = new THREE.Color(0x7d6f58), cSand = new THREE.Color(0xd8b980), cRock = new THREE.Color(0x6a625a), cDune = new THREE.Color(0xd9b87c), tmp = new THREE.Color();
+  // Open land is dry grass; ridges are grey rock, pale at the top; sand dunes out east.
+  const cGrass = new THREE.Color(0x8a9455), cDry = new THREE.Color(0xa99a6a), cSand = new THREE.Color(0xe2c58a), cRock = new THREE.Color(0x8f8a83), cPeak = new THREE.Color(0xc9c4bb), cDune = new THREE.Color(0xe8cc90), tmp = new THREE.Color();
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i) + WORLD_W / 2, z = p.getZ(i) + WORLD_H / 2;
     p.setY(i, terrainAt(clamp(x, 0, WORLD_W), clamp(z, 0, WORLD_H)) - 0.05);
     // Colour by the nearest place's district; sand out past the East Gate.
     let best = null, bd = 1e9;
     for (const q of S.quadrants) { const d = Math.hypot(Math.max(0, q.x0 - x, x - q.x0 - q.w), Math.max(0, q.z0 - z, z - q.z0 - q.d)); if (d < bd) { bd = d; best = q; } }
-    tmp.set(DCOLOUR[best.district] || 0x8c8070).lerp(cDirt, clamp(bd / 90, 0, 0.7));
-    if (x > 840) tmp.lerp(cSand, clamp((x - 840) / 40, 0, 1));
+    tmp.copy(cGrass).lerp(cDry, 0.5 + 0.5 * Math.sin(x * 0.013 + z * 0.021));
+    if (best.district === "de" || x > 740) tmp.lerp(cSand, clamp((x - 700) / 120, 0, 1));
     const rg = ridgeAt(clamp(x, 0, WORLD_W), clamp(z, 0, WORLD_H));
-    if (rg > 0.3) tmp.lerp(best.district === "de" || x > 740 ? cDune : cRock, clamp(rg / 3, 0, 0.9));
+    const desert = best.district === "de" || x > 740;
+    if (rg > 0.3) { tmp.lerp(desert ? cDune : cRock, clamp(rg / 2.5, 0, 1)); if (!desert && rg > 4.5) tmp.lerp(cPeak, clamp((rg - 4.5) / 4, 0, 0.8)); }
     col.push(tmp.r, tmp.g, tmp.b);
   }
   geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); geo.computeVertexNormals();
-  const dirt = groundTexture("lc"); dirt.repeat.set(W / 10, H / 10);
+  const dirt = groundTexture("land"); dirt.repeat.set(W / 8, H / 8);
   const land = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: dirt, vertexColors: true, roughness: 0.95 }));
   land.position.set(WORLD_W / 2, 0, WORLD_H / 2); land.receiveShadow = true; scene.add(land);
   // Each place has its own paving, flat at its height.
@@ -312,14 +319,30 @@ function buildGround() {
   }
   // Roads, with a dashed centre line.
   const asphalt = groundTexture("asphalt"); asphalt.repeat.set(1, 1);
-  const roadMat = new THREE.MeshStandardMaterial({ color: 0x8a8790, map: asphalt, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2 });
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0x9a979e, map: asphalt, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+  const kerbMat = new THREE.MeshStandardMaterial({ color: 0xd9d4c8, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 });
   const dash = (() => { const c = document.createElement("canvas"); c.width = 8; c.height = 64; const g = c.getContext("2d"); g.fillStyle = "#f2d27a"; g.fillRect(2, 0, 4, 34); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
-  const dashMat = new THREE.MeshBasicMaterial({ map: dash, transparent: true, polygonOffset: true, polygonOffsetFactor: -4, depthWrite: false });
+  const dashMat = new THREE.MeshBasicMaterial({ map: dash, transparent: true, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, depthWrite: false });
   for (const r of WD.roads) {
-    ribbon(r.points, r.width, 0.06, roadMat);
-    const dm = ribbon(r.points, 0.25, 0.08, dashMat, 3); dm.receiveShadow = false;
+    ribbon(r.points, r.width + 1.2, 0.14, kerbMat);
+    ribbon(r.points, r.width, 0.16, roadMat);
+    const dm = ribbon(r.points, 0.25, 0.19, dashMat, 3); dm.receiveShadow = false;
     dm.geometry.attributes.uv.array.forEach((v, i, a) => { if (i % 2) a[i] = v * 0.25 / 6; });
   }
+  // Boulders along the rocky ridges, so the borders read as mountains.
+  const rockGeo = new THREE.DodecahedronGeometry(1, 0), rockMat = new THREE.MeshStandardMaterial({ color: 0x9a948c, roughness: 1, flatShading: true });
+  const spots = [], rr = rng(31337);
+  for (let z = 4; z < WORLD_H; z += 6) for (let x = 4; x < WORLD_W; x += 6) {
+    const jx = x + (rr() - 0.5) * 5, jz = z + (rr() - 0.5) * 5, h = ridgeAt(jx, jz);
+    if (h > 3 && jx < 740 && rr() < 0.55) spots.push([jx, jz, h]);
+  }
+  const rocks = new THREE.InstancedMesh(rockGeo, rockMat, spots.length), M = new THREE.Matrix4(), Qr = new THREE.Quaternion(), E = new THREE.Euler(), Sv = new THREE.Vector3(), Pv = new THREE.Vector3();
+  spots.forEach(([x, z, h], i) => {
+    const k = 1.2 + rr() * 2.2 + h * 0.15;
+    Sv.set(k * (0.8 + rr() * 0.6), k * (0.6 + rr() * 0.6), k * (0.8 + rr() * 0.6)); E.set(rr() * 3, rr() * 3, rr() * 3); Qr.setFromEuler(E);
+    Pv.set(x, terrainAt(x, z) - k * 0.25, z); M.compose(Pv, Qr, Sv); rocks.setMatrixAt(i, M);
+  });
+  rocks.castShadow = true; rocks.receiveShadow = true; scene.add(rocks);
   // Lamps along every road, lit at night.
   const poleMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1f, metalness: 0.6, roughness: 0.4 });
   const poleGeo = new THREE.CylinderGeometry(0.08, 0.12, 4.2, 8), bulbGeo = new THREE.SphereGeometry(0.24, 10, 8);
@@ -376,7 +399,7 @@ const nearBlocks = (x, z, r) => inBox(x - r, z - r, x + r, z + r);
 // Square to the streets only, so a building's collision box is its real footprint.
 // `maxFoot` caps how wide it can be. It sits on the land at its lowest corner.
 async function placeBuilding(name, x, z, yaw, height, maxFoot = 13, force = false) {
-  if (!force && ridgeAt(x, z) > 0.3 || ridgeAt(x - 5, z - 5) > 0.6 || ridgeAt(x + 5, z + 5) > 0.6 || ridgeAt(x - 5, z + 5) > 0.6 || ridgeAt(x + 5, z - 5) > 0.6) return;
+  if (!force && (ridgeAt(x, z) > 0.3 || ridgeAt(x - 8, z - 8) > 0.6 || ridgeAt(x + 8, z + 8) > 0.6 || ridgeAt(x - 8, z + 8) > 0.6 || ridgeAt(x + 8, z - 8) > 0.6)) return;
   const src = await staticModel(name);
   if (!src) return;
   const m = src.clone(true);
@@ -408,18 +431,20 @@ async function buildCity(onProgress) {
     const r = rng(q.id.charCodeAt(1) * 977 + q.id.charCodeAt(2) * 131);
     const set = DISTRICT_BUILDINGS[districtOf(q)] || BUILDINGS;
     const pick = () => set[Math.floor(r() * set.length)];
-    const inset = 8;
+    // Life-size: a storey is about 3.2 m, so a three-storey block stands near 10 m and Koda
+    // (1.62 m) reaches about halfway up its ground floor.
+    const inset = 12;
     // Buildings around the edges of each place, facing in, with gaps for the roads.
-    const edge = (len) => { const out = []; for (let s = 12; s < len - 10; s += 21 + r() * 6) out.push(s); return out; };
+    const edge = (len) => { const out = []; for (let s = 15; s < len - 13; s += 27 + r() * 6) out.push(s); return out; };
     const slots = [];
     for (const s of edge(q.w)) slots.push([q.x0 + s, q.z0 + inset, 0], [q.x0 + s, q.z0 + q.d - inset, Math.PI]);
     for (const s of edge(q.d)) slots.push([q.x0 + inset, q.z0 + s, Math.PI / 2], [q.x0 + q.w - inset, q.z0 + s, -Math.PI / 2]);
     // A few low buildings for cover further in.
-    for (let i = 0; i < 3; i++) slots.push([q.x0 + 24 + r() * (q.w - 48), q.z0 + 24 + r() * (q.d - 48), Math.floor(r() * 4) * Math.PI / 2, true]);
+    for (let i = 0; i < 3; i++) slots.push([q.x0 + 30 + r() * (q.w - 60), q.z0 + 30 + r() * (q.d - 60), Math.floor(r() * 4) * Math.PI / 2, true]);
     for (const [x, z, yaw, low] of slots) {
-      if (onRoad(x, z, 7)) continue;
-      if (q.id === "q01" && x === slots[0][0] && z === slots[0][1]) { jobs.push(() => placeBuilding("kodas-building", x, z, yaw, 13, 13)); continue; }
-      jobs.push(() => placeBuilding(pick(), x, z, yaw, low ? 4 + r() * 3 : 8 + r() * 7, low ? 7 : 12));
+      if (onRoad(x, z, 12)) continue;
+      if (q.id === "q01" && x === slots[0][0] && z === slots[0][1]) { jobs.push(() => placeBuilding("kodas-building", x, z, yaw, 18, 22)); continue; }
+      jobs.push(() => placeBuilding(pick(), x, z, yaw, low ? 8 + r() * 3 : 13 + r() * 10, low ? 14 : 24));
     }
   }
   // Houses and shops along the roads between places.
@@ -429,13 +454,13 @@ async function buildCity(onProgress) {
     for (let k = 0; k + 1 < road.points.length; k++) {
       const [ax, az] = road.points[k], [bx, bz] = road.points[k + 1], L = Math.hypot(bx - ax, bz - az);
       const nx = -(bz - az) / L, nz = (bx - ax) / L;
-      for (let s = 10; s < L - 6; s += 22) for (const side of [-1, 1]) {
-        const x = ax + (bx - ax) * s / L + nx * (road.width / 2 + 9) * side, z = az + (bz - az) * s / L + nz * (road.width / 2 + 9) * side;
-        if (inZone(x, z, 6) || onRiver(x, z, 10)) continue;
+      for (let s = 14; s < L - 10; s += 28) for (const side of [-1, 1]) {
+        const x = ax + (bx - ax) * s / L + nx * (road.width / 2 + 13) * side, z = az + (bz - az) * s / L + nz * (road.width / 2 + 13) * side;
+        if (inZone(x, z, 10) || onRiver(x, z, 14)) continue;
         const near = S.quadrants.reduce((a, q) => Math.hypot(q.x0 + q.w / 2 - x, q.z0 + q.d / 2 - z) < Math.hypot(a.x0 + a.w / 2 - x, a.z0 + a.d / 2 - z) ? q : a);
         const set = DISTRICT_BUILDINGS[districtOf(near)] || BUILDINGS;
         const yaw = Math.abs(nx) > Math.abs(nz) ? (side * nx > 0 ? -Math.PI / 2 : Math.PI / 2) : (side * nz > 0 ? Math.PI : 0);
-        jobs.push(() => placeBuilding(set[Math.floor(r() * set.length)], x, z, yaw, 6 + r() * 6, 12));
+        jobs.push(() => placeBuilding(set[Math.floor(r() * set.length)], x, z, yaw, 10 + r() * 7, 20));
       }
     }
   }
@@ -546,9 +571,10 @@ const deckMat = new THREE.MeshStandardMaterial({ color: 0x6b6259, roughness: 0.8
 function buildRivers() {
   for (const [x0, z0, x1, z1] of WD.river) {
     const w = x1 - x0, d = z1 - z0, along = d > w ? "z" : "x";
-    const mat = new THREE.MeshStandardMaterial({ map: mudMap.clone(), roughness: 0.35, metalness: 0.1, color: 0x8a6a4a, polygonOffset: true, polygonOffsetFactor: -3 });
+    const mat = new THREE.MeshStandardMaterial({ map: mudMap.clone(), roughness: 0.12, metalness: 0.25, color: 0x8c6a44, emissive: 0x1a1208, polygonOffset: true, polygonOffsetFactor: -3 });
     mat.map.repeat.set(1, 1); mat.map.needsUpdate = true;
     const pts = along === "z" ? [[x0 + w / 2, z0], [x0 + w / 2, z1]] : [[x0, z0 + d / 2], [x1, z0 + d / 2]];
+    ribbon(pts, (along === "z" ? w : d) + 7, 0.04, new THREE.MeshStandardMaterial({ color: 0x4a3524, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2 }), 4);
     const m = ribbon(pts, along === "z" ? w : d, 0.1, mat, 4);
     m.geometry.attributes.uv.array.forEach((v, i, a) => { if (i % 2) a[i] = v * (along === "z" ? w : d) / 6; else a[i] = v * (along === "z" ? w : d) / 6; });
     const rv = { minX: x0, maxX: x1, minZ: z0, maxZ: z1, top: 0, base: 0, mud: true, along, mat, mesh: m, mats: [] };
@@ -835,19 +861,64 @@ function armClear(root, wide) {
 }
 
 /* ---------- animated characters ---------- */
-// Keep moves in place: the game moves the body, not the clip. The hips are held
-// at their resting spot on the ground plane in EVERY clip, so changing from one
-// move to another never makes a body jump (the guards' "glitch back").
+// Keep moves in place: the game moves the body, not the clip. Each clip's sideways and
+// forward hip motion is centred on the resting spot, so changing moves never makes a body
+// jump, but the sway inside a clip is kept: the hips carry the legs, so flattening the sway
+// makes planted feet slide from side to side. Moves that travel (flips, vaults) have their
+// travel taken out in a straight line from first frame to last, so they land where they began.
 // Some skeletons stand with Y up, others were built with Z up. The axis the hips sit
-// furthest along at rest is "up"; the two others are pinned, so only the bounce stays.
+// furthest along at rest is "up"; the bounce on that axis stays as it is.
 function stripRootMotion(clip, rest) {
   const r = [rest.x, rest.y, rest.z];
   const up = r.map(Math.abs).indexOf(Math.max(...r.map(Math.abs)));
+  const tall = Math.abs(r[up]) || 1;
   for (const t of clip.tracks) {
     if (!/hips\.position$/i.test(t.name)) continue;
-    const v = t.values;
-    for (let i = 0; i < v.length; i += 3) for (let a = 0; a < 3; a++) if (a !== up) v[i + a] = r[a];
+    const v = t.values, n = v.length / 3;
+    for (let a = 0; a < 3; a++) {
+      if (a === up || n < 1) continue;
+      const first = v[a], last = v[(n - 1) * 3 + a];
+      if (Math.abs(last - first) > 0.25 * tall) {
+        for (let i = 0; i < n; i++) v[i * 3 + a] += r[a] - (first + (last - first) * i / Math.max(1, n - 1));
+      } else {
+        let m = 0;
+        for (let i = 0; i < n; i++) m += v[i * 3 + a];
+        m /= n;
+        for (let i = 0; i < n; i++) v[i * 3 + a] += r[a] - m;
+      }
+    }
   }
+}
+// How fast a walking or running clip carries the body, in metres a second at this body's size:
+// the speed a planted foot slides back while it is on the ground. Playing the clip at
+// (ground speed / this) keeps the feet locked to the ground instead of skating.
+const STRIDE_CLIPS = /^(walk|run|sprint|crouch_walk|jog)$/;
+function measureStride(actor, name) {
+  const act = actor.clips[name], clip = act.getClip(), feet = [];
+  actor.model.traverse(o => { if (o.isBone && /(Left|Right)Foot$/.test(o.name)) feet.push(o); });
+  if (feet.length < 2 || clip.duration <= 0) return 0;
+  act.reset(); act.play();
+  const v = new THREE.Vector3(), rows = [], step = 1 / 60;
+  for (let t = 0; t <= clip.duration + 1e-4; t += step) {
+    actor.mixer.setTime(t);
+    actor.root.updateMatrixWorld(true);
+    rows.push(feet.map(f => { f.getWorldPosition(v); return [v.x, v.y, v.z]; }));
+  }
+  act.stop();
+  actor.mixer.setTime(0);
+  const sp = [];
+  for (let k = 0; k < feet.length; k++) {
+    let lo = Infinity, hi = -Infinity;
+    for (const r of rows) { lo = Math.min(lo, r[k][1]); hi = Math.max(hi, r[k][1]); }
+    const near = lo + Math.max(0.02, (hi - lo) * 0.15);
+    for (let i = 1; i < rows.length; i++) {
+      const a = rows[i - 1][k], b = rows[i][k];
+      if (a[1] < near && b[1] < near) sp.push(Math.hypot(b[0] - a[0], b[2] - a[2]) / step);
+    }
+  }
+  if (!sp.length) return 0;
+  sp.sort((a, b) => a - b);
+  return sp[Math.floor(sp.length * 0.9)];   // the steady part of the stance, not the lift-off and landing
 }
 class Actor {
   constructor(gltf, metres) {
@@ -875,6 +946,10 @@ class Actor {
     this.baseY = model.position.y;
     this.pos = this.root.position;
     this.yaw = 0;
+    this.stride = {};
+    for (const n in this.clips) if (STRIDE_CLIPS.test(n)) { const s = measureStride(this, n); if (s > 0.3) this.stride[n] = s; }
+    this.last = this.pos.clone();
+    this.vel = 0;
   }
   has(name) { return !!this.clips[name]; }
   play(name, { once = false, fade = 0.15, speed = 1, from = 0 } = {}) {
@@ -899,6 +974,14 @@ class Actor {
   faceTo(x, z, t = 1) { this.face(Math.atan2(x - this.pos.x, z - this.pos.z), t); }
   update(dt) {
     this.held = (this.held || 0) + dt;
+    // The feet keep pace with the ground: a walk or run plays as fast as the body really moves.
+    if (dt > 0) {
+      const moved = Math.hypot(this.pos.x - this.last.x, this.pos.z - this.last.z) / dt;
+      this.vel += (Math.min(moved, 20) - this.vel) * Math.min(1, dt * 10);
+      this.last.copy(this.pos);
+      const cur = this.current, nm = cur && cur.getClip().name, st = nm && this.stride[nm];
+      if (st && cur.loop !== THREE.LoopOnce) cur.timeScale = clamp(this.vel / st, 0.55, 2.2);
+    }
     restoreRest(this.model);
     this.mixer.update(dt);
     const name = this.current ? this.current.getClip().name : "";
@@ -966,13 +1049,60 @@ const stick = { id: null, x: 0, z: 0, mag: 0 };
   const hold = (id, key) => { const b = $(id); b.addEventListener("pointerdown", e => { e.preventDefault(); input[key] = true; }); for (const ev of ["pointerup", "pointercancel", "pointerleave"]) b.addEventListener(ev, () => { input[key] = false; }); };
   hold("btnAction", "touchAction"); hold("btnBoost", "boostHeld");
 })();
+/* Menus with a controller: the d-pad or left stick moves a highlight between the buttons on
+   screen, A presses the highlighted one. With nothing highlighted yet, A presses the main
+   button (Play, Start, Next, Resume). */
+const MENU_OF = { title: "title", card: "card", score: "score", paused: "pause" };
+const padNav = { dir: "", t: 0, el: null, last: 0 };
+function menuButtons(id) {
+  return [...$(id).querySelectorAll("button")].filter(b => !b.disabled && b.offsetParent !== null && !b.closest(".hidden"));
+}
+function padFocus(b) {
+  if (padNav.el) padNav.el.classList.remove("padfocus");
+  padNav.el = b;
+  if (!b) return;
+  b.classList.add("padfocus");
+  b.focus({ preventScroll: true });
+  b.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+function padMenu(id, x, z, mag, pressA) {
+  const list = menuButtons(id);
+  if (padNav.el && !list.includes(padNav.el)) padFocus(null);
+  const now = performance.now();
+  const dir = mag > 0.5 ? (Math.abs(x) > Math.abs(z) ? (x > 0 ? "r" : "l") : (z > 0 ? "d" : "u")) : "";
+  // A fresh push moves at once; holding it repeats after a short wait.
+  if (dir && (dir !== padNav.dir || now - padNav.t > (padNav.rep ? 140 : 380))) {
+    padNav.rep = dir === padNav.dir; padNav.t = now;
+    if (!padNav.el) padFocus(list.find(b => b.classList.contains("primary")) || list[0]);
+    else {
+      const r0 = padNav.el.getBoundingClientRect(), cx = r0.left + r0.width / 2, cy = r0.top + r0.height / 2;
+      const want = { r: [1, 0], l: [-1, 0], d: [0, 1], u: [0, -1] }[dir];
+      let best = null, score = Infinity;
+      for (const b of list) {
+        if (b === padNav.el) continue;
+        const r = b.getBoundingClientRect(), dx = r.left + r.width / 2 - cx, dy = r.top + r.height / 2 - cy;
+        const along = dx * want[0] + dy * want[1];
+        if (along <= 4) continue;
+        const across = Math.abs(dx * want[1] - dy * want[0]);
+        const sc = along + across * 2.5;
+        if (sc < score) { score = sc; best = b; }
+      }
+      if (best) padFocus(best);
+    }
+  }
+  if (!dir) padNav.dir = "", padNav.rep = false; else padNav.dir = dir;
+  if (pressA) {
+    const b = padNav.el || { title: $("playBtn"), card: $("cardBtn"), score: $("nextBtn"), pause: $("resumeBtn") }[id];
+    if (b && !b.disabled) b.click();
+  }
+}
 /* Game controllers: left stick or d-pad moves, A jumps, X hits, Y is the action,
    B sneaks, RT sprints, Start pauses. A carries on from a card. */
 const pad = { x: 0, z: 0, mag: 0, prev: [] };
 function pollPad() {
   const list = navigator.getGamepads ? navigator.getGamepads() : [];
   const g = [...list].find(q => q && q.connected);
-  pad.x = 0; pad.z = 0; pad.mag = 0;
+  pad.x = 0; pad.z = 0; pad.mag = 0; pad.rx = 0; pad.ry = 0;
   if (!g) return;
   const btn = i => !!(g.buttons[i] && (g.buttons[i].pressed || g.buttons[i].value > 0.5));
   let x = g.axes[0] || 0, z = g.axes[1] || 0;
@@ -980,10 +1110,21 @@ function pollPad() {
   const m = Math.hypot(x, z);
   if (m > 0.22) { pad.x = x / m; pad.z = z / m; pad.mag = btn(7) || btn(10) ? 1 : Math.min(0.9, m); }
   const press = i => btn(i) && !pad.prev[i];
-  if (state === "title") { if ((press(0) || press(9)) && !$("playBtn").disabled) $("playBtn").click(); }
-  else if (state === "card") { if (press(0) || press(9) || press(2)) cardContinue(); }
-  else if (state === "score") { if (press(0)) $("nextBtn").click(); }
+  const menu = MENU_OF[state];
+  if (menu) padMenu(menu, x, z, m, press(0));
+  if (state === "title") { if (press(9) && !$("playBtn").disabled) $("playBtn").click(); }
+  else if (state === "card") { if (press(9) || press(2)) cardContinue(); }
   else if (state === "paused") { if (press(9) || press(1)) resume(); }
+  else if (state === "build") {
+    if (press(0)) buildPlace();
+    if (press(2)) buildRemove(B.near);
+    if (press(3)) buildToggleInterior();
+    if (press(1)) buildUndo();
+    if (press(4)) buildTurn();
+    if (press(5)) buildPick(null, (B.i + 1) % catPieces().length);
+    if (press(6)) buildPick(null, (B.i - 1 + catPieces().length) % catPieces().length);
+    if (press(9)) stopBuild();
+  }
   else if (state === "play") {
     if (press(0)) jump();
     if (press(2)) attack();
@@ -992,8 +1133,7 @@ function pollPad() {
     if (press(9)) pause();
   }
   if ((state === "play" || state === "build") && press(8)) setView(cam.view + 1);
-  const rx = g.axes[2] || 0;
-  if (cam.view === 1 && Math.abs(rx) > 0.25) { cam.heading -= rx * 0.05; cam.look = 1.2; }
+  pad.rx = g.axes[2] || 0; pad.ry = g.axes[3] || 0;
   pad.action = btn(3); pad.boost = btn(4) || btn(6);
   pad.prev = g.buttons.map((b, i) => btn(i));
 }
@@ -1010,12 +1150,17 @@ function readInput() {
      Close     low behind Koda's shoulder, turning with him; drag or use the right stick to look round
      Top       straight down from high above, to see the whole neighbourhood   */
 const VIEWS = ["Distance", "Close", "Top"];
-const cam = { view: 0, heading: Math.PI, look: 0 };
-function setView(i) {
+const cam = { view: 0, heading: Math.PI, look: 0, pitch: 0, yawV: 0, pitchV: 0 };
+// The right stick, gently: a dead zone, then a curve so small pushes turn slowly, and the turn
+// eases in and out instead of snapping.
+const stickCurve = v => { const a = Math.abs(v); return a < 0.2 ? 0 : Math.sign(v) * ((a - 0.2) / 0.8) ** 2; };
+let arenaView = null;   // the view to go back to when an arena gate opens
+function setView(i, forArena = false) {
+  if (!forArena) arenaView = null;
   cam.view = ((i % VIEWS.length) + VIEWS.length) % VIEWS.length;
   if (cam.view !== 1) cam.heading = Math.PI;
   else if (koda) cam.heading = koda.yaw;
-  try { save.view = cam.view; writeSave(); } catch (e) { /* no save yet */ }
+  if (!forArena) try { save.view = cam.view; writeSave(); } catch (e) { /* no save yet */ }
   const b = $("btnView"); if (b) b.textContent = VIEWS[cam.view];
   if (state === "play" || state === "build") popText(VIEWS[cam.view].toUpperCase() + " VIEW");
   if (koda) updateCamera(0, true);
@@ -1399,6 +1544,7 @@ const boxBlock = (x, z, w, d, h, mat, walk = true) => {
 
 function clearMission() {
   timers.length = 0;
+  if (arenaView !== null) { const v = arenaView; arenaView = null; cam.view = v; cam.heading = v === 1 && koda ? koda.yaw : Math.PI; const b = $("btnView"); if (b) b.textContent = VIEWS[cam.view]; }
   for (const e of enemies) scene.remove(e.a.root);
   enemies.length = 0;
   for (const n of npcs) scene.remove(n.a.root);
@@ -1720,7 +1866,17 @@ const FOCUS = {
           A.walls.push(addBlock(qd, boxBlock(x, z, 3.3, 3.3, 2.4, arenaMat, false)));
         }
         toast("The gate is shut. Fight!", 2.5); tip("fight");
+        // The camera swings round behind Koda for the fight, close in, inside the ring.
+        if (cam.view !== 1) { const was = cam.view; setView(1, true); arenaView = was; }
         this.wave(qd);
+      }
+      // Nobody fights from inside the wall: a guard pushed, knocked or spawned out past the ring
+      // is put back inside it, where Koda can reach him.
+      if (A.started && !A.open) for (const e of enemies) {
+        if (e.qd !== qd || e.state === "ko") continue;
+        const dx = e.a.pos.x - A.x, dz = e.a.pos.z - A.z, dd = Math.hypot(dx, dz), lim = A.r - 1.4;
+        if (dd > lim) { const k = (lim - 0.3) / (dd || 1); e.a.pos.x = A.x + dx * k; e.a.pos.z = A.z + dz * k; e.a.pos.y = floorAt(e.a.pos.x, e.a.pos.z); }
+        for (const p of e.route || []) { const px = p.x - A.x, pz = p.z - A.z, pd = Math.hypot(px, pz); if (pd > lim) { p.x = A.x + px * (lim - 1) / pd; p.z = A.z + pz * (lim - 1) / pd; } }
       }
       if (A.started && !A.open && A.spawning === false && enemies.filter(e => e.qd === qd && e.state !== "ko").length === 0) {
         if (A.wave < A.waves) { A.spawning = true; later(1.4, () => this.wave(qd)); toast(`Wave ${A.wave + 1} of ${A.waves}`, 1.6); }
@@ -1729,6 +1885,8 @@ const FOCUS = {
           for (const w of A.walls) removeBlock(qd, w);
           qd.orb = makeOrb(PART_COLOURS[qd.k]); qd.orb.position.set(A.x, terrainAt(A.x, A.z), A.z);
           toast(`The gate opens. Grab ${qd.partName}!`, 3);
+          if (arenaView !== null) setView(arenaView, true);
+          arenaView = null;
           refreshObjective();
         }
       }
@@ -1737,7 +1895,7 @@ const FOCUS = {
       const A = qd.arena; A.spawning = true; A.wave++;
       const n = 2 + A.wave - 1 + Math.floor(mission.index / 5);
       const kinds = A.wave === A.waves && mission.index >= 2 ? ["gilded", "handler"] : null;
-      spawnGuards(qd, n, { radius: [4, 7], near: { x: A.x, z: A.z }, alert: true, kinds }).then(() => { A.spawning = false; refreshObjective(); });
+      spawnGuards(qd, n, { radius: [3, 6], near: { x: A.x, z: A.z }, alert: true, kinds }).then(() => { A.spawning = false; refreshObjective(); });
     },
     reset(qd) {
       const A = qd.arena; if (!A || A.open) return;
@@ -2537,8 +2695,26 @@ function updateKoda(dt) {
   koda.update(dt);
   settle();
 }
+// People are solid. Koda steps round guards and townsfolk instead of walking through them,
+// and Zora steps aside for him (she never blocks the way).
+function keepApart() {
+  if (attackLock > 0 || lunge) return;
+  const p = koda.pos;
+  const push = (o, min, share) => {
+    const dx = p.x - o.x, dz = p.z - o.z, d = Math.hypot(dx, dz);
+    if (d >= min || Math.abs(p.y - o.y) > 1.4) return;
+    const nx = d > 1e-3 ? dx / d : Math.sin(koda.yaw + Math.PI / 2), nz = d > 1e-3 ? dz / d : Math.cos(koda.yaw + Math.PI / 2);
+    const gap = min - d;
+    if (share < 1) moveWithCollision(p, nx * gap * (1 - share), nz * gap * (1 - share), 0.45, true);
+    if (share > 0) moveWithCollision(o, -nx * gap * share, -nz * gap * share, 0.4);
+  };
+  for (const e of enemies) if (e.state !== "ko" && e.a.root.parent) push(e.a.pos, 0.72, 0);
+  for (const n of npcs) if (n.a && n.a.root.parent) push(n.a.pos, 0.75, 0.3);
+  if (zora && zora.root.parent) push(zora.pos, 0.75, 1);
+}
 // After moving on the ground: step off an edge and fall, step into the mud and sink.
 function settle() {
+  keepApart();
   const g = groundAt(koda.pos.x, koda.pos.z);
   if (g === MUD) { if (koda.pos.y <= terrainAt(koda.pos.x, koda.pos.z) + 0.05) startSink(); else air = { vy: 0, speed: 3, kick: false, fall: true }; return; }
   if (koda.pos.y > g + 0.05) { air = { vy: 0, speed: koda.moving ? 4 : 0, kick: false, fall: true }; return; }
@@ -3037,7 +3213,7 @@ function buildPathLine(points) {
   let total = 0;
   for (let i = 0; i < points.length - 1 && total < 32; i++) {
     const a = points[i], b = points[i + 1], seg = Math.hypot(b.x - a.x, b.z - a.z);
-    for (let d = 0; d < seg && total < 32; d += 0.5, total += 0.5) { const t = d / seg; pts.push([a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t]); along.push(total); }
+    for (let d = 0; d < seg && total < 60; d += 0.5, total += 0.5) { const t = d / seg; pts.push([a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t]); along.push(total); }
   }
   const last = points[points.length - 1]; pts.push([last.x, last.z]); along.push(total);
   const pos = new Float32Array(pts.length * 6), al = new Float32Array(pts.length * 2), idx = [];
@@ -3148,16 +3324,89 @@ function steer(e, tx, tz, speed, dt, turn = 5) {
   return true;
 }
 let guidePath = null;
+/* ---------- the way there, by road ----------
+   Places are walled in by ridges, so the way from one to the next is by road. The roads
+   and places make a small network: every road point is a stop, and each place is a stop
+   joined to the roads that come into it. The guide follows that network for the long way,
+   and steps round things nearby on its own. */
+const RN = { nodes: [], edges: [] };
+function buildRoadNet() {
+  const add = (x, z, zone = null) => { RN.nodes.push({ x, z, zone }); RN.edges.push([]); return RN.nodes.length - 1; };
+  const link = (a, b) => { const d = Math.hypot(RN.nodes[a].x - RN.nodes[b].x, RN.nodes[a].z - RN.nodes[b].z); RN.edges[a].push([b, d]); RN.edges[b].push([a, d]); };
+  const zoneNode = {};
+  for (const q of S.quadrants) zoneNode[q.id] = add(q.x0 + q.w / 2, q.z0 + q.d / 2, q);
+  const roadNodes = [];
+  for (const r of WD.roads) {
+    let prev = null;
+    for (let k = 0; k + 1 < r.points.length; k++) {
+      const [ax, az] = r.points[k], [bx, bz] = r.points[k + 1], L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / 12));
+      for (let i = k ? 1 : 0; i <= n; i++) {
+        const x = ax + (bx - ax) * i / n, z = az + (bz - az) * i / n, id = add(x, z);
+        roadNodes.push(id); if (prev !== null) link(prev, id); prev = id;
+      }
+    }
+  }
+  // Crossings and joins between roads, and road ends that reach into a place.
+  for (let i = 0; i < roadNodes.length; i++) for (let j = i + 1; j < roadNodes.length; j++) {
+    const a = RN.nodes[roadNodes[i]], b = RN.nodes[roadNodes[j]];
+    if (Math.hypot(a.x - b.x, a.z - b.z) < 9 && !RN.edges[roadNodes[i]].some(e => e[0] === roadNodes[j])) link(roadNodes[i], roadNodes[j]);
+  }
+  for (const id of roadNodes) {
+    const n = RN.nodes[id];
+    for (const q of S.quadrants) {
+      const d = Math.hypot(Math.max(0, q.x0 - n.x, n.x - q.x0 - q.w), Math.max(0, q.z0 - n.z, n.z - q.z0 - q.d));
+      if (d < 7) link(id, zoneNode[q.id]);
+    }
+  }
+}
+// The stop to start from: the place he's in, or the nearest road point he can walk to.
+function nearestStop(x, z) {
+  const q = zoneAt(x, z); if (q) return RN.nodes.findIndex(n => n.zone === q);
+  let best = 0, bd = 1e9;
+  RN.nodes.forEach((n, i) => { if (n.zone) return; const d = Math.hypot(n.x - x, n.z - z); if (d < bd) { bd = d; best = i; } });
+  return best;
+}
+function roadRoute(x, z, tx, tz) {
+  const a = nearestStop(x, z), b = nearestStop(tx, tz);
+  if (a === b) return [];
+  const N = RN.nodes.length, dist = new Float64Array(N).fill(Infinity), came = new Int32Array(N).fill(-1), done = new Uint8Array(N);
+  dist[a] = 0;
+  for (;;) {
+    let u = -1, ud = Infinity;
+    for (let i = 0; i < N; i++) if (!done[i] && dist[i] < ud) { ud = dist[i]; u = i; }
+    if (u < 0 || u === b) break;
+    done[u] = 1;
+    for (const [v, w] of RN.edges[u]) if (ud + w < dist[v]) { dist[v] = ud + w; came[v] = u; }
+  }
+  if (came[b] < 0) return [];
+  const out = [];
+  for (let n = b; n !== a; n = came[n]) out.push(RN.nodes[n]);
+  out.reverse();
+  // Skip the middle of the place he's in and the place he's going to: go straight for the road.
+  const keep = out.filter(n => !n.zone);
+  return keep.map(n => ({ x: n.x, z: n.z }));
+}
+function guideRoute(x, z, tx, tz) {
+  const here = zoneAt(x, z), there = zoneAt(tx, tz);
+  if ((here && here === there) || (Math.hypot(tx - x, tz - z) < 40 && wideClear(x, z, tx, tz))) return pathNext(x, z, tx, tz, true);
+  const way = roadRoute(x, z, tx, tz);
+  if (!way.length) return pathNext(x, z, tx, tz, true);
+  // Drop road points already behind him, then find a way round anything to the next one.
+  while (way.length > 1 && Math.hypot(way[0].x - x, way[0].z - z) < 10) way.shift();
+  const lead = pathNext(x, z, way[0].x, way[0].z, true);
+  return lead.concat(way.slice(1), [{ x: tx, z: tz }]);
+}
 function updateGuide(now, dt) {
   const goal = objectiveTarget();
   const d = goal ? Math.hypot(goal.x - koda.pos.x, goal.z - koda.pos.z) : 0;
-  pathLine.mesh.visible = !!goal && d > 3;
-  if (!pathLine.mesh.visible) return;
+  // The route shows on the radar, GTA style; nothing is drawn on the ground.
+  pathLine.mesh.visible = false;
+  if (!goal || d <= 3) { guidePath = null; return; }
   if ((guideT -= dt) <= 0 || !guidePath) {
-    guidePath = pathNext(koda.pos.x, koda.pos.z, goal.x, goal.z, true);
+    guidePath = guideRoute(koda.pos.x, koda.pos.z, goal.x, goal.z);
     guideT = 0.35;
   }
-  buildPathLine([{ x: koda.pos.x, z: koda.pos.z }].concat(guidePath));
+  return;
   // Pulse with the song: phase 0 on the beat.
   const spb = beat.bpm ? beat.spb : 0.55;
   const ph = beat.bpm && music.started ? (((songTime() - beat.offset) / spb) % 1 + 1) % 1 : (now / 1000 / spb) % 1;
@@ -3170,7 +3419,9 @@ function updateMarker() {
   const el = $("marker"), t = objectiveTarget();
   if (!t || state !== "play") { el.classList.add("hidden"); return; }
   const d = Math.hypot(t.x - koda.pos.x, t.z - koda.pos.z);
-  markerV.set(t.x, 2.6, t.z).project(camera);
+  // Pinned to the ground it marks: places sit at different heights, so a fixed height would
+  // make the pin slide about as the camera turns.
+  markerV.set(t.x, floorAt(t.x, t.z) + 2.2, t.z).project(camera);
   const W = innerWidth, H = innerHeight, m = 46;
   let x = (markerV.x + 1) / 2 * W, y = (1 - markerV.y) / 2 * H;
   const behind = markerV.z > 1;
@@ -3210,7 +3461,7 @@ function drawMinimap() {
   mm.fillStyle = "#fff"; mm.beginPath(); mm.arc(ox + koda.pos.x * k, oz + koda.pos.z * k, 3, 0, 7); mm.fill();
 }
 
-/* ---------- the round radar (left): turns with Koda, so ahead is always up ---------- */
+/* ---------- the round radar (left): turns with the camera, so up is the way the screen looks ---------- */
 const radarCv = $("radar"), rc = radarCv.getContext("2d");
 let radarYaw = 0;
 const hexCol = n => "#" + n.toString(16).padStart(6, "0");
@@ -3218,7 +3469,7 @@ function drawRadar(dt) {
   const dpr = Math.min(2, window.devicePixelRatio || 1), css = radarCv.clientWidth || 140;
   if (radarCv.width !== Math.round(css * dpr)) { radarCv.width = radarCv.height = Math.round(css * dpr); }
   const S2 = radarCv.width, R0 = S2 / 2, range = 42, k = (R0 - 4) / range;
-  radarYaw = angleLerp(radarYaw, koda.yaw, Math.min(1, dt * 4));
+  radarYaw = angleLerp(radarYaw, cam.heading, Math.min(1, dt * 6));
   rc.setTransform(1, 0, 0, 1, 0, 0);
   rc.clearRect(0, 0, S2, S2);
   rc.save();
@@ -3232,8 +3483,10 @@ function drawRadar(dt) {
     rc.fillStyle = qd ? (qd.done ? "rgba(255,255,255,.10)" : hexCol(PART_COLOURS[qd.k]) + "44") : "rgba(255,255,255,.05)";
     rc.fillRect(o.x, o.y, q.w, q.d);
   }
-  rc.strokeStyle = "rgba(255,255,255,.16)"; rc.lineCap = "round"; rc.lineJoin = "round";
-  for (const r of WD.roads) { rc.lineWidth = r.width; rc.beginPath(); r.points.forEach(([x, z], i) => i ? rc.lineTo(x, z) : rc.moveTo(x, z)); rc.stroke(); }
+  rc.lineCap = "round"; rc.lineJoin = "round";
+  const roadLine = r => { rc.beginPath(); r.points.forEach(([x, z], i) => i ? rc.lineTo(x, z) : rc.moveTo(x, z)); };
+  for (const r of WD.roads) { rc.strokeStyle = "rgba(0,0,0,.7)"; rc.lineWidth = r.width + 2.5 / k; roadLine(r); rc.stroke(); }
+  for (const r of WD.roads) { rc.strokeStyle = "rgba(225,222,214,.55)"; rc.lineWidth = r.width; roadLine(r); rc.stroke(); }
   rc.fillStyle = "rgba(140,96,56,.95)";
   for (const m of muds) rc.fillRect(m.minX, m.minZ, m.maxX - m.minX, m.maxZ - m.minZ);
   for (const b of nearBlocks(koda.pos.x, koda.pos.z, range + 10)) {
@@ -3253,6 +3506,14 @@ function drawRadar(dt) {
     dot(e.a.pos.x, e.a.pos.z, 3.2, e.state === "alert" ? "#ff5a46" : e.meter > 0.1 ? "#f2b544" : "rgba(255,120,100,.6)");
   }
   for (const d of drones) dot(d.x, d.z, 3, d.spotted > 0 ? "#ff5a46" : "#fff1a8");
+  // The way to go, along the roads, like a GTA route.
+  if (guidePath && guidePath.length) {
+    const line = [{ x: koda.pos.x, z: koda.pos.z }, ...guidePath];
+    for (const [col, w] of [["rgba(20,4,30,.9)", 7], ["#c86bff", 4]]) {
+      rc.strokeStyle = col; rc.lineWidth = w * dpr / k; rc.beginPath();
+      line.forEach((p, i) => i ? rc.lineTo(p.x, p.z) : rc.moveTo(p.x, p.z)); rc.stroke();
+    }
+  }
   rc.restore();
   // The objective: on the radar if it's in range, pinned to the rim if not.
   const t = objectiveTarget();
@@ -3271,64 +3532,155 @@ function drawRadar(dt) {
   const nA = Math.atan2(-Math.cos(Math.PI + radarYaw), Math.sin(Math.PI + radarYaw));
   rc.fillStyle = "#fff"; rc.font = `900 ${10 * dpr}px Inter, sans-serif`; rc.textAlign = "center"; rc.textBaseline = "middle";
   rc.fillText("N", R0 + Math.cos(nA) * (R0 - 10 * dpr), R0 + Math.sin(nA) * (R0 - 10 * dpr));
-  // Koda: an arrow in the middle, always pointing up.
-  rc.fillStyle = "#fff"; rc.beginPath();
-  rc.moveTo(R0, R0 - 7 * dpr); rc.lineTo(R0 + 5 * dpr, R0 + 5 * dpr); rc.lineTo(R0, R0 + 2 * dpr); rc.lineTo(R0 - 5 * dpr, R0 + 5 * dpr); rc.closePath(); rc.fill();
+  // Koda: an arrow in the middle, pointing the way he faces.
+  {
+    const A = Math.PI + radarYaw, fx = Math.sin(koda.yaw), fz = Math.cos(koda.yaw);
+    const sx = fx * Math.cos(A) - fz * Math.sin(A), sy = fx * Math.sin(A) + fz * Math.cos(A);
+    rc.save(); rc.translate(R0, R0); rc.rotate(Math.atan2(sx, -sy));
+    rc.fillStyle = "#fff"; rc.strokeStyle = "#000"; rc.lineWidth = 1.5 * dpr; rc.beginPath();
+    rc.moveTo(0, -8 * dpr); rc.lineTo(6 * dpr, 6 * dpr); rc.lineTo(0, 2.5 * dpr); rc.lineTo(-6 * dpr, 6 * dpr); rc.closePath(); rc.stroke(); rc.fill();
+    rc.restore();
+  }
   rc.strokeStyle = "rgba(255,255,255,.3)"; rc.lineWidth = 1 * dpr; rc.beginPath(); rc.arc(R0, R0, R0 - 1, 0, 7); rc.stroke();
 }
 
 /* ---------- the big map (pause) ---------- */
+/* The pause map fills the screen. It opens on Koda; drag to look round, pinch, scroll or
+   use + and - to zoom, the target button to come back to Koda. Roads are drawn bright
+   with a dark edge so the way through is always clear, and the route to the next goal
+   runs along them in purple. */
+const MAPV = { zoom: 2.2, cx: 0, cz: 0, hills: null };
+function mapHills() {
+  if (MAPV.hills) return MAPV.hills;
+  const step = 3, w = Math.ceil((WORLD_W + 2 * ROAD) / step), h = Math.ceil((WORLD_H + 2 * ROAD) / step);
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const g = c.getContext("2d"), img = g.createImageData(w, h);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const x = -ROAD + i * step, z = -ROAD + j * step, r = ridgeAt(x, z), o = (j * w + i) * 4;
+    if (r < 0.6) { img.data[o + 3] = 0; continue; }
+    const t = Math.min(1, r / 7);
+    img.data[o] = 58 + 52 * t; img.data[o + 1] = 58 + 48 * t; img.data[o + 2] = 56 + 40 * t; img.data[o + 3] = 110 + 145 * t;
+  }
+  g.putImageData(img, 0, 0);
+  return (MAPV.hills = c);
+}
+function mapCentreOnKoda() { if (koda) { MAPV.cx = koda.pos.x; MAPV.cz = koda.pos.z; } }
 function drawBigMap() {
   const cv = $("bigmap"), dpr = Math.min(2, window.devicePixelRatio || 1);
-  const cssW = cv.clientWidth || 600, cssH = cv.clientHeight || 420;
+  const cssW = cv.clientWidth || innerWidth, cssH = cv.clientHeight || innerHeight;
   cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
-  const g = cv.getContext("2d"), pad = 14 * dpr;
-  const k = Math.min((cv.width - pad * 2) / (WORLD_W + 2 * ROAD), (cv.height - pad * 2) / (WORLD_H + 2 * ROAD));
-  const ox = (cv.width - (WORLD_W + 2 * ROAD) * k) / 2 + ROAD * k, oz = (cv.height - (WORLD_H + 2 * ROAD) * k) / 2 + ROAD * k;
-  const X = x => ox + x * k, Z = z => oz + z * k;
+  const g = cv.getContext("2d");
+  const fit = Math.min(cv.width / (WORLD_W + 2 * ROAD), cv.height / (WORLD_H + 2 * ROAD)) * 0.94;
+  MAPV.zoom = clamp(MAPV.zoom, 1, 10);
+  const k = fit * MAPV.zoom;
+  // Keep the city on screen however far it's dragged.
+  const halfW = cv.width / 2 / k, halfH = cv.height / 2 / k;
+  const span = (lo, hi, half) => hi - lo <= half * 2 ? [(lo + hi) / 2, (lo + hi) / 2] : [lo + half, hi - half];
+  const [ax, bx] = span(-ROAD, WORLD_W + ROAD, halfW), [az, bz] = span(-ROAD, WORLD_H + ROAD, halfH);
+  MAPV.cx = clamp(MAPV.cx, ax, bx); MAPV.cz = clamp(MAPV.cz, az, bz);
+  const X = x => cv.width / 2 + (x - MAPV.cx) * k, Z = z => cv.height / 2 + (z - MAPV.cz) * k;
+  MAPV.toWorld = (px, pz) => ({ x: MAPV.cx + (px * dpr - cv.width / 2) / k, z: MAPV.cz + (pz * dpr - cv.height / 2) / k });
+  MAPV.k = k / dpr;
   g.fillStyle = "#0c0b10"; g.fillRect(0, 0, cv.width, cv.height);
-  g.fillStyle = "#24222b"; g.fillRect(X(-ROAD), Z(-ROAD), (WORLD_W + 2 * ROAD) * k, (WORLD_H + 2 * ROAD) * k);
+  g.fillStyle = "#2a2c30"; g.fillRect(X(-ROAD), Z(-ROAD), (WORLD_W + 2 * ROAD) * k, (WORLD_H + 2 * ROAD) * k);
+  // Hills and the dunes: the borders you can't cross.
+  g.imageSmoothingEnabled = true;
+  g.drawImage(mapHills(), X(-ROAD), Z(-ROAD), (WORLD_W + 2 * ROAD) * k, (WORLD_H + 2 * ROAD) * k);
   for (const q of S.quadrants) {
     const o = zoneOrigin(q), qd = mission && mission.quads.find(x => x.q === q);
-    g.fillStyle = qd ? (qd.done ? "#2c3a30" : hexCol(PART_COLOURS[qd.k]) + "40") : "#1a1920";
+    g.fillStyle = qd ? (qd.done ? "#2f4334" : hexCol(PART_COLOURS[qd.k]) + "38") : "#34363c";
     g.fillRect(X(o.x), Z(o.y), q.w * k, q.d * k);
-    if (qd) { g.strokeStyle = qd.done ? "#7fe39a" : hexCol(PART_COLOURS[qd.k]); g.lineWidth = 1 * dpr; g.strokeRect(X(o.x) + dpr, Z(o.y) + dpr, q.w * k - 2 * dpr, q.d * k - 2 * dpr); }
+    if (qd) { g.strokeStyle = qd.done ? "#7fe39a" : hexCol(PART_COLOURS[qd.k]); g.lineWidth = 2 * dpr; g.strokeRect(X(o.x), Z(o.y), q.w * k, q.d * k); }
   }
-  g.fillStyle = "#8c6038"; for (const m of muds) g.fillRect(X(m.minX), Z(m.minZ), (m.maxX - m.minX) * k, (m.maxZ - m.minZ) * k);
+  g.fillStyle = "#7a5a3c"; for (const m of muds) g.fillRect(X(m.minX), Z(m.minZ), (m.maxX - m.minX) * k, (m.maxZ - m.minZ) * k);
   g.fillStyle = "#b08850"; for (const f of floats) g.fillRect(X(f.x - f.w / 2), Z(f.z - f.d / 2), f.w * k, f.d * k);
-  g.strokeStyle = "#3a3840"; g.lineCap = "round"; g.lineJoin = "round";
-  for (const r of WD.roads) { g.lineWidth = Math.max(2, r.width * k); g.beginPath(); r.points.forEach(([x, z], i) => i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z))); g.stroke(); }
-  for (const b of blockers) { if (b.mud || (b.top - b.base) < 3) continue; g.fillStyle = "#5a5866"; g.fillRect(X(b.minX), Z(b.minZ), (b.maxX - b.minX) * k, (b.maxZ - b.minZ) * k); }
-  g.fillStyle = "rgba(255,210,122,.35)"; for (const a of roofs) g.fillRect(X(a.x - a.w / 2), Z(a.z - a.d / 2), a.w * k, a.d * k);
-  // Names and what each lit quadrant holds.
+  // Roads: a dark edge, then the bright road on top, so every street reads at a glance.
+  g.lineCap = "round"; g.lineJoin = "round";
+  const roadPath = r => { g.beginPath(); r.points.forEach(([x, z], i) => i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z))); };
+  for (const r of WD.roads) { g.strokeStyle = "#08080a"; g.lineWidth = Math.max(4 * dpr, r.width * k) + 3 * dpr; roadPath(r); g.stroke(); }
+  for (const r of WD.roads) { g.strokeStyle = /bridge/i.test(r.name) ? "#cdb68a" : "#e8e3d6"; g.lineWidth = Math.max(4 * dpr, r.width * k); roadPath(r); g.stroke(); }
+  for (const b of blockers) {
+    if (b.mud || (b.top - b.base) < 2.5) continue;
+    g.fillStyle = b.building ? "#5d5b68" : "#4a4952";
+    g.fillRect(X(b.minX), Z(b.minZ), (b.maxX - b.minX) * k, (b.maxZ - b.minZ) * k);
+  }
+  // The way to the next goal, along the roads.
+  const t = objectiveTarget();
+  if (t && koda) {
+    let pts = null;
+    try { pts = guideRoute(koda.pos.x, koda.pos.z, t.x, t.z); } catch (e) { pts = null; }
+    if (pts && pts.length) {
+      const line = [{ x: koda.pos.x, z: koda.pos.z }, ...pts];
+      for (const [col, w] of [["#1a0626", 8], ["#c86bff", 4.5]]) {
+        g.strokeStyle = col; g.lineWidth = w * dpr; g.beginPath();
+        line.forEach((p, i) => i ? g.lineTo(X(p.x), Z(p.z)) : g.moveTo(X(p.x), Z(p.z))); g.stroke();
+      }
+    }
+  }
+  // Names and what each lit place holds.
   g.textAlign = "center"; g.textBaseline = "middle";
-  const fs = Math.min(11 * dpr, 90 * k * 0.13), fs2 = Math.min(10 * dpr, 90 * k * 0.115);
+  const fs = clamp(k * 6, 11 * dpr, 18 * dpr), fs2 = fs * 0.82;
   for (const q of S.quadrants) {
     const c = zoneCenter(q), qd = mission && mission.quads.find(x => x.q === q);
-    g.font = `800 ${fs}px Inter, sans-serif`; g.fillStyle = qd ? "#fff" : "rgba(255,255,255,.45)";
-    g.fillText(q.name.toUpperCase(), X(c.x), Z(c.y) - (qd ? fs * 0.8 : 0));
+    g.font = `900 ${fs}px Inter, sans-serif`; g.lineWidth = 4 * dpr; g.strokeStyle = "rgba(0,0,0,.85)";
+    g.fillStyle = qd ? "#fff" : "rgba(255,255,255,.7)";
+    g.strokeText(q.name.toUpperCase(), X(c.x), Z(c.y) - (qd ? fs * 0.8 : 0)); g.fillText(q.name.toUpperCase(), X(c.x), Z(c.y) - (qd ? fs * 0.8 : 0));
     if (qd) {
       const kind = { explore: "clue", sneak: "sneak", fight: "arena", race: "rooftops", rubble: "rubble", help: "help", blind: "hidden patrols", copies: "find her", pads: "pads", piano: "piano", chase: "chase" }[qd.focus] || qd.focus;
-      g.font = `700 ${fs2}px Inter, sans-serif`; g.fillStyle = qd.done ? "#7fe39a" : hexCol(PART_COLOURS[qd.k]);
-      if (qd.done) g.fillText(`${qd.partName} ✓`, X(c.x), Z(c.y) + fs * 0.8);
-      else { g.fillText(qd.partName, X(c.x), Z(c.y) + fs * 0.8); g.fillText(kind, X(c.x), Z(c.y) + fs * 0.8 + fs2 * 1.15); }
+      g.font = `800 ${fs2}px Inter, sans-serif`; g.fillStyle = qd.done ? "#7fe39a" : hexCol(PART_COLOURS[qd.k]);
+      const l1 = qd.done ? `${qd.partName} \u2713` : qd.partName;
+      g.strokeText(l1, X(c.x), Z(c.y) + fs * 0.8); g.fillText(l1, X(c.x), Z(c.y) + fs * 0.8);
+      if (!qd.done) { g.strokeText(kind, X(c.x), Z(c.y) + fs * 0.8 + fs2 * 1.2); g.fillText(kind, X(c.x), Z(c.y) + fs * 0.8 + fs2 * 1.2); }
     }
   }
   const pin = (x, z, col, label) => {
-    g.fillStyle = col; g.beginPath(); g.arc(X(x), Z(z), 5 * dpr, 0, 7); g.fill();
-    if (label) { g.font = `800 ${10 * dpr}px Inter, sans-serif`; g.fillText(label, X(x), Z(z) - 11 * dpr); }
+    g.fillStyle = col; g.strokeStyle = "#000"; g.lineWidth = 2 * dpr; g.beginPath(); g.arc(X(x), Z(z), 7 * dpr, 0, 7); g.fill(); g.stroke();
+    if (label) { g.font = `800 ${12 * dpr}px Inter, sans-serif`; g.lineWidth = 4 * dpr; g.strokeText(label, X(x), Z(z) - 15 * dpr); g.fillText(label, X(x), Z(z) - 15 * dpr); }
   };
   if (zora && zora.waiting) pin(zora.pos.x, zora.pos.z, "#d58cff", "ZORA");
   if (escape) pin(escape.exit.x, escape.exit.y, "#ffd27a", "EXIT");
-  const t = objectiveTarget();
-  if (t) { g.save(); g.translate(X(t.x), Z(t.z)); g.rotate(Math.PI / 4); g.fillStyle = "#ffd27a"; g.fillRect(-6 * dpr, -6 * dpr, 12 * dpr, 12 * dpr); g.restore(); }
+  if (t) { g.save(); g.translate(X(t.x), Z(t.z)); g.rotate(Math.PI / 4); g.fillStyle = "#ffd27a"; g.strokeStyle = "#000"; g.lineWidth = 2 * dpr; g.fillRect(-8 * dpr, -8 * dpr, 16 * dpr, 16 * dpr); g.strokeRect(-8 * dpr, -8 * dpr, 16 * dpr, 16 * dpr); g.restore(); }
   // Koda, pointing the way he faces.
-  g.save(); g.translate(X(koda.pos.x), Z(koda.pos.z)); g.rotate(-koda.yaw + Math.PI);
-  g.fillStyle = "#fff"; g.strokeStyle = "#000"; g.lineWidth = 2 * dpr; g.beginPath();
-  g.moveTo(0, -9 * dpr); g.lineTo(6 * dpr, 6 * dpr); g.lineTo(0, 3 * dpr); g.lineTo(-6 * dpr, 6 * dpr); g.closePath(); g.stroke(); g.fill();
-  g.restore();
-  $("mapSong").textContent = mission ? `Mission ${mission.index + 1}: ${mission.def.song}  ·  ${mission.quads.filter(q => q.done).length}/${mission.quads.length} parts` : "";
+  if (koda) {
+    g.save(); g.translate(X(koda.pos.x), Z(koda.pos.z)); g.rotate(-koda.yaw + Math.PI);
+    g.fillStyle = "#fff"; g.strokeStyle = "#000"; g.lineWidth = 2.5 * dpr; g.beginPath();
+    g.moveTo(0, -12 * dpr); g.lineTo(8 * dpr, 8 * dpr); g.lineTo(0, 4 * dpr); g.lineTo(-8 * dpr, 8 * dpr); g.closePath(); g.stroke(); g.fill();
+    g.restore();
+  }
+  $("mapSong").textContent = mission ? `Mission ${mission.index + 1}: ${mission.def.song}  \u00b7  ${mission.quads.filter(q => q.done).length}/${mission.quads.length} parts` : "";
 }
+(function mapControls() {
+  const cv = $("bigmap"), pts = new Map();
+  let pinch = 0;
+  const redraw = () => { if (state === "paused") drawBigMap(); };
+  const zoomAt = (f, px, pz) => {
+    const before = MAPV.toWorld ? MAPV.toWorld(px, pz) : null;
+    MAPV.zoom = clamp(MAPV.zoom * f, 1, 10);
+    drawBigMap();
+    if (before) { const after = MAPV.toWorld(px, pz); MAPV.cx += before.x - after.x; MAPV.cz += before.z - after.z; }
+    redraw();
+  };
+  cv.addEventListener("pointerdown", e => { cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); });
+  cv.addEventListener("pointermove", e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    if (pts.size === 1) { MAPV.cx -= (e.clientX - p.x) / (MAPV.k || 1); MAPV.cz -= (e.clientY - p.y) / (MAPV.k || 1); }
+    p.x = e.clientX; p.y = e.clientY;
+    if (pts.size === 2) {
+      const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch) { zoomAt(d / pinch, (a.x + b.x) / 2, (a.y + b.y) / 2); }
+      pinch = d; return;
+    }
+    redraw();
+  });
+  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = 0; };
+  cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+  cv.addEventListener("wheel", e => { e.preventDefault(); zoomAt(e.deltaY < 0 ? 1.18 : 1 / 1.18, e.clientX, e.clientY); }, { passive: false });
+  $("mapIn").addEventListener("click", () => zoomAt(1.4, innerWidth / 2, innerHeight / 2));
+  $("mapOut").addEventListener("click", () => zoomAt(1 / 1.4, innerWidth / 2, innerHeight / 2));
+  $("mapMe").addEventListener("click", () => { mapCentreOnKoda(); redraw(); });
+  $("pauseToggle").addEventListener("click", () => $("pause").querySelector(".pause-bar").classList.toggle("closed"));
+  addEventListener("resize", redraw);
+})();
 
 /* ---------- camera ---------- */
 const camTarget = new THREE.Vector3();
@@ -3374,6 +3726,7 @@ function updateDayNight(dt) {
 }
 // Near a lit lamp at night you're as easy to see as by day.
 const litBy = (x, z) => DAY.light > 0.6 || lamps.some(l => Math.abs(l.x - x) < 7 && Math.abs(l.z - z) < 7);
+let kodaRing = null;
 function updateCamera(dt, snap) {
   if (window.GILL_NOCAM) return;
   // In a fight the camera moves in on the two of them, and pulls back out once he's down.
@@ -3383,6 +3736,15 @@ function updateCamera(dt, snap) {
   const lead = koda.moving && !foe ? 1.6 : 0;
   if (foe) camTarget.set((koda.pos.x + foe.a.pos.x) / 2, 0.9, (koda.pos.z + foe.a.pos.z) / 2);
   else camTarget.set(koda.pos.x + Math.sin(koda.yaw) * lead, terrainAt(koda.pos.x, koda.pos.z) + 0.8 + Math.max(0, kUp()) * 0.7, koda.pos.z + Math.cos(koda.yaw) * lead);
+  {
+    const wantYaw = -stickCurve(pad.rx || 0) * 1.9, wantPitch = stickCurve(pad.ry || 0) * 0.9;
+    cam.yawV += (wantYaw - cam.yawV) * Math.min(1, dt * 7);
+    cam.pitchV += (wantPitch - cam.pitchV) * Math.min(1, dt * 7);
+    if (cam.view === 1) {
+      if (Math.abs(cam.yawV) > 0.01) { cam.heading += cam.yawV * dt; cam.look = 1.2; }
+      if (Math.abs(cam.pitchV) > 0.01) cam.pitch = clamp(cam.pitch + cam.pitchV * dt, -0.25, 0.9);
+    }
+  }
   if (cam.view === 1) {
     // Close: follow behind him. When he runs, the camera swings round behind him; after you look
     // round yourself it waits a moment first.
@@ -3391,13 +3753,15 @@ function updateCamera(dt, snap) {
     const dist = 4.6 + (foe ? 0.8 : 0), fx = Math.sin(cam.heading), fz = Math.cos(cam.heading);
     const ty = terrainAt(koda.pos.x, koda.pos.z) + Math.max(0, kUp()) + 1.5;
     camTarget.set(koda.pos.x + fx * 2.2, ty, koda.pos.z + fz * 2.2);
-    camOff.set(-fx * (dist + 2.2), 1.3, -fz * (dist + 2.2));
+    // Up and down on the right stick tilt the camera over him, or down to his shoulder.
+    const el = 0.19 + cam.pitch, reach = Math.hypot(dist + 2.2, 1.3);
+    camOff.set(-fx * reach * Math.cos(el), reach * Math.sin(el), -fz * reach * Math.cos(el));
     // Don't sit inside a hill or a building behind him.
     const cx = camTarget.x + camOff.x, cz = camTarget.z + camOff.z;
     const floor = Math.max(terrainAt(cx, cz), ...nearBlocks(cx, cz, 0.5).filter(b => !b.mud && cx > b.minX && cx < b.maxX && cz > b.minZ && cz < b.maxZ).map(b => b.top));
     if (ty + camOff.y < floor + 1.2) camOff.y = floor + 1.2 - ty;
   } else if (cam.view === 2) {
-    camOff.set(0, 46, 0.6);
+    camOff.set(0, 21, 0.4);
   } else camOff.copy(CAM_OFFSET).multiplyScalar(camZoom);
   const want = camTarget.clone().add(camOff);
   if (snap) camera.position.copy(want); else camera.position.lerp(want, Math.min(1, dt * (cam.view === 1 ? 8 : 5)));
@@ -3405,6 +3769,10 @@ function updateCamera(dt, snap) {
   if (cam.view === 2) { scene.fog.near = Math.max(scene.fog.near, 60); scene.fog.far = Math.max(scene.fog.far, 140); }
   if (themeState.roll) camera.rotation.z += themeState.roll;
   if (shake > 0) { shake = Math.max(0, shake - dt); camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake * 0.6; }
+  // From the top he gets a ring on the ground, so he's easy to find on any surface.
+  if (!kodaRing) { kodaRing = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 40), new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide })); kodaRing.rotation.x = -Math.PI / 2; kodaRing.renderOrder = 2; scene.add(kodaRing); }
+  kodaRing.visible = cam.view === 2 && state !== "title";
+  if (kodaRing.visible) kodaRing.position.set(koda.pos.x, koda.pos.y + 0.06, koda.pos.z);
   sun.position.set(koda.pos.x + DAY.dir.x, koda.pos.y + DAY.dir.y, koda.pos.z + DAY.dir.z);
   sun.target.position.set(koda.pos.x, terrainAt(koda.pos.x, koda.pos.z), koda.pos.z);
 }
@@ -3477,19 +3845,40 @@ function tick(dt, now) {
 }
 
 /* ---------- screens ---------- */
-function pause() { if (state !== "play") return; state = "paused"; $("marker").classList.add("hidden"); $("pause").classList.remove("hidden"); if (music.ac) music.ac.suspend(); drawBigMap(); }
+function pause() { if (state !== "play") return; state = "paused"; $("marker").classList.add("hidden"); $("pause").classList.remove("hidden"); if (music.ac) music.ac.suspend(); mapCentreOnKoda(); drawBigMap(); }
 function resume() { $("pause").classList.add("hidden"); state = "play"; lastT = performance.now(); if (music.ac) music.ac.resume(); }
 $("pauseBtn").addEventListener("click", pause);
 $("resumeBtn").addEventListener("click", resume);
 $("muteBtn").addEventListener("click", () => { setMuted(!music.muted); $("muteBtn").textContent = "Music: " + (music.muted ? "off" : "on"); });
 $("quitBtn").addEventListener("click", () => { $("pause").classList.add("hidden"); toTitle(); });
 
+/* Title backdrop: Koda's moves, one after another, each slowly zooming in and fading through. */
+const SHOW = ["flying_kick", "takedown", "spin_kick", "power_slide", "ground_pound", "wall_kick", "heavy_smash", "air_dash", "storm_shield", "triple_jump", "long_boost", "record_magnet"];
+const show = { i: 0, timer: 0 };
+function titleShowStep() {
+  const box = $("titleShow");
+  if (!box || $("title").classList.contains("hidden")) { show.timer = 0; return; }
+  const img = new Image();
+  img.alt = ""; img.decoding = "async";
+  img.src = "../run/assets/cards/" + SHOW[show.i++ % SHOW.length] + ".webp";
+  box.appendChild(img);
+  while (box.children.length > 2) box.firstChild.remove();
+  show.timer = setTimeout(titleShowStep, 8000);
+}
+function titleShowStart() { if (!show.timer) titleShowStep(); }
+function showBuildBtn() {
+  const b = $("buildBtn");
+  if (canBuild) { b.classList.remove("hidden"); b.disabled = false; b.textContent = "Build the city"; return; }
+  const why = /[?&]build=1/.test(location.search) && buildWhyNot;
+  b.classList.toggle("hidden", !why); b.disabled = true; if (why) b.textContent = buildWhyNot;
+}
 function toTitle() {
   state = "title";
   stopMusic();
   $("hud").classList.add("hidden"); $("touch").classList.add("hidden"); $("score").classList.add("hidden");
   $("title").classList.remove("hidden");
-  $("buildBtn").classList.toggle("hidden", !canBuild);
+  titleShowStart();
+  showBuildBtn();
   const next = save.unlocked;
   $("playBtn").textContent = next > 0 ? `Continue: Mission ${next + 1}` : "Play";
   $("missionList").innerHTML = S.missions.map((m, i) => {
@@ -3535,22 +3924,25 @@ $("btnView").addEventListener("pointerdown", e => { e.preventDefault(); e.stopPr
    metres in front of him, on the ground. Turn it, drop it, or pick up the piece it's
    touching. Pieces snap to half-metre steps and quarter turns. */
 const ONLINE = (() => {
-  const hosts = ["www.feelzmachine.com", "feelzmachine.com"];
-  if (!hosts.includes(location.hostname) || !window.supabase || !window.supabase.createClient) return null;
+  // Any real web address (feelzmachine.com, www., previews). Only a copy on this computer stays offline.
+  const local = !/^https?:$/.test(location.protocol) || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  if (local || !window.supabase || !window.supabase.createClient) return null;
   return window.supabase.createClient("https://bycdnwenbjusxpowojdb.supabase.co",
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5Y2Rud2VuYmp1c3hwb3dvamRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MjIzOTYsImV4cCI6MjA4NTA5ODM5Nn0.ixUISqTydgNOKJn9w_p7po15mG9kE25yL0HbHprRHj4",
     { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
 })();
 let canBuild = false;
+let buildWhyNot = "";
 async function checkBuilder() {
   if (/[?&]build=1/.test(location.search) && !ONLINE) return (canBuild = true);   // trying it out offline: nothing is saved
   if (!ONLINE) return false;
   try {
     const { data: s } = await ONLINE.auth.getSession();
-    if (!s || !s.session) return false;
+    if (!s || !s.session) { buildWhyNot = `Sign in to Feelz Machine at ${location.host} in this browser, then reload.`; return false; }
     const { data } = await ONLINE.rpc("is_platform_admin");
     canBuild = data === true;
-  } catch (e) { canBuild = false; }
+    if (!canBuild) buildWhyNot = "This Feelz Machine account isn't an admin, so it can't build.";
+  } catch (e) { canBuild = false; buildWhyNot = "Couldn't reach Feelz Machine to check."; }
   return canBuild;
 }
 
@@ -3565,7 +3957,7 @@ const lampPoleMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1f, metalness:
 
 // Everything you can place. w, d, h in metres.
 const PIECES = [
-  ...BUILDINGS.map(m => ({ kind: "building", model: m, name: { tenement: "Tenement", hostel: "Hostel", "kodas-building": "Koda's building" }[m] || m.toUpperCase(), cat: "Buildings", w: 12, d: 12, h: 11 })),
+  ...BUILDINGS.map(m => ({ kind: "building", model: m, name: { tenement: "Tenement", hostel: "Hostel", "kodas-building": "Koda's building" }[m] || m.toUpperCase(), cat: "Buildings", w: 20, d: 20, h: 16 })),
   { kind: "crate", name: "Crate", cat: "Cover", w: 1.1, d: 1.1, h: 0.95, prop: "crate" },
   { kind: "stack", name: "Crate stack", cat: "Cover", w: 1.2, d: 1.2, h: 2, prop: "stack" },
   { kind: "bin", name: "Bin", cat: "Cover", w: 0.7, d: 0.7, h: 1, prop: "bin" },
@@ -3797,6 +4189,7 @@ function buildUndo() { const m = B.undo.pop(); if (m && placed.includes(m)) buil
 /* ---------- boot ---------- */
 (async function boot() {
   $("playBtn").disabled = true;
+  titleShowStart();
   buildGround();
   requestAnimationFrame(frame);
   try {
@@ -3817,14 +4210,16 @@ function buildUndo() { const m = B.undo.pop(); if (m && placed.includes(m)) buil
   buildProps();
   buildAwnings();
   buildNav();
+  buildRoadNet();
   $("loading").textContent = "Adding the city's own pieces…";
   await loadPieces();
-  checkBuilder().then(ok => $("buildBtn").classList.toggle("hidden", !ok));
+  // Opened with ?build=1 but building isn't open to this browser: the button says why.
+  checkBuilder().then(showBuildBtn);
   $("loading").textContent = "";
   $("playBtn").disabled = false;
   toTitle();
   window.GILL_FLOATS = () => floats; window.GILL_DRONES = () => drones;
-  window.GILL = { buildStep: dt => updateBuild(dt), scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
+  window.GILL = { guideRoute, buildStep: dt => updateBuild(dt), scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
     enemies, npcs, get state() { return state; }, save: () => save, blockers, keys, input, cardContinue, pause, resume, drawBigMap, pathNext, stick, FOCUS, beat, songTime, boost, get lastSafe() { return lastSafe; }, fightFoe, get camZoom() { return camZoom; }, attack, jump, action, objectiveTarget, get health() { return health; }, get music() { return music; },
     sim(seconds) { let t = performance.now(); for (let i = 0; i < seconds * 30; i++) { t += 33; tick(1 / 30, t); } } };
 })();
