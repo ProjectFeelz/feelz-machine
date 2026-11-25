@@ -165,9 +165,10 @@ export default function ListenerUpgradePage() {
       });
       refreshProfile();
     },
-    onPending: () => setSuccess(
+    onPending: (reference) => setSuccess(
       'Your card payment went through. Fan Pro is being switched on, which can take a minute. '
-      + 'Nothing more to do - refresh this page if it has not appeared.'
+      + 'Leave this page open and it will appear on its own.'
+      + (reference ? ' Your payment reference is ' + reference + '.' : '')
     ),
   });
 

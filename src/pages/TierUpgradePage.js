@@ -257,9 +257,13 @@ export default function TierUpgradePage() {
       });
       refreshProfile();
     },
-    onPending: () => setSuccess(
+    // Still checking behind this message, so it replaces itself with the
+     // receipt when the webhook lands. The buyer is told to do nothing,
+     // because there is nothing for them to do.
+    onPending: (reference) => setSuccess(
       'Your card payment went through. The plan is being switched on, which can take a minute. '
-      + 'Nothing more to do - refresh this page if it has not appeared.'
+      + 'Leave this page open and it will appear on its own.'
+      + (reference ? ' Your payment reference is ' + reference + '.' : '')
     ),
   });
 

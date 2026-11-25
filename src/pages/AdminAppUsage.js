@@ -44,7 +44,16 @@ export const FUNNELS = [
   {
     title: 'Signing up',
     blurb: 'From landing on the app to a finished profile.',
-    steps: ['signup_started', 'signup_account_created', 'signup_role_chosen', 'signup_profile_done'],
+    // signup_role_chosen is NOT here on purpose. The role is chosen on the
+    // signup form itself (LoginPage.js) and passed to signUpWithEmail, so the
+    // picker that records this step - in ProfileSetup.js and Welcome.js - is
+    // on a screen this flow never shows. Listing it reported every single
+    // account as somebody who gave up at it.
+    //
+    // signup_profile_done is artist-only: ProfileSetup.save() returns early
+    // when there is no artists row, so a listener cannot reach it. Read the
+    // last step against the artists who signed up, not against everybody.
+    steps: ['signup_started', 'signup_account_created', 'signup_profile_done'],
   },
   {
     title: 'Putting out a song',
@@ -245,8 +254,19 @@ export default function AdminAppUsage() {
                 {FUNNELS.map(fn => {
                   const rows = funnels[fn.title] || [];
                   const top = Math.max(1, ...rows.map(r => Number(r.people)));
-                  const worst = rows.reduce((w, r) =>
-                    Number(r.lost_from_previous) > Number(w?.lost_from_previous || 0) ? r : w, null);
+                  // The step with the biggest loss, AND the step before it.
+                  // lost_from_previous on step N counts people who were at
+                  // N-1 and never reached N, so N-1 is where they stopped.
+                  // Naming N sent you to fix the screen they never saw.
+                  let worstAt = -1;
+                  const worst = rows.reduce((w, r, i) => {
+                    if (Number(r.lost_from_previous) > Number(w?.lost_from_previous || 0)) {
+                      worstAt = i;
+                      return r;
+                    }
+                    return w;
+                  }, null);
+                  const stoppedAt = worstAt > 0 ? rows[worstAt - 1] : null;
                   return (
                     <div key={fn.title}>
                       <p className="text-sm font-semibold text-white">{fn.title}</p>
@@ -263,7 +283,9 @@ export default function AdminAppUsage() {
                           ))}
                           {worst && Number(worst.lost_from_previous) > 0 && (
                             <p className="text-[11px] text-red-400 mt-1.5">
-                              Biggest drop: {worst.lost_from_previous} people stopped at “{worst.step}”.
+                              Biggest drop: {worst.lost_from_previous} people stopped at
+                              {' '}“{(stoppedAt || worst).step}”
+                              {stoppedAt ? ` and never reached “${worst.step}”` : ''}.
                             </p>
                           )}
                         </>
