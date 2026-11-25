@@ -116,7 +116,11 @@ export const TIER_FEATURES = {
       { text: 'Collaboration & splits', included: true },
       { text: 'Competition entry', included: true },
       { text: 'Community posting (1/day)', included: true },
-      { text: 'Priority in browse/trending', included: false },
+      // BrowsePage multiplies engagement score by tier: premium 1.5, pro 1.2.
+      // This line said "not included" while Pro was already getting 1.2, so Pro
+      // artists had a benefit nobody told them about and Premium's headline
+      // differentiator was quietly shared. The ladder is real, so say so.
+      { text: 'Some priority in browse/trending', included: true },
       { text: 'Download sales (2 tracks/month)', included: true },
       { text: 'Offline listening, play with no signal', included: true },
       { text: 'YouTube video backdrop', included: false },
@@ -138,7 +142,7 @@ export const TIER_FEATURES = {
       { text: 'Advanced analytics', included: true },
       { text: 'Collaboration & splits', included: true },
       { text: 'Competition entry', included: true },
-      { text: 'Priority in browse/trending', included: true },
+      { text: 'Top priority in browse/trending', included: true },
       { text: 'Download sales', included: true },
       { text: 'Offline listening, play with no signal', included: true },
       { text: 'YouTube video backdrop', included: true },
