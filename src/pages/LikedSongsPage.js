@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { useTier } from '../contexts/useTier';
 import { usePlayer } from '../contexts/PlayerContext';
 import { Heart, Play, Pause, Music, ArrowLeft, Loader, Shuffle, Search, X, MoreHorizontal, ListMusic, Check } from 'lucide-react';
 
@@ -13,6 +14,7 @@ function formatDuration(s) {
 export default function LikedSongsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isListenerPro, tierLoading } = useTier();
   const { playTrack, currentTrack, isPlaying, togglePlay, addToQueue, playNextInQueue } = usePlayer();
   const [tracks, setTracks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -140,6 +142,21 @@ export default function LikedSongsPage() {
           <button onClick={handleShuffle}
             className="flex items-center space-x-2 px-5 py-2.5 bg-white/[0.08] text-white rounded-full font-semibold text-sm active:scale-95 transition hover:bg-white/[0.12]">
             <Shuffle className="w-4 h-4" /><span>Shuffle</span>
+          </button>
+        </div>
+      )}
+
+
+      {/* Liking is free and stays free. Keeping the songs is the paid part. */}
+      {!tierLoading && !isListenerPro && (
+        <div className="mb-5 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+          <p className="text-sm text-white/60">
+            Keep your liked songs on your phone. Fan Pro gives you downloads with no
+            monthly cap, and offline listening for when you have no signal.
+          </p>
+          <button onClick={() => navigate('/listener/upgrade')}
+            className="mt-1.5 text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition">
+            Get Fan Pro
           </button>
         </div>
       )}

@@ -13,6 +13,27 @@ import {
   ArrowLeft, Check, X, Loader, Shield, AlertCircle, Globe
 } from 'lucide-react';
 
+// WHAT ORDER THE CARDS COME IN.
+//
+// They were rendered with Object.entries(), so the order was whatever order
+// the keys happen to sit in inside src/data/tiers.js: free, pro, premium. The
+// first thing anybody saw on the page that sells the plans was the plan that
+// costs nothing, and the paid ones were below it.
+//
+// Named here rather than by reordering tiers.js, so the data module keeps its
+// natural free-upward shape and only the presentation changes. Any slug not
+// listed keeps its original position, so adding a tier cannot make it vanish.
+const CARD_ORDER = ['pro', 'premium', 'free'];
+function cardOrder(tiers) {
+  const entries = Object.entries(tiers);
+  return entries.slice().sort((a, b) => {
+    const ia = CARD_ORDER.indexOf(a[0]);
+    const ib = CARD_ORDER.indexOf(b[0]);
+    return (ia === -1 ? entries.findIndex(e => e[0] === a[0]) + CARD_ORDER.length : ia)
+         - (ib === -1 ? entries.findIndex(e => e[0] === b[0]) + CARD_ORDER.length : ib);
+  });
+}
+
 // ── PayPal config ─────────────────────────────────────────────
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID || '';
 const PLAN_IDS = {
@@ -509,7 +530,7 @@ export default function TierUpgradePage() {
 
       {/* Tier cards */}
       <div className="px-6 space-y-4">
-        {Object.entries(viewRole === 'beatmaker' ? BEATMAKER_TIER_FEATURES : TIER_FEATURES).map(([slug, tier]) => {
+        {cardOrder(viewRole === 'beatmaker' ? BEATMAKER_TIER_FEATURES : TIER_FEATURES).map(([slug, tier]) => {
           const isCurrent = currentTier === slug;
           const isDowngrade = (currentTier === 'premium' && slug !== 'premium') ||
                               (currentTier === 'pro' && slug === 'free');

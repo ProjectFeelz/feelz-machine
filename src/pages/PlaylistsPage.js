@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { useTier } from '../contexts/useTier';
 import { ListMusic, ArrowLeft, Loader, Plus, Music, Trash2, Users, Link, Check, Play, Camera } from 'lucide-react';
 import { usePlayer } from '../contexts/PlayerContext';
 
 export default function PlaylistsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isListenerPro, tierLoading } = useTier();
   const [playlists, setPlaylists]         = useState([]);
   const [sharedPlaylists, setSharedPlaylists] = useState([]);
   const [loading, setLoading]             = useState(true);
@@ -328,6 +330,20 @@ export default function PlaylistsPage() {
         className="w-full flex items-center space-x-2 px-4 py-3 mb-4 bg-white/[0.04] hover:bg-white/[0.07] rounded-xl border border-white/[0.06] text-sm text-white/60 hover:text-white/80 transition">
         <Plus className="w-4 h-4" /><span>New playlist</span>
       </button>
+
+      {/* Nothing here is gated. Playlists are free on both plans. The hook is
+          offline listening, which genuinely is not. */}
+      {!tierLoading && !isListenerPro && (
+        <div className="mb-4 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+          <p className="text-sm text-white/60">
+            Play any playlist with no signal. Offline listening comes with Fan Pro.
+          </p>
+          <button onClick={() => navigate('/listener/upgrade')}
+            className="mt-1.5 text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition">
+            Get Fan Pro
+          </button>
+        </div>
+      )}
 
       {/* Create form */}
       {creating && (
