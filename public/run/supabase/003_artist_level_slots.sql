@@ -17,7 +17,7 @@ as $$
     when a.id is null then 0
     when coalesce(a.is_platform_owned, false) then 1000
     when coalesce(a.is_suspended, false) then 0
-    else (case when a.tier = 'premium' and (a.tier_expires_at is null or a.tier_expires_at > now()) then 1 else 0 end)
+    else (case when public.artist_tier_at_least(a.id, 'premium') then 1 else 0 end)
        + (case when public.artist_has_addon(a.id, 'feelzrun') then 4 else 0 end)
   end
   from (select 1) one left join public.artists a on a.id = p_artist_id;
@@ -223,7 +223,7 @@ declare
   src text;
 begin
   p := public.game_ensure_player();
-  price := case pct when 10 then 250 when 25 then 600 when 50 then 1200 else null end;
+  price := case pct when 10 then 750 when 25 then 1800 when 50 then 3600 else null end;
   if price is null then raise exception 'Vouchers come in 10%%, 25%% and 50%%.'; end if;
   select vt.max_percent, vt.source into maxp, src from public.game_voucher_tracks vt where vt.track_id = track;
   if maxp is null then raise exception 'Vouchers are not available for that song.'; end if;

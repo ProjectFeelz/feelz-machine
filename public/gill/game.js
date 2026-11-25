@@ -164,7 +164,8 @@ const OWN_MODELS = new Set(["stall", "booth", "billboard", "container", "carriag
   "mc-b3", "uc-b5", "de-b2", "generator", "handcart", "washline", "chimney", "vent", "hauler", "shuttle", "skiff", "conveyor", "fountain", "firepit", "rocks",
   "commtower", "lockup", "shelter", "station", "elevator", "skydeck", "tenement2", "hostel2",
   "k-corner", "k-pillar", "k-wall", "k-win-open", "k-win-closed", "k-win-half", "k-roof-flat", "k-roof-gentle", "k-roof-steep", "k-switchback", "k-walkway", "k-lift", "k-washpost",
-  "obelisk", "climbtower", "checkpoint", "veilheart"]);
+  "obelisk", "climbtower", "checkpoint", "veilheart",
+  "pump", "lampfall", "trafficfall", "carwreck", "cat", "cat2", "busstop", "watertank", "produce", "dish", "phonebox", "barrels", "planter"]);
 function staticModel(name) {
   if (!staticCache[name]) staticCache[name] = loadGLB((OWN_MODELS.has(name) ? "models/world/" : MODELS + "world/") + name + ".glb").then(g => g.scene).catch(() => null);
   return staticCache[name];
@@ -1075,6 +1076,8 @@ class Actor {
     model.scale.multiplyScalar(k);
     model.position.y = -lo * k;
     model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    // How high the hips are standing: a rider's hips sit on the saddle.
+    if (hips) { this.root.updateMatrixWorld(true); hips.getWorldPosition(v); this.hipsH = v.y; }
     this.mixer = new THREE.AnimationMixer(model);
     this.clips = {};
     const rest = hips ? hips.position.clone() : new THREE.Vector3(0, 1, 0);
@@ -1091,6 +1094,8 @@ class Actor {
   }
   has(name) { return !!this.clips[name]; }
   play(name, { once = false, fade = 0.15, speed = 1, from = 0 } = {}) {
+    // In the saddle the legs belong to the horse: walking and running moves become sitting.
+    if (this.seated && /^(walk|run|sprint|crouch_walk|crouch_idle|swim|tread|turn180)$/.test(name)) name = this.has("idle") ? "idle" : "fight_idle";
     const a = this.clips[name];
     if (!a) return 0;
     if (this.current === a && !once) { a.timeScale = speed; return a.getClip().duration; }
@@ -1123,9 +1128,12 @@ class Actor {
     restoreRest(this.model);
     this.mixer.update(dt);
     const name = this.current ? this.current.getClip().name : "";
-    if (this.native) { if (this.armIn) armsIn(this.model, this.armIn); if (this.reach > 0.01) armsReach(this.model, this.reach); return; }   // rigged and animated in Mixamo: only the arm width is tuned
-    if (/^(run|sprint)$/.test(name)) armSwing(this.model, ARM_SWING);
-    if (!/^(punch|kick|takedown|hit|ko|alert|flykick|jump|spinkick)$/.test(name)) armClear(this.model, /^crouch/.test(name));
+    if (this.native) { if (this.armIn) armsIn(this.model, this.armIn); if (this.reach > 0.01 && !this.seated) armsReach(this.model, this.reach); }   // rigged and animated in Mixamo: only the arm width is tuned
+    else {
+      if (/^(run|sprint)$/.test(name)) armSwing(this.model, ARM_SWING);
+      if (!/^(punch|kick|takedown|hit|ko|alert|flykick|jump|spinkick)$/.test(name)) armClear(this.model, /^crouch/.test(name));
+    }
+    if (this.seated) { seatPose(this.model); this.model.position.y = this.baseY + this.seated.lift; this.model.position.z = -0.12; }
   }
 }
 // The moves were downloaded with wide arm space so the arms clear his jacket. That reads a little
@@ -1362,7 +1370,7 @@ function writeSave() { try { localStorage.setItem("gill.save2", JSON.stringify(s
 
 /* ---------- HUD ---------- */
 let toastT = 0, tipT = 0;
-function toast(text, secs = 3) { const t = $("toast"); t.textContent = text; t.classList.add("show"); toastT = secs; }
+function toast(text, secs = 3) { if (typeof obsSend === "function") obsSend("toast", { text }); const t = $("toast"); t.textContent = text; t.classList.add("show"); toastT = secs; }
 const tipQueue = [];
 function tip(key) {
   if (save.tips[key] || !S.tips[key]) return;
@@ -1666,6 +1674,7 @@ function playNote(semi, len = 0.35, type = "triangle", vol = 0.16, detune = 0, w
 }
 function sfxBuzz() { playNote(-17, 0.3, "sawtooth", 0.08); playNote(-16, 0.3, "sawtooth", 0.08); }
 function popText(text, cls = "") {
+  if (typeof obsSend === "function") obsSend("pop", { text, cls });
   const el = $("pop"); el.textContent = text; el.className = "pop show " + cls;
   clearTimeout(popText.t); popText.t = setTimeout(() => el.classList.remove("show"), 700);
 }
@@ -1724,8 +1733,10 @@ function clearMission() {
   sleepPlacedEnforcers();
   if (koda) koda.pushing = null;
   if (arenaView !== null) { const v = arenaView; arenaView = null; cam.view = v; cam.heading = v === 1 && koda ? koda.yaw : Math.PI; const b = $("btnView"); if (b) b.textContent = VIEWS[cam.view]; }
+  if (koda && koda.riding && koda.riding.owner !== "town") dismount();
   for (const e of enemies) scene.remove(e.a.root);
   enemies.length = 0;
+  for (const h of horses.filter(h => h.owner === "enemy")) removeHorse(h);
   for (const n of npcs) scene.remove(n.a.root);
   npcs.length = 0;
   for (const d of drones) { scene.remove(d.group); scene.remove(d.light); }
@@ -1800,6 +1811,11 @@ function spawnGuards(qd, count, { radius = [8, 16], kinds, hidden = false, alert
       const a2 = ang + k * Math.PI / 2;
       const s = freeSpot(cx + Math.cos(a2) * rad, cz + Math.sin(a2) * rad, 0.6, r);
       route.push(new THREE.Vector3(s.x, floorAt(s.x, s.z), s.z));
+    }
+    // Out in the open, one of the patrol rides a horse.
+    if (i === 0 && count >= 3 && !hidden && !alert && !near && kind !== "gilded" && ["explore", "rubble", "help", "pads", "race", "sneak"].includes(qd.focus) && r() < 0.6) {
+      made.push(makeRider(kind, route[0].x, route[0].z, route, { qd, speed: 2.1 }).then(e => { if (mission !== m) { scene.remove(e.a.root); removeHorse(e.horse); enemies.splice(enemies.indexOf(e), 1); return null; } refreshObjective(); return e; }).catch(() => null));
+      continue;
     }
     made.push(makeActor(kind + ".glb", ENEMIES[kind]).then(a => {
       if (mission !== m) return null;
@@ -2230,11 +2246,11 @@ const FOCUS = {
           m.position.set((qd.r() - 0.5) * 2, sz * 0.3, (qd.r() - 0.5) * 2); m.rotation.set(qd.r(), qd.r() * 3, qd.r());
           m.castShadow = true; group.add(m);
         }
-        // A street light the Veil brought down, lying across the pile.
-        staticModel(i % 2 ? "chimney" : "mast").then(src => {
+        // A street light or traffic light the Veil brought down, lying across the pile.
+        staticModel(i % 2 ? "trafficfall" : "lampfall").then(src => {
           if (!src) return;
           const m = src.clone(true), bx = new THREE.Box3().setFromObject(m), sz = bx.getSize(new THREE.Vector3());
-          m.scale.setScalar(4.5 / Math.max(sz.x, sz.y, sz.z)); m.rotation.set(1.35, qd.r() * 6, 0.25);
+          m.scale.setScalar(4.5 / Math.max(sz.x, sz.y, sz.z)); m.rotation.set(0, qd.r() * 6, 0);
           const b2 = new THREE.Box3().setFromObject(m), c = b2.getCenter(new THREE.Vector3()); m.position.set(-c.x, -b2.min.y - 0.2, -c.z);
           m.traverse(o => { if (o.isMesh) o.castShadow = true; }); group.add(m);
         });
@@ -2906,6 +2922,7 @@ function startSink() {
 function updateKoda(dt) {
   readInput();
   invuln = Math.max(0, invuln - dt);
+  if (koda.riding) { ride(dt); return; }
   // In the mud: he goes under and comes back up on the bank he jumped from.
   if (koda.sinking) {
     koda.sinking.t -= dt; koda.pos.y -= dt * 1.4;
@@ -2954,9 +2971,12 @@ function updateKoda(dt) {
       if (g === MUD) { koda.pos.y = terrainAt(koda.pos.x, koda.pos.z); air = null; startSink(); koda.update(dt); return; }
       koda.pos.y = g;
       if (air.kick) landKick();
+      const fromJump = koda.current && koda.current.getClip().name === "bigjump";
       air = null; attackLock = Math.max(attackLock, 0.08);
-      // Land on his feet: straight into standing or running, never held in a mid-air pose.
-      koda.held = 1; koda.play(input.mag ? "run" : "idle", { fade: 0.08 });
+      // Land on his feet. Standing still, the jump plays out its landing (he sinks into it and
+      // rises); moving, he runs straight on.
+      if (fromJump && !input.mag) { koda.landT = 0.5; koda.current.timeScale = 1; }
+      else { koda.held = 1; koda.play(input.mag ? "run" : "idle", { fade: 0.08 }); }
     }
     koda.update(dt);
     return;
@@ -2972,6 +2992,7 @@ function updateKoda(dt) {
     if (lunge.t <= 0) lunge = null;
   }
   if (attackLock > 0) { attackLock -= dt; koda.update(dt); settle(); return; }
+  if (koda.landT > 0) { koda.landT -= dt; if (!input.mag) { koda.update(dt); settle(); return; } koda.landT = 0; }
   // Free roam: standing still and holding ACTION by a tree, rocks or sand gathers it.
   if (mission && mission.def.free && input.actionHeld && !input.mag && !air && updateGather(dt, true)) { koda.update(dt); settle(); return; }
   const sneaking = input.sneak;
@@ -3047,6 +3068,7 @@ function settle() {
 }
 function jump() {
   if (!koda || attackLock > 0 || koda.sinking) return;
+  if (koda.riding) { dismount(); return; }
   koda.pushing = null;
   // Just walked off an edge: a moment's grace to still jump.
   if (air && !(air.fall && air.t < 0.16)) return;
@@ -3070,7 +3092,10 @@ function jump() {
   if (low && koda.has("vault")) { air.speed = Math.max(speed, 5.5); air.vault = true; input.x = f.x; input.z = f.y; koda.play("vault", { once: true, speed: 1.6 }); }
   else if (speed >= 7.5 && koda.has("frontflip")) koda.play("frontflip", { once: true, speed: 1.35, from: 0.25 });
   else if (!input.mag && fightFoe() && koda.has("backflip")) { koda.play("backflip", { once: true, speed: 1.5, from: 0.35 }); const f = forward(koda); air.speed = 3; air.back = { x: -f.x, z: -f.y }; }
-  else koda.play(koda.has("bigjump") ? "bigjump" : "jump", { once: true, speed: 1.3, from: koda.has("bigjump") ? 0.25 : 0 });
+  // The jump is timed to the arc: its push-off starts now and its feet touch down when he lands
+  // (in the clip he leaves the ground at 0.5 s and is back on it at 1.12 s).
+  else if (koda.has("bigjump")) koda.play("bigjump", { once: true, from: 0.5, speed: 0.62 / (2 * air.vy / 22) });
+  else koda.play("jump", { once: true, speed: 1.3 });
   tip("jump");
 }
 // The guard to strike: the nearest one in reach, favouring the one he faces.
@@ -3088,7 +3113,7 @@ function strikeTarget(reach) {
   return best;
 }
 function attack() {
-  if (!koda || attackLock > 0) return;
+  if (!koda || attackLock > 0 || koda.riding) return;
   koda.pushing = null;
   if (air) {
     if (air.kick) return;
@@ -3114,7 +3139,7 @@ function attack() {
     ? [{ clip: "punch", from: 0.6, speed: 1.6, lock: 0.45, hits: [0.93], dmg: 1 },
        { clip: "combo", from: 0.5, speed: 1.7, lock: 0.75, hits: [0.87, 1.35], dmg: 1 },
        { clip: "elbowup", from: 0.3, speed: 1.6, lock: 0.7, hits: [0.6, 1.0], dmg: 1, body: true },
-       { clip: "roundhouse", from: 0.45, speed: 1.5, lock: 0.7, hits: [0.9], dmg: 2, push: 2.6 }]
+       { clip: "roundhouse", from: 0.6, speed: 1.6, lock: 0.7, hits: [1.27], dmg: 2, push: 2.6 }]   // the spinning kick: his foot comes round at 1.27 s
     : koda.native
       ? [{ clip: "punch", speed: 1.5, lock: 0.5, hits: [0.22], dmg: 1 }, { clip: "combo", speed: 1.6, lock: 0.8, hits: [0.24, 0.55], dmg: 1 }, { clip: "kick", speed: 1.4, lock: 0.7, hits: [0.42], dmg: 2, body: true }]
       : [{ clip: "punch", speed: 1.5, lock: 0.42, hits: [0.17], dmg: 1 }, { clip: "punch", speed: 1.5, lock: 0.42, hits: [0.17], dmg: 1 }, { clip: "kick", speed: 1.5, lock: 0.5, hits: [0.17], dmg: 2 }];
@@ -3164,9 +3189,11 @@ function landKick() {
 }
 function action() {
   if (!koda || attackLock > 0 || air) return;
+  if (koda.riding) { dismount(); return; }
   if (mission) for (const qd of mission.quads) if (qd.focus === "rubble" && FOCUS.rubble.tap(qd)) return;
   if (prayNear()) return;
   { const st = storeNear(); if (st) { openShop(st); return; } }
+  { const h = !koda.pushing && nearHorse(); if (h) { mount(h); return; } }
   if (!npcs.some(n => dist2(koda.pos, n.a.pos) < 2.6) && talkToAmbient()) return;
   if (npcs.some(n => dist2(koda.pos, n.a.pos) < 2.6) || (mission && mission.quads.some(q => q.focus === "copies" && q.zoras && q.zoras.some(z => !z.gone && dist2(z.z.pos, koda.pos) < 2.4)))) return talkOrListen();
   if (searchNear()) return;
@@ -3217,6 +3244,7 @@ function sideFlash(fromX, fromZ) {
 }
 function hurtKoda(n, fromX, fromZ) {
   if (invuln > 0 || state !== "play" || air) return;
+  if (koda.riding) dismount(true);   // knocked out of the saddle
   health -= n; invuln = 1.0; drawHearts();
   mission.stats.hurt += n;
   sfxHit(true);
@@ -3250,6 +3278,7 @@ function alertEnemy(e) {
   tip("seen");
 }
 function hitEnemy(e, dmg, nx, nz, body = false) {
+  if (e.horse) riderOff(e);   // knocked out of the saddle
   e.hp -= dmg;
   e.flash = 0.12;
   impact(e.a.pos.x - nx * 0.3, body ? 1.05 : 1.55, e.a.pos.z - nz * 0.3, nx, nz, dmg > 1);
@@ -3264,6 +3293,7 @@ function hitEnemy(e, dmg, nx, nz, body = false) {
 }
 function knockOut(e) {
   if (e.state === "ko") return;
+  if (e.horse) riderOff(e);
   e.state = "ko"; e.a.play("ko", { once: true });
   // He falls flat: slide him clear of crates, rubble and walls so the body lies on open ground.
   const f = forward(e.a), lie = freeSpot(e.a.pos.x + f.x * 0.9, e.a.pos.z + f.y * 0.9, 1.3);
@@ -3313,7 +3343,7 @@ function updateEnemies(dt) {
     const f = forward(a), dx = koda.pos.x - a.pos.x, dz = koda.pos.z - a.pos.z;
     // Under a roof or sneaking: much harder to spot. Up on a rooftop: guards look along the street, not up.
     const covered = underRoof(koda.pos.x, koda.pos.z);
-    const range = (koda.sneaking ? 4 : 7.5) * (covered ? 0.5 : 1) * (kUp() > 1.5 ? 0.6 : 1) * (koda.inCover ? 0.6 : 1) * (litBy(koda.pos.x, koda.pos.z) ? 1 : 0.65);
+    const range = (koda.sneaking ? 4 : 7.5) * (covered ? 0.5 : 1) * (kUp() > 1.5 ? 0.6 : 1) * (koda.inCover ? 0.6 : 1) * (litBy(koda.pos.x, koda.pos.z) ? 1 : 0.65) * (e.horse ? 1.4 : 1);
     const inCone = d < range && (dx * f.x + dz * f.y) / (d || 1) > 0.55;
     const heard = (koda.sprinting || air) && d < 4;
     // Crouched, anything waist-high hides him; standing, it has to be chest-high.
@@ -3349,9 +3379,11 @@ function updateEnemies(dt) {
     if (e.searchT <= 0) { e.state = "suspicious"; e.meter = 0.6; a.play("walk"); if (attacker === e) attacker = null; continue; }
     // Mid-swing or mid-shout: plant the feet and keep facing him.
     if ((e.holdT = Math.max(0, (e.holdT || 0) - dt)) > 0) { a.face(Math.atan2(dx, dz), Math.min(1, dt * 10)); continue; }
+    // A rider gallops up, then jumps down to fight on foot.
+    if (e.horse && d < 3.4 && !koda.riding) { riderOff(e); e.holdT = Math.min(0.7, a.play("alert", { once: true, speed: 1.3 }) || 0.4); continue; }
     // One at a time: only the main attacker comes in. The rest wait their turn in a ring
     // around Koda, shuffling sideways, until it's theirs.
-    if (attacker !== e && d < 8) {
+    if (attacker !== e && d < 8 && !e.horse) {
       const ringR = 3.4, ang = Math.atan2(a.pos.x - koda.pos.x, a.pos.z - koda.pos.z) + dt * 0.35 * (e.orbit || (e.orbit = Math.random() < 0.5 ? -1 : 1));
       const tx = koda.pos.x + Math.sin(ang) * ringR, tz = koda.pos.z + Math.cos(ang) * ringR;
       const mx = tx - a.pos.x, mz = tz - a.pos.z, md = Math.hypot(mx, mz);
@@ -3363,7 +3395,7 @@ function updateEnemies(dt) {
     // In reach from 1.6 m, out of reach past 2.1 m: no flicking between chasing and squaring up.
     e.inReach = e.inReach ? d < 2.1 : d < 1.6;
     if (!e.inReach) {
-      if (steer(e, e.lastSeen.x, e.lastSeen.z, 5.2, dt, 8)) a.play("run");
+      if (steer(e, e.lastSeen.x, e.lastSeen.z, e.horse ? 9.5 : 5.2, dt, e.horse ? 3 : 8)) a.play("run");
       else { a.play(a.has("fight_idle") ? "fight_idle" : "walk"); a.face(Math.atan2(dx, dz), Math.min(1, dt * 8)); }
       continue;
     }
@@ -3750,6 +3782,8 @@ function updateGuide(now, dt) {
   for (const x of shrines) x.flame.rotation.y += dt * 1.2;
   updateSway(now);
   updateAmbient(dt);
+  updateHorses(dt);
+  updateCritters(performance.now());
   updateDust(dt);
   updateFlyers(dt);
   const goal = objectiveTarget();
@@ -4174,8 +4208,9 @@ function frame(now) {
     koda.update(real); if (zora) zora.update(real);
   }
   if (state === "play" || state === "build") updateCoop(real);
+  updateObs(real);
   if ((frame.n = (frame.n || 0) + 1) % 30 === 0) { showHudBuild(); showRoomButtons(); }
-  if (state === "build") { updateSway(now); updateAmbient(real); updateFlyers(real); }
+  if (state === "build") { updateSway(now); updateAmbient(real); updateFlyers(real); updateHorses(real); }
   if (!window.GILL_NORENDER) renderer.render(scene, camera);
 }
 // Time left on the song. Red for the last 20 seconds.
@@ -4308,6 +4343,8 @@ function startFreeRoam() {
   refreshObjective();
   loadInv(); drawInventory();
   wakePlacedEnforcers();
+  spawnRoadRiders();
+  showRoomButtons(); showHudBuild();
   toast("Free roam. The city is yours. Hold ACTION by trees, rocks and sand to gather.", 3.5);
 }
 $("roamBtn").addEventListener("click", startFreeRoam);
@@ -4356,6 +4393,7 @@ const stepMat = new THREE.MeshStandardMaterial({ color: 0x8d8a86, roughness: 0.9
 const lampPoleMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1f, metalness: 0.6, roughness: 0.4 });
 
 // Everything you can place. w, d, h in metres.
+const ENFORCER_NAMES = { sentinel: "Sentinel", guard: "Guard", "street-warden": "Street warden", hunter: "Hunter", handler: "Handler", gilded: "Gilded" };
 const PIECES = [
   ...BUILDINGS.map(m => ({ kind: "building", model: m, name: { tenement: "Tenement", hostel: "Hostel", "kodas-building": "Koda's building" }[m] || m.toUpperCase(), cat: "Buildings", w: 20, d: 20, h: 16 })),
   { kind: "crate", name: "Crate", cat: "Cover", w: 1.1, d: 1.1, h: 0.95, prop: "crate" },
@@ -4428,7 +4466,26 @@ const PIECES = [
   ...[["general", "General store"], ["wood", "Timber yard"], ["stone", "Quarry"], ["sand", "Sand pit"], ["metal", "Scrap yard"], ["glass", "Glassworks"]].map(([sells, name]) =>
     ({ kind: "store", model: sells === "general" ? "booth" : "stall", sells, name, cat: "Stores", w: sells === "general" ? 2.6 : 4.2, d: sells === "general" ? 2.2 : 3.2, h: 3.2, grid: 0.5 })),
   // Enforcers: stand one where it should patrol. In free roam and your worlds they come alive.
-  ...Object.keys(ENEMIES).map(k => ({ kind: "enforcer", model: k, name: { sentinel: "Sentinel", guard: "Guard", "street-warden": "Street warden", hunter: "Hunter", handler: "Handler", gilded: "Gilded" }[k] || k, cat: "Enforcers", w: 1, d: 1, h: 2 }))
+  ...Object.keys(ENEMIES).map(k => ({ kind: "enforcer", model: k, name: ENFORCER_NAMES[k] || k, cat: "Enforcers", w: 1, d: 1, h: 2 })),
+  // On horseback: they patrol further and faster, and ride you down.
+  ...Object.keys(ENEMIES).filter(k => k !== "gilded").map(k => ({ kind: "enforcer", model: "horse:" + k, name: "Mounted " + (ENFORCER_NAMES[k] || k).toLowerCase(), cat: "Enforcers", w: 1, d: 2.4, h: 2.6 })),
+  // Street furniture, Veil wreckage and more, made in Meshy. These keep their own shape (scaled to height).
+  { kind: "kit", model: "busstop", name: "Bus shelter", cat: "Street", w: 4, d: 2, h: 3, grid: 0.5, uniform: true, cost: { metal: 3, glass: 2 } },
+  { kind: "kit", model: "phonebox", name: "Phone box", cat: "Street", w: 1.2, d: 1.2, h: 2.4, grid: 0.5, uniform: true, cost: { metal: 2, glass: 2 } },
+  { kind: "kit", model: "pump", name: "Petrol pump", cat: "Street", w: 1, d: 0.8, h: 2, grid: 0.5, uniform: true, cost: { metal: 3 } },
+  { kind: "kit", model: "planter", name: "Planter", cat: "Street", w: 1.4, d: 1.4, h: 1.6, grid: 0.5, uniform: true, cost: { stone: 1, wood: 1 } },
+  { kind: "kit", model: "produce", name: "Produce table", cat: "Market", w: 2, d: 1.2, h: 1.4, grid: 0.5, uniform: true, cost: { wood: 2 } },
+  { kind: "kit", model: "watertank", name: "Water tank", cat: "Industrial", w: 3, d: 3, h: 6, grid: 0.5, uniform: true, cost: { metal: 6 } },
+  { kind: "kit", model: "barrels", name: "Oil drums", cat: "Industrial", w: 2.4, d: 2, h: 1.2, grid: 0.5, uniform: true, walk: true, cost: { metal: 2 } },
+  { kind: "kit", model: "dish", name: "Satellite dish", cat: "Industrial", w: 2.5, d: 2.5, h: 4, grid: 0.5, uniform: true, cost: { metal: 4 } },
+  { kind: "kit", model: "lampfall", name: "Fallen street light", cat: "Wreckage", w: 5, d: 1.6, h: 1.4, grid: 0.5, uniform: true, walk: true, cost: { metal: 1 } },
+  { kind: "kit", model: "trafficfall", name: "Toppled traffic light", cat: "Wreckage", w: 4.5, d: 1.6, h: 1.4, grid: 0.5, uniform: true, walk: true, cost: { metal: 1 } },
+  { kind: "kit", model: "carwreck", name: "Car wreck", cat: "Wreckage", w: 4, d: 2, h: 1.5, grid: 0.5, uniform: true, walk: true, cost: { metal: 2 } },
+  { kind: "kit", model: "cat", name: "Cat (sitting)", cat: "Animals", w: 0.3, d: 0.45, h: 0.42, grid: 0.25, uniform: true, pass: true, critter: true },
+  { kind: "kit", model: "cat2", name: "Cat (resting)", cat: "Animals", w: 0.3, d: 0.55, h: 0.25, grid: 0.25, uniform: true, pass: true, critter: true },
+  // Animals: a horse to ride, or a rail with horses tied to it.
+  { kind: "horse", name: "Horse", cat: "Animals", w: 0.8, d: 2.4, h: 2.2 },
+  { kind: "hitch", name: "Hitched horses", cat: "Animals", w: 4, d: 3.6, h: 2.2, cost: { wood: 3 } }
 ];
 const BLOCK_MATS = {
   wood: new THREE.MeshStandardMaterial({ color: 0x9a6a3c, roughness: 0.85 }),
@@ -4474,19 +4531,36 @@ async function makePiece(rec) {
     staticModel(mdl).then(src => {
       if (!src || made.gone) return;
       const m = src.clone(true), box0 = new THREE.Box3().setFromObject(m), sz = box0.getSize(new THREE.Vector3());
-      m.scale.set(rec.w / Math.max(0.01, sz.x), rec.h / Math.max(0.01, sz.y), rec.d / Math.max(0.01, sz.z));
-      m.rotation.y = turn * Math.PI / 2;
+      if (def.uniform) m.scale.setScalar(rec.h / Math.max(0.01, sz.y));   // its own shape, at its real height
+      else m.scale.set(rec.w / Math.max(0.01, sz.x), rec.h / Math.max(0.01, sz.y), rec.d / Math.max(0.01, sz.z));
+      m.rotation.y = (def.uniform ? (rec.rot || 0) : turn * Math.PI / 2);
       const b2 = new THREE.Box3().setFromObject(m), c = b2.getCenter(new THREE.Vector3());
       m.position.set(x - c.x, base - b2.min.y, z - c.z);
       m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
       if (rec.kind === "store") tintStall(m, ["general", "wood", "stone", "sand", "metal", "glass"].indexOf(def.sells) % STALL_TINTS.length);
       scene.add(m); made.meshes.push(m);
+      if (def.critter) critters.push({ m, base: m.scale.y, ph: Math.random() * 6, made });
+      // Its real footprint, once its shape is known.
+      if (def.uniform && made.blocks[0]) { const b = made.blocks[0], bb = new THREE.Box3().setFromObject(m); b.minX = bb.min.x; b.maxX = bb.max.x; b.minZ = bb.min.z; b.maxZ = bb.max.z; b.top = bb.max.y; navMark(b); }
     });
     if (rec.kind === "store") { made.store = def.sells; stores.push(made); }
     if (!def.pass) block({ walk: !!def.walk || !!def.stack, low: !!def.low || h <= 1.2, store: rec.kind === "store" ? def.sells : undefined });
   } else if (rec.kind === "enforcer") {
-    // Shown standing at its post; in free roam a real one patrols from here.
-    makeActor(rec.model + ".glb", ENEMIES[rec.model] || 1.9).then(a => { if (!a) return; a.pos.set(x, base, z); a.face(rec.rot || 0, 1); a.play(a.has("fight_idle") ? "fight_idle" : "walk"); a.update(0.01); a.root.visible = !(state === "play" && mission && mission.def.free); scene.add(a.root); made.meshes.push(a.root); made.actor = a; }).catch(() => null);
+    // Shown standing at its post (or sat on its horse); in free roam a real one patrols from here.
+    const mounted = /^horse:/.test(rec.model || ""), kind = mounted ? rec.model.slice(6) : rec.model;
+    const hidden = state === "play" && mission && mission.def.free;
+    if (mounted) { made.horse = makeHorse(x, z, rec.rot || 0, { coat: HORSE_COATS[Math.abs(Math.round(x * 3 + z)) % HORSE_COATS.length], cloth: ENFORCER_CLOTH, owner: "piece" }); made.horse.hidden = hidden; }
+    makeActor(kind + ".glb", ENEMIES[kind] || 1.9).then(a => {
+      if (!a || made.gone) return;
+      a.pos.set(x, base, z); a.face(rec.rot || 0, 1); if (mounted) { seat(a, true); made.horse.rider = a; }
+      a.play(a.has("fight_idle") ? "fight_idle" : "walk"); a.update(0.01); a.root.visible = !hidden; scene.add(a.root); made.meshes.push(a.root); made.actor = a;
+    }).catch(() => null);
+  } else if (rec.kind === "horse") {
+    made.horse = makeHorse(x, z, rec.rot || 0, { coat: HORSE_COATS[Math.abs(Math.round(x * 3 + z)) % HORSE_COATS.length], cloth: HORSE_CLOTHS[Math.abs(Math.round(x + z * 5)) % HORSE_CLOTHS.length], owner: "piece" });
+  } else if (rec.kind === "hitch") {
+    const hb = addHitch(x, z, rec.rot || 0, 2);
+    made.meshes.push(hb.g); hb.b.piece = made; made.blocks.push(hb.b); navMark(hb.b); made.hitch = hb.horses;
+    for (const h of hb.horses) h.owner = "piece";
   } else if (rec.kind === "block" || rec.kind === "tile") {
     const m = box(BLOCK_MATS[(def && def.mat) || "stone"] || BLOCK_MATS.stone, w, h, d);
     if (rec.kind === "tile") m.castShadow = false;
@@ -4545,6 +4619,8 @@ async function makePiece(rec) {
 }
 function unmakePiece(made) {
   made.gone = true;
+  for (const h of [made.horse, ...(made.hitch || [])]) if (h) { if (koda && koda.riding === h) dismount(); removeHorse(h); }
+  for (let i = critters.length - 1; i >= 0; i--) if (critters[i].made === made) critters.splice(i, 1);
   if (made.store) { const i = stores.indexOf(made); if (i >= 0) stores.splice(i, 1); }
   for (const m of made.meshes) if (m && m.parent) m.parent.remove(m);
   for (const b of made.blocks) { const i = blockers.indexOf(b); if (i >= 0) blockers.splice(i, 1); navMark(b); }
@@ -4584,7 +4660,7 @@ function startBuild() {
   if (!koda.parent) scene.add(koda.root);
   koda.pos.y = groundAt(koda.pos.x, koda.pos.z);
   renderBuildBar(); updateCamera(0, true);
-  if (myWorld) toast(saveTable() ? `Building in ${myWorld.name}. Everything you place is kept.` : "Building in your world. Keeping your builds comes with a Feelz Machine plan.", 3.5);
+  if (myWorld) toast(saveTable() ? `Building in ${myWorld.name}. Everything you place is kept.` : "Building in your world. Keeping your builds comes with Feelz Machine Premium.", 3.5);
   else if (!canBuild && !coop.ch) toast("Building in free roam. Gather materials for blocks. Keep what you build in My worlds.", 3.5);
   else toast(canBuild && ONLINE ? (coop.ch ? "Building together. Your pieces are saved to the city and the room sees them." : "Build mode. Everything you place is saved to the city.") : coop.ch ? "Building together. Everyone in the room sees what you place." : "Build mode (trying it out: nothing is saved here).", 3.5);
 }
@@ -4597,7 +4673,7 @@ function stopBuild() {
 }
 function renderBuildBar() {
   $("buildCats").innerHTML = catList().map(c => `<button class="bcat${c === B.cat ? " on" : ""}" data-c="${c}">${c}</button>`).join("");
-  $("buildItems").innerHTML = catPieces().map((p, i) => `<button class="bitem${i === B.i ? " on" : ""}" data-i="${i}">${p.kind === "building" && p.model ? `<img src="thumbs/${p.model}.webp" alt="" onerror="this.remove()">` : p.model && p.kind !== "enforcer" ? `<img src="thumbs/${p.model}.webp" alt="" onerror="this.replaceWith(Object.assign(document.createElement('i'), { textContent: '■' }))">` : `<i>${{ Cover: "▣", Climb: "☰", Nature: "♣", Blocks: "◼", Ground: "▦", Enforcers: "☗", Stores: "$" }[p.cat] || "■"}</i>`}<span>${p.name}</span></button>`).join("");
+  $("buildItems").innerHTML = catPieces().map((p, i) => `<button class="bitem${i === B.i ? " on" : ""}" data-i="${i}">${p.kind === "building" && p.model ? `<img src="thumbs/${p.model}.webp" alt="" onerror="this.remove()">` : p.model && p.kind !== "enforcer" ? `<img src="thumbs/${p.model}.webp" alt="" onerror="this.replaceWith(Object.assign(document.createElement('i'), { textContent: '■' }))">` : `<i>${{ Cover: "▣", Climb: "☰", Nature: "♣", Blocks: "◼", Ground: "▦", Enforcers: "☗", Stores: "$", Animals: "♞", Street: "▥", Wreckage: "✕" }[p.cat] || "■"}</i>`}<span>${p.name}</span></button>`).join("");
   $("buildName").textContent = (catPieces()[B.i] || {}).name || "";
 }
 function buildPick(cat, i) {
@@ -4947,10 +5023,26 @@ async function buildTownPlan() {
       jobs.push(placeThing("firepit", cx + 4, cz - 22, 0, 7, { solid: false }));
       // A fuel stop: the shelter, a generator and two pumps, with a hauler filling up.
       jobs.push(placeThing("shelter", cx + 24, cz + 6, face(cx + 24, cz + 6), 7));
-      jobs.push(placeThing("valve", cx + 18, cz + 12, 0, 1.6, { walk: true }));
-      jobs.push(placeThing("valve", cx + 18, cz + 16, 0, 1.6, { walk: true }));
+      jobs.push(placeThing("pump", cx + 18, cz + 12, -Math.PI / 2, 1, { h: 2 }));
+      jobs.push(placeThing("pump", cx + 18, cz + 16, -Math.PI / 2, 1, { h: 2 }));
+      jobs.push(placeThing("barrels", cx + 30, cz + 10, r() * 6, 2.4, { h: 1.2, walk: true }));
       jobs.push(placeThing("generator", cx + 28, cz + 16, 0, 2.4, { walk: true }));
     }
+    // Street life everywhere: a bus shelter by the road, a phone box, a produce table by the kiosk,
+    // and each district's own bits (water tanks and drums down the hill, dishes and planters up it).
+    { const st = WD.roads.find(rd => rd.street && (rd.name === q.name + " Street" || rd.name === q.name + " Avenue"));
+      if (st) { const [[ax, az], [bx, bz]] = st.points, horiz = Math.abs(bx - ax) > Math.abs(bz - az), off = st.width / 2 + 2.2, along = (horiz ? q.x0 + q.w * 0.72 : q.z0 + q.d * 0.72);
+        const x = horiz ? along : ax - off, z = horiz ? az - off : along; jobs.push(placeThing("busstop", x, z, horiz ? 0 : Math.PI / 2, 4, { h: 3, pad: 0.3 })); } }
+    jobs.push(placeThing("phonebox", cx + 16, cz - 19, face(cx + 16, cz - 19), 1.2, { h: 2.4 }));
+    jobs.push(placeThing("produce", cx + 23, cz - 12, face(cx + 23, cz - 12), 2, { h: 1.4, walk: true, pad: 0.2 }));
+    if (dist === "lc" || dist === "mc") {
+      jobs.push(placeThing("watertank", cx - 26, cz - 24, r() * 6, 3, { h: 6 }));
+      for (let i = 0; i < 2; i++) jobs.push(placeThing("barrels", cx - 18 + i * 30, cz + 24 - i * 6, r() * 6, 2.4, { h: 1.2, walk: true }));
+    }
+    if (dist === "mc" || dist === "uc") jobs.push(placeThing("dish", cx + 26, cz + 24, r() * 6, 2.5, { h: 4 }));
+    if (dist === "uc" || dist === "rc") for (let i = 0; i < (dist === "rc" ? 6 : 4); i++) { const a = i / (dist === "rc" ? 6 : 4) * Math.PI * 2 + 0.4, d = 12; jobs.push(placeThing("planter", cx + Math.cos(a) * d, cz + Math.sin(a) * d, r() * 6, 1.4, { h: 1.6, pad: 0.2 })); }
+    // Street cats: one sat up, one curled, somewhere quiet.
+    for (let i = 0; i < 2; i++) { const a = r() * Math.PI * 2, d = 10 + r() * 16; jobs.push(placeThing(i ? "cat2" : "cat", cx + Math.cos(a) * d, cz + Math.sin(a) * d, r() * 6, 0.4, { h: i ? 0.25 : 0.42, solid: false }).then(t => { if (t) critters.push({ m: t.m, base: t.m.scale.y, ph: r() * 6 }); })); }
     // A few palms and shrubs out in the dry places too, so nowhere is bare.
     if (dist === "de" || dist === "lc") for (let i = 0; i < 3; i++) { const a = r() * Math.PI * 2, d = 20 + r() * 18; jobs.push(Promise.resolve(addTree(cx + Math.cos(a) * d, cz + Math.sin(a) * d, 4 + r() * 2, r))); }
   }
@@ -4962,7 +5054,8 @@ async function buildTownPlan() {
     const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
     if (onRoad(x, z, 5) || blocked(x, z, 3.5) || onRiver(x, z, 4)) continue;
     const g = new THREE.Group(), base = terrainAt(x, z);
-    for (const [name, size, rx, rz, ox, oz] of [["mast", 9, 1.35, 0.2, 0, 0], ["container", 5, 0.25, 0.5, 2.2, 1.5], ["chimney", 5, 1.45, 0.6, -2, -1.4]]) {
+    const hero = ["carwreck", "lampfall", "trafficfall"][(S.quadrants.indexOf(q) + i) % 3];
+    for (const [name, size, rx, rz, ox, oz] of [[hero, hero === "carwreck" ? 4 : 5, 0, 0, 0.5, -0.4], ["container", 5, 0.25, 0.5, 2.2, 1.5], ["chimney", 5, 1.45, 0.6, -2, -1.4]]) {
       const src = await staticModel(name); if (!src) continue;
       const m = src.clone(true), bx = new THREE.Box3().setFromObject(m), sz = bx.getSize(new THREE.Vector3());
       m.scale.setScalar(size / Math.max(sz.x, sz.y, sz.z)); m.rotation.set(rx, dr() * 6, rz);
@@ -4986,6 +5079,12 @@ async function buildTownPlan() {
     flyers.push({ g, cx: q.x0 + q.w / 2, cz: q.z0 + q.d / 2, r: 70 + fr() * 90, y: 38 + fr() * 22, w: (0.06 + fr() * 0.05) * (fr() < 0.5 ? -1 : 1), a: fr() * 6.28 });
   }
 }
+// Cats breathe, and now and then look round.
+const critters = [];
+function updateCritters(now) {
+  const t = now / 1000;
+  for (const c of critters) { if (!c.m.parent) continue; c.m.scale.y = c.base * (1 + Math.sin(t * 2.4 + c.ph) * 0.025); }
+}
 const flyers = [];
 function updateFlyers(dt) {
   for (const f of flyers) {
@@ -4996,6 +5095,319 @@ function updateFlyers(dt) {
     f.g.rotation.set(0, Math.atan2(dx, dz), 0); f.g.rotateZ(-Math.sign(f.w) * 0.18);
   }
 }
+
+/* ---------- horses ----------
+   Horses stand hitched at a rail in every place, and some enforcers ride: they patrol on
+   horseback, see further from up there, and gallop after Koda, jumping down to fight once
+   they reach him. Walk up to any horse without a rider and press ACTION to ride it; ACTION
+   or JUMP gets off. A hit knocks a rider (Koda too) out of the saddle.
+   Each horse is one mesh on its own little skeleton, built here from simple shapes, and it
+   walks, trots and gallops with its legs in a real horse's order. */
+const horses = [];
+const HORSE_SEAT = 1.6;   // the saddle, above the ground
+// Bay, chestnut, black, dapple grey, palomino, dark bay, liver chestnut: kept deep enough to read against the sand.
+const HORSE_COATS = [0x5a3018, 0x7a3a1c, 0x1e1813, 0x6a655e, 0x9a7440, 0x3a2212, 0x5e3a22];
+const HORSE_CLOTHS = [0x2f5d8a, 0x8a6a2f, 0x3f6a34, 0x6a2f5d, 0x2f2f2f];
+const ENFORCER_CLOTH = 0x7a1515;
+const horseMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78 });
+const horseGeoCache = {};
+// The skeleton at rest: [name, parent, x, y, z]. Legs are front left, front right, hind left, hind right.
+const HORSE_BONES = [["root", -1, 0, 0, 0], ["body", 0, 0, 1.2, 0], ["neck", 1, 0, 1.38, 0.68], ["head", 2, 0, 1.86, 1.32], ["tail", 1, 0, 1.4, -0.92],
+  ["lf", 1, 0.19, 1.02, 0.6], ["lf2", 5, 0.19, 0.55, 0.6], ["rf", 1, -0.19, 1.02, 0.6], ["rf2", 7, -0.19, 0.55, 0.6],
+  ["lh", 1, 0.19, 1.02, -0.62], ["lh2", 9, 0.19, 0.55, -0.62], ["rh", 1, -0.19, 1.02, -0.62], ["rh2", 11, -0.19, 0.55, -0.62]];
+function horseGeometry(coat, cloth) {
+  const key = coat + ":" + cloth;
+  if (horseGeoCache[key]) return horseGeoCache[key];
+  const parts = [], dark = 0x1c1612, hoof = 0x2a2420, leather = 0x4a2e1a;
+  const put = (g, bone, colour, fn) => { if (fn) fn(g); parts.push([g, bone, colour]); };
+  put(new THREE.CapsuleGeometry(0.37, 1.2, 6, 14), 1, coat, g => { g.rotateX(Math.PI / 2); g.scale(0.95, 1.12, 1); g.translate(0, 1.2, 0); });
+  put(new THREE.SphereGeometry(0.36, 12, 10), 1, coat, g => { g.scale(0.9, 1.05, 0.8); g.translate(0, 1.3, 0.62); });   // chest
+  put(new THREE.CylinderGeometry(0.15, 0.3, 0.86, 12), 2, coat, g => { g.rotateX(0.95); g.translate(0, 1.62, 1.01); });
+  put(new THREE.CylinderGeometry(0.08, 0.14, 0.58, 12), 3, coat, g => { g.rotateX(2.45); g.translate(0, 1.65, 1.52); });
+  put(new THREE.SphereGeometry(0.15, 10, 8), 3, coat, g => { g.scale(0.85, 1, 1.2); g.translate(0, 1.88, 1.38); });
+  put(new THREE.SphereGeometry(0.09, 8, 6), 3, dark, g => { g.scale(1, 0.8, 1); g.translate(0, 1.44, 1.69); });   // muzzle
+  for (const s of [1, -1]) put(new THREE.ConeGeometry(0.04, 0.15, 6), 3, coat, g => { g.rotateX(-0.3); g.translate(s * 0.07, 2.04, 1.3); });
+  put(new THREE.BoxGeometry(0.07, 0.2, 0.9), 2, dark, g => { g.rotateX(0.95 - Math.PI / 2); g.translate(0, 1.72, 0.95); });
+  put(new THREE.CylinderGeometry(0.035, 0.1, 0.8, 7), 4, dark, g => { g.rotateX(-0.3); g.translate(0, 1.06, -1.04); });
+  for (const [i, x, z] of [[5, 0.19, 0.6], [7, -0.19, 0.6], [9, 0.19, -0.62], [11, -0.19, -0.62]]) {
+    put(new THREE.CylinderGeometry(0.08, z > 0 ? 0.1 : 0.13, 0.5, 8), i, coat, g => g.translate(x, 0.8, z));
+    put(new THREE.CylinderGeometry(0.045, 0.06, 0.48, 7), i + 1, coat, g => g.translate(x, 0.32, z));
+    put(new THREE.CylinderGeometry(0.068, 0.075, 0.09, 8), i + 1, hoof, g => g.translate(x, 0.045, z));
+  }
+  put(new THREE.BoxGeometry(0.72, 0.05, 0.86), 1, cloth, g => g.translate(0, 1.58, -0.06));
+  put(new THREE.BoxGeometry(0.5, 0.12, 0.6), 1, leather, g => g.translate(0, 1.63, -0.06));
+  put(new THREE.BoxGeometry(0.34, 0.16, 0.1), 1, leather, g => g.translate(0, 1.71, 0.22));
+  // One geometry for the whole horse: positions, normals, a colour per part, and the bone it rides on.
+  let nv = 0, ni = 0;
+  for (const [g] of parts) { nv += g.attributes.position.count; ni += g.index.count; }
+  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), col = new Float32Array(nv * 3), si = new Uint16Array(nv * 4), sw = new Float32Array(nv * 4), idx = new Uint32Array(ni);
+  let v = 0, k = 0;
+  const c = new THREE.Color();
+  for (const [g, bone, colour] of parts) {
+    c.setHex(colour);
+    const p = g.attributes.position, n = g.attributes.normal;
+    for (let i = 0; i < p.count; i++) {
+      pos.set([p.getX(i), p.getY(i), p.getZ(i)], (v + i) * 3); nor.set([n.getX(i), n.getY(i), n.getZ(i)], (v + i) * 3);
+      col.set([c.r, c.g, c.b], (v + i) * 3); si[(v + i) * 4] = bone; sw[(v + i) * 4] = 1;
+    }
+    for (let i = 0; i < g.index.count; i++) idx[k + i] = g.index.getX(i) + v;
+    v += p.count; k += g.index.count; g.dispose();
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3)); geo.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3)); geo.setAttribute("skinIndex", new THREE.BufferAttribute(si, 4)); geo.setAttribute("skinWeight", new THREE.BufferAttribute(sw, 4));
+  geo.setIndex(new THREE.BufferAttribute(idx, 1));
+  return (horseGeoCache[key] = geo);
+}
+function makeHorse(x, z, yaw, { coat = HORSE_COATS[0], cloth = HORSE_CLOTHS[0], owner = "town" } = {}) {
+  const bones = HORSE_BONES.map(([name]) => Object.assign(new THREE.Bone(), { name }));
+  HORSE_BONES.forEach(([, p, bx, by, bz], i) => {
+    if (p < 0) bones[i].position.set(bx, by, bz);
+    else { const q = HORSE_BONES[p]; bones[i].position.set(bx - q[2], by - q[3], bz - q[4]); bones[p].add(bones[i]); }
+  });
+  const mesh = new THREE.SkinnedMesh(horseGeometry(coat, cloth), horseMat);
+  mesh.add(bones[0]); mesh.castShadow = true; mesh.frustumCulled = false;
+  const root = new THREE.Group(); root.add(mesh);
+  root.updateMatrixWorld(true);
+  mesh.bind(new THREE.Skeleton(bones));
+  const B = {}; bones.forEach(b => { B[b.name] = b; });
+  const h = { root, mesh, B, pos: new THREE.Vector3(x, terrainAt(x, z), z), yaw, v: 0, ph: Math.random(), t: Math.random() * 10, graze: 0, rider: null, owner, last: new THREE.Vector3(x, 0, z), hitched: false };
+  h.pos.y = groundAt(x, z);
+  root.position.copy(h.pos); root.rotation.y = yaw;
+  scene.add(root); horses.push(h);
+  return h;
+}
+function removeHorse(h) { scene.remove(h.root); const i = horses.indexOf(h); if (i >= 0) horses.splice(i, 1); }
+// The gaits: which leg steps when (as a share of one stride) and how far the legs reach.
+const GAITS = {
+  walk: { stride: 1.7, amp: 0.32, lift: 0.7, off: { lf: 0.25, rf: 0.75, lh: 0, rh: 0.5 }, bob: 0.02 },
+  trot: { stride: 2.6, amp: 0.48, lift: 1.0, off: { lf: 0, rh: 0, rf: 0.5, lh: 0.5 }, bob: 0.05 },
+  gallop: { stride: 4.6, amp: 0.78, lift: 1.3, off: { lh: 0, rh: 0.1, lf: 0.45, rf: 0.55 }, bob: 0.09 }
+};
+function poseHorse(h, dt) {
+  const B = h.B, v = h.v, t = (h.t += dt);
+  const gait = v > 7 ? GAITS.gallop : v > 3.2 ? GAITS.trot : GAITS.walk;
+  const moving = Math.min(1, v / 0.6);
+  h.ph = (h.ph + dt * v / gait.stride) % 1;
+  for (const leg of ["lf", "rf", "lh", "rh"]) {
+    const s = (h.ph + gait.off[leg]) * Math.PI * 2, front = leg[1] === "f";
+    B[leg].rotation.x = -gait.amp * Math.sin(s) * moving;
+    // The leg folds while it swings forward through the air.
+    B[leg + "2"].rotation.x = (front ? 1 : 0.6) * gait.lift * Math.max(0, Math.cos(s)) * moving;
+  }
+  const s2 = h.ph * Math.PI * 4;
+  B.body.position.y = 1.2 + Math.abs(Math.sin(s2)) * gait.bob * moving;
+  B.body.rotation.x = v > 7 ? Math.sin(h.ph * Math.PI * 2) * 0.06 : 0;
+  // Standing: the head goes down to graze now and then, the tail swishes, an ear-flick nod.
+  if (v < 0.3 && !h.rider) { h.graze -= dt; if (h.graze < -9) h.graze = 4 + Math.random() * 3; }
+  else h.graze = Math.min(h.graze, 0);
+  const down = h.graze > 0 ? 1 : 0;
+  B.neck.rotation.x += ((h.graze > 0 ? 0.95 : v > 7 ? 0.25 : 0) + Math.sin(t * 1.3) * 0.03 - B.neck.rotation.x) * Math.min(1, dt * 2.5);
+  B.head.rotation.x = Math.sin(t * 0.8) * 0.05 + down * 0.2;
+  B.tail.rotation.z = Math.sin(t * (v > 3 ? 3 : 1.6)) * 0.28;
+  B.tail.rotation.x = -0.25 - Math.min(0.7, v * 0.07);
+}
+function updateHorses(dt) {
+  for (const h of horses) {
+    if (h.rider) { h.pos.copy(h.rider.pos); h.yaw = h.rider.yaw; }
+    const near = koda && Math.hypot(h.pos.x - koda.pos.x, h.pos.z - koda.pos.z) < 70;
+    h.root.visible = near && !h.hidden;
+    if (!near) { h.last.copy(h.pos); continue; }
+    // Speed measured from how far it really moved, so the legs never slide.
+    const moved = dt > 0 ? Math.hypot(h.pos.x - h.last.x, h.pos.z - h.last.z) / dt : 0;
+    h.last.copy(h.pos);
+    h.v += (Math.min(moved, 14) - h.v) * Math.min(1, dt * 8);
+    h.root.position.copy(h.pos); h.root.rotation.y = h.yaw;
+    poseHorse(h, dt);
+  }
+}
+// A rider's pose: thighs out and forward over the saddle, knees bent, hands on the reins.
+function seatPose(root) {
+  if (!root.userData.seat) root.userData.seat = ["UpLeg", "Leg"].map(part => ["Left", "Right"].map(sd => { let f = null; root.traverse(o => { if (!f && o.isBone && new RegExp("mixamorig:?" + sd + part + "$").test(o.name)) f = o; }); return f; }));
+  root.updateMatrixWorld(true);
+  root.getWorldQuaternion(_ai.rq);
+  const across = new THREE.Vector3(1, 0, 0).applyQuaternion(_ai.rq).normalize(), ahead = new THREE.Vector3(0, 0, 1).applyQuaternion(_ai.rq).normalize();
+  const turn = (bone, axis, ang) => { if (!bone) return; bone.parent.getWorldQuaternion(_ai.pq); _ai.q.setFromAxisAngle(axis, ang); bone.quaternion.premultiply(_ai.pq.clone().invert().multiply(_ai.q).multiply(_ai.pq)); bone.updateMatrixWorld(true); };
+  const [thighs, shins] = root.userData.seat;
+  thighs.forEach((b, i) => { turn(b, ahead, (i === 0 ? 1 : -1) * 0.42); turn(b, across, -1.35); });
+  shins.forEach(b => turn(b, across, 1.45));
+  armsReach(root, 0.55);
+}
+function seat(a, on) {
+  a.seated = on ? { lift: HORSE_SEAT - (a.hipsH || 0.95) + 0.02 } : null;
+  if (!on) { a.model.position.y = a.baseY; a.model.position.z = 0; }
+}
+// Koda gets on and off.
+function nearHorse(r = 2.6) {
+  let best = null, bd = r;
+  for (const h of horses) { if (h.rider) continue; const d = Math.hypot(h.pos.x - koda.pos.x, h.pos.z - koda.pos.z); if (d < bd) { bd = d; best = h; } }
+  return best;
+}
+function mount(h) {
+  koda.pushing = null; input.sneak = false; $("btnSneak").classList.remove("on");
+  h.hitched = false; h.rider = koda; koda.riding = h; h.v = 0;
+  koda.pos.set(h.pos.x, groundAt(h.pos.x, h.pos.z), h.pos.z); koda.face(h.yaw, 1);
+  seat(koda, true); koda.play("idle", { fade: 0.1 });
+  if (!save.rodeOnce) { save.rodeOnce = true; writeSave(); toast("Riding. Push further to trot, all the way (or Shift / RT) to gallop. ACTION or JUMP to get off.", 4); }
+}
+function dismount(knocked = false) {
+  const h = koda.riding; if (!h) return;
+  koda.riding = null; h.rider = null; h.v = 0; seat(koda, false);
+  const sx = Math.cos(koda.yaw), sz = -Math.sin(koda.yaw);   // off to his left
+  const s = freeSpot(koda.pos.x + sx * 1.1, koda.pos.z + sz * 1.1, 0.5);
+  koda.pos.set(s.x, groundAt(s.x, s.z), s.z);
+  if (knocked) { koda.play("hurt", { once: true }); attackLock = 0.5; }
+  else koda.play("idle", { fade: 0.1 });
+}
+function ride(dt) {
+  const h = koda.riding;
+  const gallop = input.mag > 0.93 || boost.on;
+  const target = !input.mag ? 0 : input.mag < 0.55 ? 1.8 : gallop ? 10.5 : 5.2;
+  h.cmd = (h.cmd || 0) + (target - (h.cmd || 0)) * Math.min(1, dt * (target > (h.cmd || 0) ? 1.5 : 2.8));
+  if (input.mag) koda.face(Math.atan2(input.x, input.z), Math.min(1, dt * (h.cmd > 6 ? 2.2 : 3.6)));
+  if (h.cmd > 0.05) {
+    const bx = koda.pos.x, bz = koda.pos.z;
+    moveWithCollision(koda.pos, Math.sin(koda.yaw) * h.cmd * dt, Math.cos(koda.yaw) * h.cmd * dt, 0.6, true);
+    const got = Math.hypot(koda.pos.x - bx, koda.pos.z - bz) / dt;
+    if (got < h.cmd * 0.4) h.cmd = Math.max(got, h.cmd * 0.6);   // walked into something: pull up
+  }
+  const g = groundAt(koda.pos.x, koda.pos.z);
+  if (g === MUD || swimming()) { dismount(); air = { vy: 0, speed: 0, kick: false, fall: true }; return; }
+  koda.pos.y = g;
+  koda.moving = h.cmd > 0.3; koda.sprinting = h.cmd > 7; koda.sneaking = false; koda.inCover = null;
+  koda.play("idle");
+  koda.update(dt);
+}
+// Enforcers on horseback.
+function riderOff(e) {
+  const h = e.horse; if (!h) return;
+  e.horse = null; h.rider = null; h.v = 0; seat(e.a, false);
+  const f = forward(e.a), s = freeSpot(e.a.pos.x + f.y * 1.1, e.a.pos.z - f.x * 1.1, 0.5);
+  e.a.pos.set(s.x, floorAt(s.x, s.z), s.z);
+  e.speed = 2 + Math.random() * 0.5;
+}
+function makeRider(kind, x, z, route, extra = {}) {
+  return makeActor(kind + ".glb", ENEMIES[kind] || 1.9).then(a => {
+    const h = makeHorse(x, z, 0, { coat: HORSE_COATS[Math.floor(Math.random() * HORSE_COATS.length)], cloth: ENFORCER_CLOTH, owner: "enemy" });
+    a.pos.set(x, floorAt(x, z), z); scene.add(a.root); seat(a, true); a.play("fight_idle");
+    h.rider = a;
+    const e = Object.assign({ a, qd: null, route, leg: 1, state: "patrol", meter: 0, hp: kind === "gilded" ? 5 : 3, hidden: false, cool: 0.5, hitT: 0, lastSeen: new THREE.Vector3(), searchT: 0, speed: 2.1, kind, shiftT: 0, horse: h }, extra);
+    enemies.push(e);
+    return e;
+  });
+}
+// A hitching rail: two posts and a bar, with horses tied to it, heads to the rail.
+const railMat = new THREE.MeshStandardMaterial({ color: 0x6e4a2a, roughness: 0.9 });
+function addHitch(x, z, yaw, n, r = Math.random) {
+  const len = 1.6 * n + 0.6, base = terrainAt(x, z);
+  const g = new THREE.Group();
+  for (const s of [-1, 1]) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 1.15, 7), railMat); p.position.set(s * len / 2, 0.57, 0); p.castShadow = true; g.add(p); }
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, len + 0.1, 7), railMat); bar.rotation.z = Math.PI / 2; bar.position.y = 1.05; bar.castShadow = true; g.add(bar);
+  const trough = new THREE.Mesh(new THREE.BoxGeometry(len * 0.8, 0.35, 0.45), railMat); trough.position.set(0, 0.18, 0.5); trough.castShadow = true; g.add(trough);
+  g.position.set(x, base, z); g.rotation.y = yaw; scene.add(g);
+  const cx = Math.cos(yaw), sx = Math.sin(yaw);
+  // Solid round the rail and the trough: the corners of that strip, turned with the rail.
+  const pts = [[-len / 2, -0.1], [len / 2, -0.1], [-len / 2, 0.75], [len / 2, 0.75]].map(([lx, lz]) => [x + cx * lx + sx * lz, z - sx * lx + cx * lz]);
+  const b = { minX: Math.min(...pts.map(q => q[0])), maxX: Math.max(...pts.map(q => q[0])), minZ: Math.min(...pts.map(q => q[1])), maxZ: Math.max(...pts.map(q => q[1])), top: base + 1.1, base, walk: false, low: true, mesh: g, mats: [] };
+  blockers.push(b);
+  const made = [];
+  for (let i = 0; i < n; i++) {
+    const off = (i - (n - 1) / 2) * 1.6, ax = x + cx * off + sx * 2.1, az = z - sx * off + cx * 2.1;
+    const h = makeHorse(ax, az, yaw + Math.PI, { coat: HORSE_COATS[Math.floor(r() * HORSE_COATS.length)], cloth: HORSE_CLOTHS[Math.floor(r() * HORSE_CLOTHS.length)] });
+    h.hitched = true; made.push(h);
+  }
+  return { g, horses: made, b };
+}
+function buildHitches() {
+  for (const q of S.quadrants) {
+    const r = rng(q.id.charCodeAt(2) * 313 + 7), cx = q.x0 + q.w / 2, cz = q.z0 + q.d / 2;
+    for (let tries = 0; tries < 14; tries++) {
+      const a = r() * Math.PI * 2, d = 17 + r() * Math.min(q.w, q.d) * 0.25, x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+      if (onRoad(x, z, 4) || onRiver(x, z, 5) || ridgeAt(x, z) > 0.2 || blocked(x, z, 4.2)) continue;
+      addHitch(x, z, Math.atan2(cx - x, cz - z) + Math.PI, 2 + (r() < 0.4 ? 1 : 0), r);
+      break;
+    }
+  }
+}
+// Free roam: riders patrol the roads, two to a district.
+function spawnRoadRiders() {
+  const r = rng(4242), kinds = Object.keys(ENEMIES).filter(k => k !== "gilded"), m = mission;
+  for (const q of S.quadrants) {
+    if (r() < 0.45) continue;
+    const cx = q.x0 + q.w / 2, cz = q.z0 + q.d / 2, route = [];
+    for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + r(), s = freeSpot(cx + Math.cos(a) * 24, cz + Math.sin(a) * 24, 1); route.push(new THREE.Vector3(s.x, floorAt(s.x, s.z), s.z)); }
+    makeRider(kinds[Math.floor(r() * kinds.length)], route[0].x, route[0].z, route, { roam: true }).then(e => { if (mission !== m) { scene.remove(e.a.root); removeHorse(e.horse); enemies.splice(enemies.indexOf(e), 1); } }).catch(() => null);
+  }
+}
+
+/* ---------- stream overlay (OBS) ----------
+   Stream the game with OBS and the overlay shows what's happening on top: the song, the
+   objective, the parts of the song unlocked, where Koda is, hearts, when he's been seen,
+   room chat and the big moments. Turn it on from the pause menu; it gives a link to add in
+   OBS as a Browser source. The game sends its state to that link a couple of times a second.
+   "Clean screen" hides the game's own HUD so the overlay is the only one on the stream. */
+var obs = { code: null, ch: null, t: 0, last: "", idle: 0 };   // var: toasts before this line still find it
+function obsCode() {
+  const make = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), b => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[b % 32]).join("");
+  try { let c = localStorage.getItem("gill.obs"); if (!c) { c = make(); localStorage.setItem("gill.obs", c); } return c; } catch (e) { return obs.code || make(); }
+}
+const obsLink = () => `${location.origin}${location.pathname.replace(/[^/]*$/, "")}obs.html?c=${obs.code || obsCode()}`;
+function obsStart() {
+  if (!ONLINE || obs.ch) return;
+  obs.code = obsCode();
+  obs.ch = ONLINE.channel("gill-obs-" + obs.code, { config: { broadcast: { self: false } } });
+  obs.ch.subscribe(st => { if (st === "SUBSCRIBED") { obs.last = ""; obs.t = 0; } });
+  try { localStorage.setItem("gill.obsOn", "1"); } catch (e) { /* no storage */ }
+  renderObs();
+}
+async function obsStop() {
+  if (obs.ch) { try { await obs.ch.unsubscribe(); } catch (e) { /* gone */ } }
+  obs.ch = null;
+  try { localStorage.removeItem("gill.obsOn"); } catch (e) { /* no storage */ }
+  renderObs();
+}
+function obsSend(event, payload) { if (obs && obs.ch) { try { obs.ch.send({ type: "broadcast", event, payload }); } catch (e) { /* not ready */ } } }
+function updateObs(dt) {
+  if (!obs.ch || (obs.t -= dt) > 0) return;
+  obs.t = 0.5;
+  const q = koda ? zoneAt(koda.pos.x, koda.pos.z) : null, m = mission;
+  const st = {
+    playing: state === "play" || state === "build" || state === "paused", state,
+    song: m ? m.def.song : "", n: m && m.index >= 0 ? m.index + 1 : 0, free: !!(m && m.def.free),
+    objective: $("objective") ? $("objective").textContent : "",
+    place: q ? q.name : "", district: q ? districtOf(q) : "",
+    parts: m ? m.quads.map((qd, i) => ({ name: qd.partName, done: !!qd.done, colour: "#" + PART_COLOURS[i % PART_COLOURS.length].toString(16).padStart(6, "0") })) : [],
+    time: m && !m.def.free ? Math.floor(m.t) : null,
+    hearts: health, wanted: anySeen ? 2 : anySus ? 1 : 0, riding: !!(koda && koda.riding), building: state === "build",
+    room: coop.ch ? coop.code : "", players: coop.ch ? coop.others.size + 1 : 1, world: myWorld ? myWorld.name : "",
+    hour: Math.round(DAY.hour * 10) / 10
+  };
+  const key = JSON.stringify(st);
+  if (key === obs.last && (obs.idle += 0.5) < 5) return;   // unchanged: a heartbeat every 5 seconds
+  obs.idle = 0; obs.last = key;
+  obsSend("state", st);
+}
+function renderObs() {
+  const on = !!obs.ch;
+  $("obsToggle").textContent = on ? "Overlay: on" : "Overlay: off";
+  $("obsToggle").classList.toggle("primary", on); $("obsToggle").classList.toggle("ghost", !on);
+  $("obsLink").value = ONLINE ? obsLink() : "";
+  $("obsNote").textContent = !ONLINE ? "The overlay works when you play on feelzmachine.com." : on ? "Live. Anything you do now shows on the overlay." : "Turn the overlay on, then add the link to OBS.";
+  $("obsClean").textContent = document.body.classList.contains("clean-feed") ? "Clean screen: on" : "Clean screen: off";
+}
+(function obsControls() {
+  $("obsBtn").addEventListener("click", () => { $("obsPanel").classList.toggle("hidden"); renderObs(); });
+  $("obsClose").addEventListener("click", () => $("obsPanel").classList.add("hidden"));
+  $("obsToggle").addEventListener("click", () => { if (obs.ch) obsStop(); else obsStart(); });
+  $("obsCopy").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(obsLink()); $("obsCopy").textContent = "Copied"; } catch (e) { $("obsLink").select(); document.execCommand && document.execCommand("copy"); $("obsCopy").textContent = "Copied"; }
+    setTimeout(() => { $("obsCopy").textContent = "Copy link"; }, 1600);
+  });
+  $("obsPreview").addEventListener("click", () => window.open(obsLink() + "&preview=1", "_blank", "noopener"));
+  $("obsClean").addEventListener("click", () => { document.body.classList.toggle("clean-feed"); try { localStorage.setItem("gill.clean", document.body.classList.contains("clean-feed") ? "1" : ""); } catch (e) { /* no storage */ } renderObs(); });
+  $("obsLink").addEventListener("keydown", e => e.stopPropagation());
+  try { if (localStorage.getItem("gill.clean") === "1") document.body.classList.add("clean-feed"); if (localStorage.getItem("gill.obsOn") === "1") obsStart(); } catch (e) { /* no storage */ }
+})();
 
 /* ---------- townsfolk at work ----------
    The place Koda is in comes alive: a seller behind every stall and people walking
@@ -5224,7 +5636,7 @@ function coopUnpiece(key) {
 
 /* ---------- my worlds ----------
    A world is the city plus everything one player builds in it, kept on their Feelz Machine
-   account (a paid plan keeps it; anyone can try building). Open it from My worlds: it plays
+   account (Premium keeps it; anyone can play and try building). Open it from My worlds: it plays
    as free roam with your pieces in place. Make a room from inside it and friends walk and
    build in it with you; what they place is kept in your world. The official city (Steve's
    pieces, the missions) is the same for everyone. */
@@ -5248,7 +5660,7 @@ async function renderWorlds() {
   const { data: s2 } = await ONLINE.auth.getSession();
   if (!s2 || !s2.session) { note.textContent = "Sign in to Feelz Machine in this browser to keep worlds."; return; }
   await checkWorlds();
-  note.textContent = canSaveWorlds ? "Your worlds, kept on your Feelz Machine account." : "Keeping worlds comes with a Feelz Machine plan. You can still build in Free roam and in rooms.";
+  note.textContent = canSaveWorlds ? "Your worlds, kept on your Feelz Machine account." : "Making your own worlds comes with Feelz Machine Premium. The game, Free roam and rooms are free for everyone, and you can build in them.";
   $("worldNew").disabled = !canSaveWorlds;
   const { data } = await ONLINE.from("gill_worlds").select("id,name,updated_at").order("updated_at", { ascending: false });
   list.innerHTML = (data || []).map(w => `<div class="world-row" data-id="${w.id}"><b>${w.name.replace(/[<>&]/g, "")}</b><small>${new Date(w.updated_at).toLocaleDateString()}</small><button class="primary" data-act="play">Play</button><button class="ghost" data-act="rename">Rename</button></div>`).join("") || (canSaveWorlds ? '<p class="coop-or">No worlds yet. Make your first one.</p>' : "");
@@ -5362,14 +5774,16 @@ function wakePlacedEnforcers() {
     if (m.actor) m.actor.root.visible = false;
     const r = m.rec, route = [];
     for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + (r.rot || 0), s2 = freeSpot(r.x + Math.cos(a) * 5, r.z + Math.sin(a) * 5, 0.6); route.push(new THREE.Vector3(s2.x, floorAt(s2.x, s2.z), s2.z)); }
-    makeActor(r.model + ".glb", ENEMIES[r.model] || 1.9).then(a => {
+    const mounted = /^horse:/.test(r.model || ""), kind = mounted ? r.model.slice(6) : r.model;
+    if (mounted) { if (m.horse) m.horse.hidden = true; makeRider(kind, r.x, r.z, route, { placed: m }).catch(() => null); continue; }
+    makeActor(kind + ".glb", ENEMIES[kind] || 1.9).then(a => {
       if (!a || !(mission && mission.def.free)) return;
       a.pos.set(r.x, floorAt(r.x, r.z), r.z); scene.add(a.root); a.play("walk");
       enemies.push({ a, qd: null, route, leg: 1, state: "patrol", meter: 0, hp: r.model === "gilded" ? 5 : 3, hidden: false, cool: 0.5, hitT: 0, lastSeen: new THREE.Vector3(), searchT: 0, speed: 2.2, kind: r.model, shiftT: 0, placed: m });
     }).catch(() => null);
   }
 }
-function sleepPlacedEnforcers() { for (const m of placed) if (m.rec.kind === "enforcer") { m.awake = false; if (m.actor) m.actor.root.visible = true; } }
+function sleepPlacedEnforcers() { for (const m of placed) if (m.rec.kind === "enforcer") { m.awake = false; if (m.actor) m.actor.root.visible = true; if (m.horse) m.horse.hidden = false; } }
 
 /* ---------- stores ----------
    Every place has stores. Walk up to one and press ACTION: buy wood, stone, sand, metal and
@@ -5421,6 +5835,7 @@ async function renderShop() {
    shows when your Feelz Machine account has a birth date showing 18 or over. */
 const CHAT_BAD = /\b(fuck|shit|bitch|cunt|nigg|fag|dick|pussy|slut|whore)\w*/gi;
 function chatShow(name, colour, text) {
+  obsSend("chat", { name, colour: hexCol(colour), text });
   const p2 = document.createElement("p");
   p2.innerHTML = `<b style="color:${hexCol(colour)}"></b><span></span>`;
   p2.querySelector("b").textContent = name; p2.querySelector("span").textContent = text;
@@ -5518,6 +5933,7 @@ function showRoomButtons() {
   buildProps();
   $("loading").textContent = "Setting up the streets…";
   await buildTownPlan();
+  buildHitches();
   buildAwnings();
   buildNav();
   buildRoadNet();
@@ -5532,5 +5948,6 @@ function showRoomButtons() {
   window.GILL_FLOATS = () => floats; window.GILL_DRONES = () => drones;
   window.GILL = { startBuild, B, buildPick, buildPlace, buildPickUp, placedCount: () => placed.length, inv: () => Object.assign({}, inv), dustCount: () => dust.pool.filter(p => p.life > 0).length, flyerCount: () => flyers.length, zones: S.quadrants, ambientCount: () => ambient.map(p => p.job).join(","), moveWithCollision, shrines, travelTo, prayNear, guideRoute, buildStep: dt => updateBuild(dt), scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
     enemies, npcs, get state() { return state; }, save: () => save, blockers, keys, input, cardContinue, pause, resume, drawBigMap, pathNext, stick, FOCUS, beat, songTime, boost, get lastSafe() { return lastSafe; }, fightFoe, get camZoom() { return camZoom; }, attack, jump, action, objectiveTarget, get health() { return health; }, get music() { return music; },
+    horses, mount, dismount, nearHorse, obs, obsStart, updateObs, critters, placeThing, staticModel: n => staticModel(n),
     sim(seconds) { let t = performance.now(); for (let i = 0; i < seconds * 30; i++) { t += 33; tick(1 / 30, t); } } };
 })();

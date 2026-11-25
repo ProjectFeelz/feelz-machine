@@ -15,11 +15,12 @@ import React, { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
 import {
-  Gamepad2, Play, Users, Music, Sparkles, Trophy, Ticket, Radio, Lock, ChevronRight, Crown,
+  Gamepad2, Play, Users, Music, Sparkles, Trophy, Ticket, Radio, Lock, ChevronRight, Crown, Hammer, Map as MapIcon,
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 const RUN = '/run/';
+const GILL = '/gill/';
 
 // The painting each mission opens on: the hero shows these on their own, with dancing Koda in front.
 const PAINTINGS = [
@@ -52,9 +53,24 @@ const GAMES = [
       { icon: Sparkles, text: 'Artist runs' },
     ],
   },
+  {
+    id: 'gill',
+    title: 'G.I.L.L.',
+    tagline: 'Good Intentions Last Longest',
+    description: 'An open city set to the songs of Big Feelz. Bring each quadrant back to life to the music, roam free, ride, build, and play together with your family and friends.',
+    image: `${GILL}cover.webp`,
+    href: GILL,
+    external: true,
+    status: 'Under development',
+    tags: [
+      { icon: MapIcon, text: 'Open city' },
+      { icon: Hammer, text: 'Build and gather' },
+      { icon: Users, text: 'Play together' },
+    ],
+  },
 ];
 
-const COMING = 2;   // empty spaces on the phone shelf, so it reads as a catalogue that grows
+const COMING = 1;   // empty spaces on the phone shelf, so it reads as a catalogue that grows
 
 const FEATURES = [
   { icon: Users,  title: 'Online co-op',        text: 'Up to 6 friends, one mission, each on their own phone.' },
@@ -313,6 +329,36 @@ function DesktopGames() {
           <ArtistRuns />
         </section>
 
+        {/* ── In development ─────────────────────────────────────────────── */}
+        {GAMES.filter(g => g.status).map(g => (
+          <section key={g.id} className="mt-14 rounded-3xl border border-amber-300/20 overflow-hidden relative grid grid-cols-5">
+            <div className="relative col-span-3 min-h-[300px]">
+              <img src={g.image} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-black" />
+              <span className="absolute top-4 left-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/75 border border-amber-300/50 text-[10px] font-black tracking-[0.25em] uppercase text-amber-200">
+                <Hammer className="w-3.5 h-3.5" /> {g.status}
+              </span>
+            </div>
+            <div className="col-span-2 bg-black p-8 flex flex-col justify-center">
+              <p className="text-[10px] font-bold tracking-[0.3em] text-amber-300/80 uppercase">{g.tagline}</p>
+              <h2 className="text-4xl font-black italic mt-1">{g.title}</h2>
+              <p className="text-sm text-white/60 mt-3 leading-relaxed">{g.description}</p>
+              <p className="text-xs text-white/40 mt-3 leading-relaxed">It is still being built, so things change from week to week. Free to play for everyone; making your own worlds comes with Premium.</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {g.tags.map(({ icon: Icon, text }) => (
+                  <span key={text} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.07] border border-white/[0.08] text-[11px] text-white/75">
+                    <Icon className="w-3.5 h-3.5 text-amber-300" /> {text}
+                  </span>
+                ))}
+              </div>
+              <button type="button" onClick={() => go(g.href)}
+                className="mt-6 self-start inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 text-black text-sm font-black">
+                <Play className="w-4 h-4 fill-black" /> Try it early
+              </button>
+            </div>
+          </section>
+        ))}
+
         {/* ── What is coming ─────────────────────────────────────────────── */}
         <section className="mt-14 rounded-3xl border border-white/[0.08] overflow-hidden relative">
           <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 via-fuchsia-500/10 to-sky-500/10" />
@@ -323,13 +369,13 @@ function DesktopGames() {
               <p className="text-sm text-white/55 mt-2 max-w-md">New games played to the music, built on the same engine as Feelz Run, so your account and progress come with you.</p>
             </div>
             <div className="flex gap-3">
-              {['m08', 'm13', 'm05'].map((id, i) => (
+              {['m08', 'm13'].map((id, i) => (
                 <div key={id} className="relative w-36 aspect-[3/4] rounded-2xl overflow-hidden border border-white/[0.1]">
                   <img src={`${RUN}assets/missions/${id}.webp`} alt="" className="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-60" />
                   <div className="absolute inset-0 bg-black/40" />
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
                     <Lock className="w-6 h-6 text-white/70" />
-                    <p className="mt-2 text-xs font-black tracking-[0.3em] text-white/60">GAME {String(i + 2).padStart(2, '0')}</p>
+                    <p className="mt-2 text-xs font-black tracking-[0.3em] text-white/60">GAME {String(i + 3).padStart(2, '0')}</p>
                   </div>
                 </div>
               ))}
@@ -380,6 +426,11 @@ function PhoneGames({ open }) {
             <div className="relative aspect-[16/9] bg-white/[0.04]">
               <img src={g.image} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+              {g.status && (
+                <span className="absolute top-3 right-3 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/70 border border-amber-300/50 text-[10px] font-black tracking-[0.15em] uppercase text-amber-200">
+                  <Hammer className="w-3 h-3" /> {g.status}
+                </span>
+              )}
               <div className="absolute left-4 bottom-3 right-4">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-amber-200/80">{g.tagline}</p>
                 <p className="text-2xl font-black text-white leading-tight">{g.title}</p>
@@ -395,7 +446,7 @@ function PhoneGames({ open }) {
                 ))}
               </div>
               <span className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-amber-400 text-black text-xs font-bold">
-                <Play className="w-3.5 h-3.5" /> Play
+                <Play className="w-3.5 h-3.5" /> {g.status ? 'Try it early' : 'Play'}
               </span>
             </div>
           </button>

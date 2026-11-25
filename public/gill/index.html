@@ -164,10 +164,23 @@
       <div class="pause-btns" id="pauseBtns">
         <button class="primary" id="resumeBtn">Resume</button>
         <button class="ghost" id="muteBtn">Music: on</button>
+        <button class="ghost" id="obsBtn">Stream overlay</button>
         <button class="ghost" id="quitBtn">Back to title</button>
       </div>
       <div class="pause-travel pause-btns" id="pauseTravel"></div>
       <button class="pause-toggle" id="pauseToggle" aria-label="Show or hide the buttons">&#9650;</button>
+    </div>
+    <div id="obsPanel" class="obs-panel hidden" role="dialog" aria-label="Stream overlay">
+      <div class="obs-head"><p class="kicker">Stream overlay for OBS</p><button class="ghost" id="obsClose" aria-label="Close">&times;</button></div>
+      <ol class="obs-steps">
+        <li>Turn the overlay on.</li>
+        <li>Copy the link.</li>
+        <li>In OBS: Sources, <b>+</b>, Browser. Paste the link. Width 1920, height 1080.</li>
+        <li>Put it above your game capture.</li>
+      </ol>
+      <div class="obs-row"><input id="obsLink" readonly aria-label="Overlay link"><button class="primary" id="obsCopy">Copy link</button></div>
+      <div class="obs-row"><button class="ghost" id="obsToggle">Overlay: off</button><button class="ghost" id="obsClean">Clean screen: off</button><button class="ghost" id="obsPreview">Preview</button></div>
+      <p class="obs-note" id="obsNote"></p>
     </div>
     <div class="map-zoom">
       <button id="mapIn" aria-label="Zoom in">+</button>
