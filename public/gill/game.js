@@ -888,6 +888,7 @@ function blocked(x, z, r, y = null, isKoda = false) {
   // Hills and dunes are walls: checked across the body's width, not just at its middle.
   if (ridgeAt(x, z) > 0.9 || ridgeAt(x + r, z) > 0.9 || ridgeAt(x - r, z) > 0.9 || ridgeAt(x, z + r) > 0.9 || ridgeAt(x, z - r) > 0.9) return RIDGE;
   for (const b of nearBlocks(x, z, r + 0.1)) {
+    if (b.interior && isKoda) continue;   // a building with an inside: he walks in
     if (b.mud) { if (isKoda) continue; if (b.bridgeOver) continue; if (onBridge(x, z)) continue; }
     else if ((b.ramp ? rampTop(b, x, z) : b.top) <= y + 0.35) continue;
     if (x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r) { if (!b.cells || inCells(b.cells, x, z, r)) return b; }
@@ -2015,7 +2016,12 @@ function stashSpot(qd) {
   const q = qd.q, c = zoneCenter(q);
   // Hand-placed clue spots in this place come first.
   const o = zoneOrigin(q), spots = CLUE_MADE.filter(m => !m.gone && m.rec.x > o.x && m.rec.x < o.x + q.w && m.rec.z > o.y && m.rec.z < o.y + q.d);
-  if (spots.length) { const m = spots[Math.floor(qd.r() * spots.length)]; return freeSpot(m.rec.x, m.rec.z, 1.2, qd.r); }
+  if (spots.length) {
+    const m = spots[Math.floor(qd.r() * spots.length)], x = m.rec.x, z = m.rec.z;
+    // Inside a building he can walk into: the part waits right there, indoors.
+    if (nearBlocks(x, z, 0.5).some(b => b.interior && x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ)) return { x, z };
+    return freeSpot(x, z, 1.2, qd.r);
+  }
   if (qd.r() < 0.85) {
     const boxes = inBox(q.x0 + 4, q.z0 + 4, q.x0 + q.w - 4, q.z0 + q.d - 4).filter(b => SEARCHABLE[b.prop] && !b.holds && Math.hypot((b.minX + b.maxX) / 2 - c.x, (b.minZ + b.maxZ) / 2 - c.y) > 12);
     if (boxes.length) {
@@ -4394,7 +4400,18 @@ function drawClock() {
   el.textContent = Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0");
   el.classList.remove("low");
 }
+// Indoors, the building he is in turns see-through so he and the camera can see the room.
+let insideB = null;
+function updateInside() {
+  let now = null;
+  if (koda) for (const b of nearBlocks(koda.pos.x, koda.pos.z, 0.5)) if (b.interior && koda.pos.x > b.minX && koda.pos.x < b.maxX && koda.pos.z > b.minZ && koda.pos.z < b.maxZ) { now = b; break; }
+  if (now === insideB) return;
+  const see = (b, on) => { if (b) for (const m of b.mats || []) { m.transparent = on; m.opacity = on ? 0.15 : 1; m.depthWrite = !on; m.needsUpdate = true; } };
+  see(insideB, false); see(now, true); insideB = now;
+  if (now) popText("INSIDE");
+}
 function tick(dt, now) {
+  updateInside();
   for (const m of CLUE_MADE) if (m.clueMesh) m.clueMesh.visible = B.on;
   if (!(tick.cullT > now - 250)) {
     tick.cullT = now;
@@ -4819,9 +4836,10 @@ function unmakePiece(made) {
 const CLUE_MADE = [];   // clue spot pieces, saved or from clues.js
 // The starting clue spots from clues.js, unless one has been moved (a saved spot with its name).
 async function seedClues() {
-  const moved = new Set(placed.filter(p => p.rec.kind === "clue").map(p => p.rec.label));
+  const moved = new Set(placed.filter(p => p.rec.kind === "clue" || p.rec.interior).map(p => p.rec.label));
   const all = window.GILL_CLUES || {};
-  for (const id in all) for (const s of all[id]) if (!moved.has(s.id)) placed.push(await makePiece({ kind: "clue", label: s.id, x: s.x, z: s.z, rot: 0, w: 1, d: 1, h: 1.2, interior: false, y: null }));
+  for (const r of all.rooms || []) if (!moved.has(r.id)) placed.push(await makePiece({ kind: "building", model: r.model, label: r.id, x: r.x, z: r.z, rot: 0, w: r.w, d: r.d, h: r.h, interior: true, door: r.door, y: null }));
+  for (const id in all) if (id !== "rooms") for (const s of all[id]) if (!moved.has(s.id)) placed.push(await makePiece({ kind: "clue", label: s.id, x: s.x, z: s.z, rot: 0, w: 1, d: 1, h: 1.2, interior: false, y: null }));
 }
 const placed = [];   // pieces from Feelz Machine and the ones placed this visit
 const stores = [];   // store pieces: walk up to one to shop

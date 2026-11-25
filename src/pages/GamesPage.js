@@ -176,11 +176,11 @@ function ArtistRuns() {
         <h3 className="text-lg font-black">Artist runs</h3>
       </div>
       <p className="text-xs text-white/50 mt-1">Artists on Feelz Machine put their own songs in the game. Run them.</p>
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        {levels === null && Array.from({ length: 4 }).map((_, i) => <div key={i} className="aspect-[4/3] rounded-2xl bg-white/[0.03] animate-pulse" />)}
-        {levels && levels.slice(0, 4).map(lv => (
+      <div className="mt-5 flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 [scrollbar-width:thin]">
+        {levels === null && Array.from({ length: 4 }).map((_, i) => <div key={i} className="w-[46%] shrink-0 aspect-[4/3] rounded-2xl bg-white/[0.03] animate-pulse" />)}
+        {levels && levels.slice(0, 12).map(lv => (
           <button key={lv.id} type="button" onClick={() => go(`${RUN}?level=${lv.id}`)}
-            className="group relative aspect-[4/3] rounded-2xl overflow-hidden border border-white/[0.08] text-left">
+            className="group relative w-[46%] shrink-0 snap-start aspect-[4/3] rounded-2xl overflow-hidden border border-white/[0.08] text-left">
             {lv.cover
               ? <img src={lv.cover} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
               : <div className="absolute inset-0 bg-gradient-to-br from-fuchsia-600/30 to-amber-500/20" />}
@@ -195,14 +195,14 @@ function ArtistRuns() {
           </button>
         ))}
         {levels && levels.length === 0 && (
-          <div className="col-span-2 rounded-2xl border border-dashed border-white/[0.1] py-10 px-6 text-center">
+          <div className="w-full shrink-0 rounded-2xl border border-dashed border-white/[0.1] py-10 px-6 text-center">
             <Music className="w-7 h-7 text-fuchsia-300/40 mx-auto" />
             <p className="text-sm text-white/60 font-semibold mt-2">The first artist runs are on their way.</p>
             <p className="text-xs text-white/40 mt-1">Artists on Premium can put a song in the game from Upload, then Manage Tracks.</p>
           </div>
         )}
         {levels && levels.length > 0 && levels.length < 4 && Array.from({ length: 4 - levels.length }).map((_, i) => (
-          <div key={'e' + i} className="aspect-[4/3] rounded-2xl border border-dashed border-white/[0.1] flex flex-col items-center justify-center text-center px-3">
+          <div key={'e' + i} className="w-[46%] shrink-0 snap-start aspect-[4/3] rounded-2xl border border-dashed border-white/[0.1] flex flex-col items-center justify-center text-center px-3">
             <Music className="w-6 h-6 text-white/15" />
             <p className="text-[11px] text-white/35 mt-2 leading-snug">An artist's song goes here next</p>
           </div>
