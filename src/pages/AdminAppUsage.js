@@ -61,6 +61,14 @@ export const FUNNELS = [
     blurb: 'From seeing the plans to paying.',
     steps: ['upgrade_viewed', 'upgrade_plan_chosen', 'upgrade_paid'],
   },
+  {
+    // Its own funnel rather than a fourth step on the artist one: artist Pro
+    // and Fan Pro are different products bought by different people, and one
+    // bar chart holding both answers nothing about either.
+    title: 'Fan Pro',
+    blurb: 'Listeners, from seeing the plan to paying. Counts card and PayPal alike.',
+    steps: ['fan_upgrade_viewed', 'fan_upgrade_paid'],
+  },
 ];
 
 function Card({ title, icon: Icon, blurb, children }) {

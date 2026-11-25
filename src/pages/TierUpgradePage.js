@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
 import { step, screen } from '../utils/track';
+import usePaystackReturn from '../hooks/usePaystackReturn';
 import { showReceipt } from '../components/PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import { useTier } from '../contexts/useTier';
@@ -220,17 +221,47 @@ export default function TierUpgradePage() {
         setActiveSubId(sub.paypal_subscription_id || null);
         const { data: tierRow } = await supabase
           .from('platform_tiers').select('slug').eq('id', sub.tier_id).maybeSingle();
-        if (tierRow) { setCurrentTier(tierRow.slug); setLoading(false); return; }
+        if (tierRow) { setCurrentTier(tierRow.slug); setLoading(false); return tierRow.slug; }
       }
       setActiveSubId(null);
       const { data: artistRow } = await supabase
         .from('artists').select('tier').eq('id', artist.id).maybeSingle();
       setCurrentTier(artistRow?.tier || 'free');
+      setLoading(false);
+      // Answers as well as sets, so the Paystack return below can ask again
+      // until the webhook has written the row.
+      return artistRow?.tier || 'free';
     } catch {
       setCurrentTier('free');
     }
     setLoading(false);
   };
+
+  // Back from paying in rand. The card button leaves the site entirely, so
+  // this is the only place a card subscription can be noticed, recorded or
+  // receipted at all.
+  usePaystackReturn({
+    ready: !!artist,
+    check: fetchCurrentTier,
+    onPaid: (slug) => {
+      step('upgrade_paid', slug);
+      const name = slug === 'premium' ? 'Premium' : 'Pro';
+      setSuccess(`Welcome to ${name}! Your new features are active.`);
+      showReceipt({
+        kind: 'subscription',
+        heading: `${name} is live`,
+        title: `Artist ${name}`,
+        subtitle: 'Paid by card in rand',
+        note: 'Your new upload and payout limits are active now. The renewal date is in your '
+            + 'notifications, and Paystack has emailed you a receipt.',
+      });
+      refreshProfile();
+    },
+    onPending: () => setSuccess(
+      'Your card payment went through. The plan is being switched on, which can take a minute. '
+      + 'Nothing more to do - refresh this page if it has not appeared.'
+    ),
+  });
 
   const handleSubscriptionSuccess = async ({ subscriptionId, tierSlug, billingCycle: cycle }) => {
     // PayPal has approved it. This is the only step on this page that costs

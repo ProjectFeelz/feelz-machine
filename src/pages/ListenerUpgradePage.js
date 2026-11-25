@@ -7,6 +7,8 @@ import { showReceipt } from '../components/PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import BillingTrouble from '../components/BillingTrouble';
 import PaystackSubscribeButton from '../components/PaystackSubscribeButton';
+import usePaystackReturn from '../hooks/usePaystackReturn';
+import { step, screen } from '../utils/track';
 import { ChevronLeft, Check, Zap, Crown, Loader, Palette, BarChart3, Star } from 'lucide-react';
 
 const PAYPAL_CLIENT_ID = process.env.REACT_APP_PAYPAL_CLIENT_ID || '';
@@ -123,18 +125,51 @@ export default function ListenerUpgradePage() {
   const [success,     setSuccess]     = useState('');
   const [error,       setError]       = useState('');
 
-  useEffect(() => {
-    if (!user) return;
-    // Check if listener already has a pro subscription
-    supabase.from('listener_tier_subscriptions')
+  // RECORDED AT LAST.
+  //
+  // This page had no tracking of any kind, so Fan Pro did not appear in the
+  // admin funnels even once. Its own names, not the artist ones: mixing two
+  // products into one funnel makes both unreadable.
+  useEffect(() => { step('fan_upgrade_viewed'); return screen('listener_upgrade'); }, []);
+
+  const fetchListenerTier = async () => {
+    if (!user) return 'free';
+    const { data } = await supabase.from('listener_tier_subscriptions')
       .select('status, tier_id, platform_tiers(slug)')
       .eq('user_id', user.id)
       .eq('status', 'active')
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.platform_tiers?.slug) setCurrentTier(data.platform_tiers.slug);
+      .maybeSingle();
+    const slug = data?.platform_tiers?.slug || 'free';
+    if (data?.platform_tiers?.slug) setCurrentTier(slug);
+    return slug;
+  };
+
+  useEffect(() => { if (user) fetchListenerTier(); /* eslint-disable-next-line */ }, [user?.id]);
+
+  // Back from paying in rand. Until now a fan who paid by card was returned to
+  // the ARTIST upgrade page, and nothing recorded or receipted it.
+  usePaystackReturn({
+    ready: !!user,
+    check: fetchListenerTier,
+    onPaid: () => {
+      step('fan_upgrade_paid', 'fan_pro');
+      setCurrentTier('fan_pro');
+      setSuccess('Welcome to Fan Pro! Your themes and badge are now active.');
+      showReceipt({
+        kind: 'subscription',
+        heading: 'Fan Pro is live',
+        title: 'Fan Pro',
+        subtitle: 'Paid by card in rand',
+        note: 'Unlimited downloads, offline listening, themes and your badge are on now. '
+            + 'Your renewal date is in your notifications, and Paystack has emailed you a receipt.',
       });
-  }, [user?.id]);
+      refreshProfile();
+    },
+    onPending: () => setSuccess(
+      'Your card payment went through. Fan Pro is being switched on, which can take a minute. '
+      + 'Nothing more to do - refresh this page if it has not appeared.'
+    ),
+  });
 
   const handleSuccess = async (subscriptionId, billingCycle) => {
     setProcessing(true); setError('');
@@ -166,6 +201,7 @@ export default function ListenerUpgradePage() {
         throw new Error(result.error || 'We could not confirm that subscription. Please contact us.');
       }
 
+      step('fan_upgrade_paid', 'fan_pro');
       setCurrentTier('fan_pro');
       setSuccess('Welcome to Fan Pro! Your themes and badge are now active.');
       // Sani paid for Pro and got no confirmation of any kind — the app just

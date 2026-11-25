@@ -417,7 +417,11 @@ exports.handler = async (event) => {
         plan:         plan.planCode,
         currency:     'ZAR',
         reference,
-        callback_url: `${SITE}/upgrade?billing=started`,
+        // Back to the page that sells the thing they just bought. This was
+        // /upgrade for everyone, so a fan who paid by card was returned to the
+        // ARTIST tiers - a different product, with their own plan nowhere on
+        // it. ?billing=started is read by both pages now.
+        callback_url: `${SITE}${body.subject === 'fan' ? '/listener/upgrade' : '/upgrade'}?billing=started`,
         // Sent as a convenience for reading the Paystack dashboard, never as
         // the thing the subscription is matched on. Paystack's own docs
         // describe metadata as a string, and the list endpoint returns null
