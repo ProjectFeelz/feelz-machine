@@ -6,9 +6,16 @@
 import { Crown, Zap, Star } from 'lucide-react';
 
 // ── Base prices in USD ────────────────────────────────────────
+// The prices shown on /upgrade. platform_tiers holds the same numbers and is
+// what actually gets charged in rand, so these two MUST be kept in step: a gap
+// between them is a customer quoted one price and billed another, which is
+// exactly what happened before migration 259 (table said 20, this said 17).
+// Making the page read platform_tiers is the real fix and has not been done.
+//
+// Raised in migration 260. The annual discount stays at about 30%.
 export const BASE_USD = {
-  pro:     { monthly: 2.00,  annual: 17.00 },
-  premium: { monthly: 5.00,  annual: 42.00 },
+  pro:     { monthly: 5.00,  annual:  42.00 },
+  premium: { monthly: 12.00, annual: 100.00 },
 };
 
 export const BEATMAKER_TIER_FEATURES = {
