@@ -28,7 +28,12 @@
         <div class="timer" id="timer" title="Time on this mission">0:00</div>
         <div class="dayclock" id="dayClock" title="Time of day in the city">18:00</div>
         <div class="beat" id="beat" aria-hidden="true"></div>
+        <span class="inv hidden" id="inv"></span>
+      <span class="world-pill hidden" id="worldPill"></span>
         <span class="coop-pill hidden" id="coopPill"></span>
+        <button class="view-btn hidden" id="btnChat" aria-label="Chat (T)">Chat</button>
+        <button class="view-btn hidden" id="btnVoice" aria-label="Voice">Voice</button>
+        <button class="view-btn hidden" id="btnBuildHud" aria-label="Build (B)">Build</button>
         <button class="view-btn" id="btnView" aria-label="Switch camera view (V)">Distance</button>
         <button class="icon-btn" id="pauseBtn" aria-label="Pause">II</button>
       </div>
@@ -40,6 +45,8 @@
     <canvas id="radar" aria-hidden="true"></canvas>
     <div class="mixer" id="mixer" aria-label="The parts of the song you have unlocked"></div>
     <div class="tip" id="tip"></div>
+    <div class="chat-log" id="chatLog"></div>
+    <div class="chat-box hidden" id="chatBox"><input id="chatInput" maxlength="120" placeholder="Say something to the room" autocomplete="off"><button class="primary" id="chatSend">Send</button></div>
     <div class="toast" id="toast"></div>
     <div class="pop" id="pop"></div>
     <div class="cover" id="cover">IN COVER</div>
@@ -71,11 +78,35 @@
     <div class="build-actions">
       <button id="bTurn" title="R">Turn</button>
       <button id="bPlace" class="go" title="F or Enter">Place</button>
-      <button id="bPickUp" title="X" disabled>Pick up</button>
+      <button id="bPickUp" title="X or click it" disabled>Move</button>
+      <button id="bDelete" title="Delete">Remove</button>
+      <button id="bGather" title="Hold E">Gather</button>
       <button id="bInside" title="I">Inside on/off</button>
       <button id="bUndo" title="Z">Undo</button>
       <button id="bView" title="V">View</button>
       <button id="bDone" title="Esc">Done</button>
+    </div>
+  </div>
+
+  <!-- A store in the city: materials for credits -->
+  <div id="shop" class="screen hidden">
+    <div class="card coop-card">
+      <p class="kicker" id="shopKicker">STORE</p>
+      <h2 id="shopTitle">General store</h2>
+      <p class="coop-or" id="shopNote"></p>
+      <div id="shopList"></div>
+      <div class="coop-row"><button class="ghost" id="shopConvert">Turn Feelz Run finds into credits</button><button class="primary" id="shopClose">Done</button></div>
+    </div>
+  </div>
+
+  <!-- My worlds: places a player builds and keeps -->
+  <div id="worlds" class="screen hidden">
+    <div class="card coop-card">
+      <p class="kicker">MY WORLDS</p>
+      <h2>Build it. Keep it. Bring friends.</h2>
+      <p class="coop-or" id="worldsNote"></p>
+      <div class="world-list" id="worldList"></div>
+      <div class="coop-row"><button class="primary" id="worldNew">New world</button><button class="ghost" id="worldsClose">Done</button></div>
     </div>
   </div>
 
@@ -110,6 +141,7 @@
         <button class="primary" id="playBtn">Play</button>
         <button class="ghost hidden" id="buildBtn">Build the city</button>
         <button class="ghost" id="roamBtn">Free roam</button>
+        <button class="ghost" id="worldsBtn">My worlds</button>
         <button class="ghost" id="coopBtn">Play together</button>
       </div>
       <p class="loading" id="loading">Loading the city…</p>

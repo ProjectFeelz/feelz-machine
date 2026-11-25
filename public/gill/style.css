@@ -401,3 +401,55 @@ html, body, .screen { scrollbar-width: none; }
 .coop-status { min-height: 1.2em; color: var(--gold-hi); font-weight: 800; letter-spacing: .06em; }
 .coop-status big { font-size: 34px; letter-spacing: .3em; display: block; margin-top: 6px; }
 .coop-pill { font: 800 11px/1 Inter, sans-serif; letter-spacing: .08em; color: #000; background: var(--gold); border-radius: 999px; padding: 7px 10px; }
+
+/* My worlds */
+.world-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; max-height: 46vh; overflow-y: auto; scrollbar-width: none; }
+.world-list::-webkit-scrollbar { display: none; }
+.world-row { display: flex; gap: 8px; align-items: center; background: #000; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
+.world-row b { flex: 1; text-align: left; font-size: 15px; }
+.world-row small { color: var(--muted); font-size: 11px; }
+.world-row button { min-width: 0; padding: 8px 14px; font-size: 13px; }
+.world-pill { font: 800 11px/1 Inter, sans-serif; letter-spacing: .08em; color: #000; background: #7fe39a; border-radius: 999px; padding: 7px 10px; }
+
+/* Title on phones: every mission fits, three across, nothing cut off. */
+#title .missions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#title .mission { min-width: 0; }
+#title .mission b { min-width: 0; }
+@media (max-width: 900px), (max-height: 520px) {
+  #title .title-card { width: min(560px, 62vw); padding-right: 12px; }
+  #title .mission { gap: 4px; padding: 4px 6px; font-size: 11px; }
+  #title .mission span { width: 12px; }
+  #title .mission em { font-size: 9px; }
+  #title .title-buttons { flex-wrap: wrap; gap: 6px; }
+  #title .title-buttons .primary, #title .title-buttons .ghost { padding: 7px 12px; font-size: 12px; }
+}
+.world-name { flex: 1; min-width: 0; font: 700 15px Inter, sans-serif; background: #111; color: #fff; border: 1px solid var(--gold); border-radius: 8px; padding: 6px 8px; }
+
+.title-show { pointer-events: none; }
+#worlds, #coop { z-index: 40; }
+
+.inv { display: inline-flex; gap: 8px; font: 800 12px/1 Inter, sans-serif; color: #fff; background: rgba(0,0,0,.72); border: 1px solid rgba(255,255,255,.14); border-radius: 999px; padding: 6px 10px; }
+.inv b { font-weight: 800; }
+
+/* Phones and small windows: the objective gets its own line under the top bar, nothing overlaps. */
+@media (max-width: 1100px), (max-height: 560px) {
+  .hud-objective { top: calc(54px + var(--sat)); max-width: min(62vw, 560px); font-size: 11.5px; padding: 6px 12px; line-height: 1.3; white-space: normal; text-align: center; }
+  .hud-right > .hud-row { gap: 5px; }
+  .hud-right .timer, .hud-right .dayclock, .view-btn, .coop-pill, .world-pill, .inv { font-size: 10.5px; padding: 6px 8px; }
+  .hud-zone { padding: 5px 10px; }
+  .hud-zone span:last-child { font-size: 13px; }
+  #radar { top: auto; }
+}
+body.roam #timer, body.roam #beat, body.roam #mixer { display: none !important; }
+/* Shop and chat */
+.shop-row { display: flex; align-items: center; gap: 8px; background: #000; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; margin: 6px 0; }
+.shop-row b { flex: 1; text-align: left; } .shop-row small { color: var(--muted); }
+.shop-row button { min-width: 0; padding: 7px 12px; font-size: 13px; }
+.chat-log { position: absolute; left: calc(12px + var(--sal)); bottom: 200px; max-width: min(420px, 60vw); display: flex; flex-direction: column; gap: 4px; pointer-events: none; z-index: 6; }
+.chat-log p { margin: 0; background: rgba(0,0,0,.7); border-radius: 10px; padding: 5px 9px; font: 600 12.5px/1.35 Inter, sans-serif; color: #fff; transition: opacity .6s; }
+.chat-log p b { margin-right: 6px; }
+.chat-box { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%); display: flex; gap: 6px; z-index: 8; }
+.chat-box input { width: min(420px, 70vw); font: 600 15px Inter, sans-serif; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--gold); background: #000; color: #fff; }
+.view-btn.on { background: var(--gold); color: #000; }
+/* The objective always has its own line under the top bar, so nothing on the right can cover it. */
+.hud-objective { top: calc(54px + var(--sat)); }

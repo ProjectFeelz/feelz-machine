@@ -50,6 +50,28 @@ for (const z of WD.zones) {
   const q = S.quadrants.find(k => k.id === z.id);
   if (q) Object.assign(q, { x0: z.x, z0: z.z, w: z.w, d: z.d, elev: z.elev, district: z.district, region: z.region, about: z.about, name: z.name });
 }
+// Streets through every place: each road that reaches a place carries on straight through it
+// to the far side, so the roads make one network and running through never breaks off.
+(function streetsThroughPlaces() {
+  const add = [];
+  for (const q of S.quadrants) {
+    const xs = new Set(), zs = new Set();
+    for (const r of WD.roads) for (const [px, pz] of r.points) {
+      const dx = Math.max(q.x0 - px, 0, px - (q.x0 + q.w)), dz = Math.max(q.z0 - pz, 0, pz - (q.z0 + q.d));
+      if (Math.hypot(dx, dz) > 12) continue;
+      // Which side of the place it comes in from decides the street's direction.
+      const onX = px < q.x0 + 4 || px > q.x0 + q.w - 4, onZ = pz < q.z0 + 4 || pz > q.z0 + q.d - 4;
+      if (onX && !onZ) zs.add(Math.round(clamp(pz, q.z0 + 8, q.z0 + q.d - 8)));
+      else if (onZ && !onX) xs.add(Math.round(clamp(px, q.x0 + 8, q.x0 + q.w - 8)));
+    }
+    // Every place gets at least one street each way through its middle.
+    if (!xs.size) xs.add(Math.round(q.x0 + q.w / 2));
+    if (!zs.size) zs.add(Math.round(q.z0 + q.d / 2));
+    for (const z of zs) add.push({ name: q.name + " Street", width: 9, points: [[q.x0 - 2, z], [q.x0 + q.w + 2, z]], street: true });
+    for (const x of xs) add.push({ name: q.name + " Avenue", width: 9, points: [[x, q.z0 - 2], [x, q.z0 + q.d + 2]], street: true });
+  }
+  WD.roads.push(...add);
+})();
 const zoneOrigin = q => new THREE.Vector2(q.x0, q.z0);
 const zoneCenter = q => new THREE.Vector2(q.x0 + q.w / 2, q.z0 + q.d / 2);
 const Q = id => S.quadrants.find(q => q.id === id);
@@ -140,7 +162,9 @@ const staticCache = {};
 // G.I.L.L.'s own pieces (from the F.I.L.L. kit) live with the game; the rest come from Feelz Run.
 const OWN_MODELS = new Set(["stall", "booth", "billboard", "container", "carriage", "hedge", "mast", "turnstile", "valve", "filter", "shrine", "cage", "scanner", "glass",
   "mc-b3", "uc-b5", "de-b2", "generator", "handcart", "washline", "chimney", "vent", "hauler", "shuttle", "skiff", "conveyor", "fountain", "firepit", "rocks",
-  "commtower", "lockup", "shelter", "station", "elevator", "skydeck", "tenement2", "hostel2"]);
+  "commtower", "lockup", "shelter", "station", "elevator", "skydeck", "tenement2", "hostel2",
+  "k-corner", "k-pillar", "k-wall", "k-win-open", "k-win-closed", "k-win-half", "k-roof-flat", "k-roof-gentle", "k-roof-steep", "k-switchback", "k-walkway", "k-lift", "k-washpost",
+  "obelisk", "climbtower", "checkpoint", "veilheart"]);
 function staticModel(name) {
   if (!staticCache[name]) staticCache[name] = loadGLB((OWN_MODELS.has(name) ? "models/world/" : MODELS + "world/") + name + ".glb").then(g => g.scene).catch(() => null);
   return staticCache[name];
@@ -311,7 +335,9 @@ function buildGround() {
     const desert = best.district === "de" || x > 740;
     if (rg > 0.3) { tmp.lerp(desert ? cDune : cRock, clamp(rg / 2.5, 0, 1)); if (!desert && rg > 4.5) tmp.lerp(cPeak, clamp((rg - 4.5) / 4, 0, 0.8)); }
     col.push(tmp.r, tmp.g, tmp.b);
-    sandy.push(desert ? Math.max(clamp((x - 700) / 80, 0, 1), best.district === "de" ? 1 : 0) : 0);
+    // This is a desert city: open land is sand. Only near the green districts does it turn to grass.
+    const green = (best.district === "rc" || best.district === "uc") ? clamp(1 - bd / 40, 0, 1) : 0;
+    sandy.push(desert ? 1 : 1 - green);
   }
   geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); geo.setAttribute("sandy", new THREE.Float32BufferAttribute(sandy, 1)); geo.computeVertexNormals();
   const dirt = groundTexture("land"); dirt.repeat.set(W / 8, H / 8);
@@ -321,14 +347,14 @@ function buildGround() {
     sh.uniforms.sandMap = { value: SAND.map };
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float sandy;\nvarying float vSandy;").replace("#include <uv_vertex>", "#include <uv_vertex>\nvSandy = sandy;");
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D sandMap;\nvarying float vSandy;")
-      .replace("#include <color_fragment>", "#include <color_fragment>\nif (vSandy > 0.001) { vec3 sandC = pow(texture2D(sandMap, vMapUv * 0.6).rgb, vec3(2.2)); diffuseColor.rgb = mix(diffuseColor.rgb, sandC, vSandy); }");
+      .replace("#include <color_fragment>", "#include <color_fragment>\nif (vSandy > 0.001) { vec3 sandC = pow(mix(texture2D(sandMap, vMapUv * 5.3).rgb, texture2D(sandMap, vec2(vMapUv.y, -vMapUv.x) * 1.7).rgb, 0.35), vec3(2.2)); diffuseColor.rgb = mix(diffuseColor.rgb, sandC, vSandy); }");
   };
   const land = new THREE.Mesh(geo, landMat);
   land.position.set(WORLD_W / 2, 0, WORLD_H / 2); land.receiveShadow = true; scene.add(land);
   // Each place has its own paving, flat at its height.
   for (const q of S.quadrants) {
     const kind = districtOf(q), st = kind === "de" ? photoTex("sand") : null, paving = st ? st.map : groundTexture(kind);
-    const tileM = { lc: 8, mc: 8, uc: 5, rc: 9, de: 10 }[kind] || 6;
+    const tileM = { lc: 8, mc: 8, uc: 5, rc: 9, de: 1.6 }[kind] || 6;   // the photo sand is about a metre and a half across
     paving.repeat.set(q.w / tileM, q.d / tileM);
     const tint = new THREE.Color(0xffffff).multiplyScalar(kind === "uc" ? 0.78 : kind === "de" ? 0.9 : 0.95);
     const mat = kind === "de"
@@ -356,11 +382,11 @@ function buildGround() {
     dm.geometry.attributes.uv.array.forEach((v, i, a) => { if (i % 2) a[i] = v * 0.25 / 6; });
   }
   // Boulders along the rocky ridges, so the borders read as mountains.
-  const rockGeo = new THREE.DodecahedronGeometry(1, 0), rockMat = new THREE.MeshStandardMaterial({ color: 0x9a948c, roughness: 1, flatShading: true });
+  const rockGeo = new THREE.DodecahedronGeometry(1, 0), rockMat = new THREE.MeshStandardMaterial({ color: 0xc09a6c, roughness: 1, flatShading: true });   // sandstone
   const spots = [], rr = rng(31337);
   for (let z = 4; z < WORLD_H; z += 6) for (let x = 4; x < WORLD_W; x += 6) {
     const jx = x + (rr() - 0.5) * 5, jz = z + (rr() - 0.5) * 5, h = ridgeAt(jx, jz);
-    if (h > 3 && jx < 740 && rr() < 0.55) spots.push([jx, jz, h]);
+    if (h > 3.5 && jx < 740 && rr() < 0.3) spots.push([jx, jz, h]);
   }
   const rocks = new THREE.InstancedMesh(rockGeo, rockMat, spots.length), M = new THREE.Matrix4(), Qr = new THREE.Quaternion(), E = new THREE.Euler(), Sv = new THREE.Vector3(), Pv = new THREE.Vector3();
   spots.forEach(([x, z, h], i) => {
@@ -519,20 +545,20 @@ async function buildCity(onProgress) {
     const pick = () => set[Math.floor(r() * set.length)];
     // Life-size: a storey is about 3.2 m, so a three-storey block stands near 10 m and Koda
     // (1.62 m) reaches about halfway up its ground floor.
-    const inset = 12;
+    const inset = 16;
     // Buildings around the edges of each place, facing in, with gaps for the roads.
-    const edge = (len) => { const out = []; for (let s = 15; s < len - 13; s += 27 + r() * 6) out.push(s); return out; };
+    const edge = (len) => { const out = []; for (let s = 18; s < len - 16; s += 34 + r() * 6) out.push(s); return out; };
     const slots = [];
     for (const s of edge(q.w)) slots.push([q.x0 + s, q.z0 + inset, 0], [q.x0 + s, q.z0 + q.d - inset, Math.PI]);
     for (const s of edge(q.d)) slots.push([q.x0 + inset, q.z0 + s, Math.PI / 2], [q.x0 + q.w - inset, q.z0 + s, -Math.PI / 2]);
     // A few low buildings for cover further in.
-    for (let i = 0; i < 3; i++) slots.push([q.x0 + 30 + r() * (q.w - 60), q.z0 + 30 + r() * (q.d - 60), Math.floor(r() * 4) * Math.PI / 2, true]);
+    if (districtOf(q) !== "de") for (let i = 0; i < 3; i++) slots.push([q.x0 + 30 + r() * (q.w - 60), q.z0 + 30 + r() * (q.d - 60), Math.floor(r() * 4) * Math.PI / 2, true]);
     for (const [x, z, yaw, low] of slots) {
       if (onRoad(x, z, 12)) continue;
       // The middle of every place stays open: that's where the arena, the rooftop course and the stalls go.
       if (Math.hypot(x - (q.x0 + q.w / 2), z - (q.z0 + q.d / 2)) < 26) continue;
-      if (q.id === "q01" && x === slots[0][0] && z === slots[0][1]) { jobs.push(() => placeBuilding("kodas-building", x, z, yaw, 18, 22)); continue; }
-      jobs.push(() => placeBuilding(pick(), x, z, yaw, low ? 8 + r() * 3 : 13 + r() * 10, low ? 14 : 24));
+      if (q.id === "q01" && x === slots[0][0] && z === slots[0][1]) { jobs.push(() => placeBuilding("kodas-building", x, z, yaw, 24, 30)); continue; }
+      jobs.push(() => placeBuilding(pick(), x, z, yaw, districtOf(q) === "de" ? 7 + r() * 4 : low ? 11 + r() * 4 : 20 + r() * 14, districtOf(q) === "de" ? 16 : low ? 18 : 32));
     }
   }
   // Houses and shops along the roads between places.
@@ -542,13 +568,13 @@ async function buildCity(onProgress) {
     for (let k = 0; k + 1 < road.points.length; k++) {
       const [ax, az] = road.points[k], [bx, bz] = road.points[k + 1], L = Math.hypot(bx - ax, bz - az);
       const nx = -(bz - az) / L, nz = (bx - ax) / L;
-      for (let s = 14; s < L - 10; s += 28) for (const side of [-1, 1]) {
-        const x = ax + (bx - ax) * s / L + nx * (road.width / 2 + 13) * side, z = az + (bz - az) * s / L + nz * (road.width / 2 + 13) * side;
+      for (let s = 16; s < L - 12; s += 34) for (const side of [-1, 1]) {
+        const x = ax + (bx - ax) * s / L + nx * (road.width / 2 + 16) * side, z = az + (bz - az) * s / L + nz * (road.width / 2 + 16) * side;
         if (inZone(x, z, 10) || onRiver(x, z, 14)) continue;
         const near = S.quadrants.reduce((a, q) => Math.hypot(q.x0 + q.w / 2 - x, q.z0 + q.d / 2 - z) < Math.hypot(a.x0 + a.w / 2 - x, a.z0 + a.d / 2 - z) ? q : a);
         const set = DISTRICT_BUILDINGS[districtOf(near)] || BUILDINGS;
         const yaw = Math.abs(nx) > Math.abs(nz) ? (side * nx > 0 ? -Math.PI / 2 : Math.PI / 2) : (side * nz > 0 ? Math.PI : 0);
-        jobs.push(() => placeBuilding(set[Math.floor(r() * set.length)], x, z, yaw, 10 + r() * 7, 20));
+        jobs.push(() => placeBuilding(set[Math.floor(r() * set.length)], x, z, yaw, 14 + r() * 8, 26));
       }
     }
   }
@@ -666,7 +692,7 @@ function buildRivers() {
     const pts = along === "z" ? [[x0 + w / 2, z0], [x0 + w / 2, z1]] : [[x0, z0 + d / 2], [x1, z0 + d / 2]];
     ribbon(pts, (along === "z" ? w : d) + 7, 0.04, new THREE.MeshStandardMaterial({ color: 0x4a3524, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2 }), 4);
     const m = ribbon(pts, along === "z" ? w : d, 0.1, mat, 4);
-    m.geometry.attributes.uv.array.forEach((v, i, a) => { if (i % 2) a[i] = v * (along === "z" ? w : d) / 6; else a[i] = v * (along === "z" ? w : d) / 6; });
+    m.geometry.attributes.uv.array.forEach((v, i, a) => { if (i % 2) a[i] = v * (along === "z" ? w : d) / 1.6; else a[i] = v * (along === "z" ? w : d) / 1.6; });
     const rv = { minX: x0, maxX: x1, minZ: z0, maxZ: z1, top: 0, base: 0, mud: true, along, mat, mesh: m, mats: [] };
     muds.push(rv); blockers.push(rv);
     // A crossing of three crates every 60 metres, away from the bridges.
@@ -687,22 +713,24 @@ function buildRivers() {
     }
   }
   for (const [x0, z0, x1, z1] of WD.bridges) {
-    const top = Math.max(terrainAt(x0 - 2, (z0 + z1) / 2), terrainAt(x1 + 2, (z0 + z1) / 2), terrainAt((x0 + x1) / 2, z0 - 2), terrainAt((x0 + x1) / 2, z1 + 2)) + 0.07;   // flush with the road: it carries straight on
-    // The road carries straight over the river as a causeway: same glass as the road, low stone kerbs.
-    const deck = new THREE.Mesh(propGeo, causewayMat);
-    deck.scale.set(x1 - x0, 0.5, z1 - z0); deck.position.set((x0 + x1) / 2, top - 0.25, (z0 + z1) / 2); deck.castShadow = true; deck.receiveShadow = true; scene.add(deck);
-    blockers.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, top, base: top - 0.5, walk: true, bridge: true, mesh: deck, mats: [] });
-    // Rails along the long sides.
-    const along = (x1 - x0) > (z1 - z0) ? "x" : "z";
+    // The road carries straight over the river as a causeway: it lies on the land the whole way,
+    // so it meets the road at both ends with no step, and low stone kerbs keep you on it.
+    const top = terrainAt((x0 + x1) / 2, (z0 + z1) / 2) + 0.07;
+    blockers.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, top, base: top - 0.5, walk: true, bridge: true, ramp: { follow: true }, mats: [] });
+    const along = (x1 - x0) > (z1 - z0) ? "x" : "z", len = along === "x" ? x1 - x0 : z1 - z0, n = Math.ceil(len / 2);
     for (const side of [0, 1]) {
-      const rail = new THREE.Mesh(propGeo, kerbStoneMat);
-      if (along === "x") { rail.scale.set(x1 - x0, 0.4, 0.5); rail.position.set((x0 + x1) / 2, top + 0.2, side ? z1 - 0.25 : z0 + 0.25); }
-      else { rail.scale.set(0.5, 0.4, z1 - z0); rail.position.set(side ? x1 - 0.25 : x0 + 0.25, top + 0.2, (z0 + z1) / 2); }
-      rail.castShadow = true; rail.receiveShadow = true;
-      scene.add(rail);
-      // Rails stop you: you can't walk off the side of a bridge.
-      const rb = new THREE.Box3().setFromObject(rail);
-      blockers.push({ minX: rb.min.x - 0.1, maxX: rb.max.x + 0.1, minZ: rb.min.z - 0.1, maxZ: rb.max.z + 0.1, top: top + 0.95, base: top, rail: true, mats: [] });
+      let topK = -1e9;
+      for (let i = 0; i < n; i++) {
+        const a = (along === "x" ? x0 : z0) + (i + 0.5) * len / n;
+        const kx = along === "x" ? a : (side ? x1 - 0.25 : x0 + 0.25), kz = along === "x" ? (side ? z1 - 0.25 : z0 + 0.25) : a;
+        const g = terrainAt(kx, kz), rail = new THREE.Mesh(propGeo, kerbStoneMat); topK = Math.max(topK, g);
+        if (along === "x") rail.scale.set(len / n + 0.05, 0.45, 0.5); else rail.scale.set(0.5, 0.45, len / n + 0.05);
+        rail.position.set(kx, g + 0.2, kz); rail.castShadow = true; rail.receiveShadow = true; scene.add(rail);
+      }
+      // Kerbs stop you: you can't walk off the side.
+      const kx0 = along === "x" ? x0 : (side ? x1 - 0.5 : x0), kx1 = along === "x" ? x1 : (side ? x1 : x0 + 0.5);
+      const kz0 = along === "x" ? (side ? z1 - 0.5 : z0) : z0, kz1 = along === "x" ? (side ? z1 : z0 + 0.5) : z1;
+      blockers.push({ minX: kx0 - 0.1, maxX: kx1 + 0.1, minZ: kz0 - 0.1, maxZ: kz1 + 0.1, top: topK + 1.1, base: topK - 2, rail: true, mats: [] });
     }
   }
 }
@@ -982,6 +1010,9 @@ function stripRootMotion(clip, rest) {
   for (const t of clip.tracks) {
     if (!/hips\.position$/i.test(t.name)) continue;
     const v = t.values, n = v.length / 3;
+    // Jumps and climbs where the game itself lifts the body: the clip's own rise is taken out
+    // (crouches stay), so he doesn't go up twice.
+    if (/^(bigjump|wallclimb)$/.test(clip.name)) for (let i = 0; i < n; i++) { const k = i * 3 + up; if (Math.abs(v[k]) > Math.abs(r[up])) v[k] = r[up]; }
     for (let a = 0; a < 3; a++) {
       if (a === up || n < 1) continue;
       const first = v[a], last = v[(n - 1) * 3 + a];
@@ -1144,6 +1175,7 @@ addEventListener("keydown", e => {
   if (state === "card" && (e.code === "Space" || e.code === "Enter" || e.code === "KeyJ")) return cardContinue();
   if (state === "paused" && (e.code === "Escape" || e.code === "KeyP")) return resume();
   if (e.code === "KeyV" && (state === "play" || state === "build")) return setView(cam.view + 1);
+  if (e.code === "KeyB" && state === "play" && mission && mission.def.free) return startBuild();
   if (state !== "play") return;
   if (e.code === "KeyC" || e.code === "ControlLeft") toggleSneak();
   if (e.code === "KeyJ" || e.code === "KeyK") attack();
@@ -1192,7 +1224,7 @@ const stick = { id: null, x: 0, z: 0, mag: 0 };
    screen, A presses the highlighted one. With nothing highlighted yet, A presses the main
    button (Play, Start, Next, Resume). */
 const MENU_OF = { title: "title", card: "card", score: "score", paused: "pause" };
-const menuId = () => (state === "title" && !$("coop").classList.contains("hidden")) ? "coop" : MENU_OF[state];
+const menuId = () => state === "title" && !$("coop").classList.contains("hidden") ? "coop" : state === "title" && !$("worlds").classList.contains("hidden") ? "worlds" : MENU_OF[state];
 const padNav = { dir: "", t: 0, el: null, last: 0 };
 function menuButtons(id) {
   return [...$(id).querySelectorAll("button")].filter(b => !b.disabled && b.offsetParent !== null && !b.closest(".hidden"));
@@ -1232,7 +1264,7 @@ function padMenu(id, x, z, mag, pressA) {
   }
   if (!dir) padNav.dir = "", padNav.rep = false; else padNav.dir = dir;
   if (pressA) {
-    const b = padNav.el || { title: $("playBtn"), card: $("cardBtn"), score: $("nextBtn"), pause: $("resumeBtn"), coop: $("coopMake") }[id];
+    const b = padNav.el || { title: $("playBtn"), card: $("cardBtn"), score: $("nextBtn"), pause: $("resumeBtn"), coop: $("coopMake"), worlds: $("worldNew") }[id];
     if (b && !b.disabled) b.click();
   }
 }
@@ -1258,7 +1290,7 @@ function pollPad() {
   else if (state === "paused") { if (press(9) || press(1)) resume(); }
   else if (state === "build") {
     if (press(0)) buildPlace();
-    if (press(2)) buildRemove(B.near);
+    if (press(2)) buildPickUp(B.near);
     if (press(3)) buildToggleInterior();
     if (press(1)) buildUndo();
     if (press(6)) buildTurn();
@@ -1689,6 +1721,7 @@ const boxBlock = (x, z, w, d, h, mat, walk = true) => {
 
 function clearMission() {
   timers.length = 0;
+  sleepPlacedEnforcers();
   if (koda) koda.pushing = null;
   if (arenaView !== null) { const v = arenaView; arenaView = null; cam.view = v; cam.heading = v === 1 && koda ? koda.yaw : Math.PI; const b = $("btnView"); if (b) b.textContent = VIEWS[cam.view]; }
   for (const e of enemies) scene.remove(e.a.root);
@@ -1968,6 +2001,16 @@ function makeCart(x, z) {
   const load = new THREE.Group(); group.add(load);
   for (let k = 0; k < 6; k++) { const m = new THREE.Mesh(propGeo, rubbleMat); const sz = 0.25 + Math.random() * 0.2; m.scale.set(sz, sz, sz); m.position.set((Math.random() - 0.5) * 0.55, 0.85 + (k >> 1) * 0.08, (Math.random() - 0.5) * 0.8 + 0.1); m.rotation.set(Math.random(), Math.random() * 3, Math.random()); m.castShadow = true; load.add(m); }
   scene.add(group);
+  // The wooden hand cart from the F.I.L.L. kit replaces the plain shapes once it's loaded.
+  staticModel("handcart").then(src => {
+    if (!src) return;
+    const m = src.clone(true), box = new THREE.Box3().setFromObject(m), sz = box.getSize(new THREE.Vector3());
+    m.scale.setScalar(2.2 / Math.max(sz.x, sz.z)); m.rotation.y = sz.x > sz.z ? Math.PI / 2 : 0;
+    const b2 = new THREE.Box3().setFromObject(m), c = b2.getCenter(new THREE.Vector3()); m.position.set(-c.x, -b2.min.y, -c.z + 0.1);
+    m.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    for (const o of group.children.slice()) if (o !== load) o.visible = false;
+    group.add(m); load.position.y = 0.05;
+  });
   const cart = { group, x, z, yaw: 0, loads: 0,
     place() { group.position.set(cart.x, terrainAt(cart.x, cart.z), cart.z); group.rotation.y = cart.yaw; },
     roll(d) { wheel.rotation.x += d / 0.28; },
@@ -2105,8 +2148,19 @@ const FOCUS = {
       const c = zoneCenter(qd.q);
       const dir = koda.pos.z > c.y ? 1 : -1;   // start on the side Koda comes from
       const course = [[0, 14, 0.9, 2.6], [0, 10, 1.8, 3], [1.5, 6, 1.8, 3], [1.5, 2, 2.4, 3], [-1, -3.5, 2.4, 3], [-1, -7.5, 1.8, 3], [0.5, -11.5, 1.8, 3], [0.5, -15.5, 0.9, 2.6]];
-      qd.course = course.map(([x, z, h, s]) => {
+      // The course is built from real things: shipping containers to run along and leap between,
+      // crates for the low steps.
+      qd.course = course.map(([x, z, h, s], i) => {
         const b = addBlock(qd, boxBlock(c.x + x, c.y + z * dir, s, s, h, h < 1 ? PROPS[1].mat : roofTopMat));
+        if (h >= 1) staticModel("container").then(src => {
+          if (!src || !b.mesh || !b.mesh.parent) return;
+          const m = src.clone(true), box = new THREE.Box3().setFromObject(m), sz = box.getSize(new THREE.Vector3());
+          m.scale.set(s / sz.x, h / sz.y, s / sz.z); if (i % 2) m.rotation.y = Math.PI / 2;
+          const b2 = new THREE.Box3().setFromObject(m), cc = b2.getCenter(new THREE.Vector3());
+          m.position.set(b.mesh.position.x - cc.x, b.base - b2.min.y, b.mesh.position.z - cc.z);
+          m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+          b.mesh.visible = false; own(qd, m);
+        });
         return { x: c.x + x, z: c.y + z * dir, top: b.top };
       });
       qd.start = freeSpot(c.x, c.y + 18.5 * dir, 1);
@@ -2176,6 +2230,14 @@ const FOCUS = {
           m.position.set((qd.r() - 0.5) * 2, sz * 0.3, (qd.r() - 0.5) * 2); m.rotation.set(qd.r(), qd.r() * 3, qd.r());
           m.castShadow = true; group.add(m);
         }
+        // A street light the Veil brought down, lying across the pile.
+        staticModel(i % 2 ? "chimney" : "mast").then(src => {
+          if (!src) return;
+          const m = src.clone(true), bx = new THREE.Box3().setFromObject(m), sz = bx.getSize(new THREE.Vector3());
+          m.scale.setScalar(4.5 / Math.max(sz.x, sz.y, sz.z)); m.rotation.set(1.35, qd.r() * 6, 0.25);
+          const b2 = new THREE.Box3().setFromObject(m), c = b2.getCenter(new THREE.Vector3()); m.position.set(-c.x, -b2.min.y - 0.2, -c.z);
+          m.traverse(o => { if (o.isMesh) o.castShadow = true; }); group.add(m);
+        });
         group.position.set(x, terrainAt(x, z), z);
         const b = addBlock(qd, { minX: x - 1.4, maxX: x + 1.4, minZ: z - 1.4, maxZ: z + 1.4, top: 1.3, walk: true, mesh: group, mats: [] });
         qd.piles.push({ x, z, b, loads: 3, total: 3, dig: 0 });
@@ -2855,6 +2917,15 @@ function updateKoda(dt) {
     return;
   }
   const water = mission && mission.def.theme === "water" ? 0.8 : 1;
+  // Climbing: up the face, then over the top onto it.
+  if (koda.climb) {
+    const c = koda.climb; c.t += dt;
+    const k = Math.min(1, c.t / c.dur), up = Math.min(1, k / 0.75), over = Math.max(0, (k - 0.7) / 0.3);
+    koda.pos.y = c.y0 + (c.y1 - c.y0) * (1 - Math.pow(1 - up, 2));
+    koda.pos.x = c.x0 + (c.x1 - c.x0) * over; koda.pos.z = c.z0 + (c.z1 - c.z0) * over;
+    if (k >= 1) { koda.pos.set(c.x1, c.y1, c.z1); koda.climb = null; attackLock = 0; koda.held = 1; koda.play("idle", { fade: 0.1 }); }
+    koda.update(dt); return;
+  }
   // In the air: a jump arc. You can steer while airborne, and land on anything you clear.
   if (air) {
     air.t = (air.t || 0) + dt;
@@ -2901,11 +2972,14 @@ function updateKoda(dt) {
     if (lunge.t <= 0) lunge = null;
   }
   if (attackLock > 0) { attackLock -= dt; koda.update(dt); settle(); return; }
+  // Free roam: standing still and holding ACTION by a tree, rocks or sand gathers it.
+  if (mission && mission.def.free && input.actionHeld && !input.mag && !air && updateGather(dt, true)) { koda.update(dt); settle(); return; }
   const sneaking = input.sneak;
   const sprint = !sneaking && input.mag > 0.93;
   // A light push walks, further runs, all the way (or RT / Shift) sprints.
   const walking = !sneaking && !sprint && !boost.on && input.mag > 0 && input.mag < 0.55 && koda.has("walk");
-  let speed = input.mag === 0 ? 0 : sneaking ? 2.6 : sprint ? 8.2 : walking ? 1.7 : 5.4;
+  // Two paces: a walk and one quick run (no separate sprint).
+  let speed = input.mag === 0 ? 0 : sneaking ? 2.6 : walking ? 1.7 : 6.8;
   if (boost.on && !sneaking) speed = 13;
   if (koda.pushing) speed = Math.min(speed, 2.4);
   speed *= water;
@@ -2918,7 +2992,7 @@ function updateKoda(dt) {
     moveWithCollision(koda.pos, input.x * speed * dt, input.z * speed * dt, 0.45, true);
     koda.face(want, Math.min(1, dt * 14));
     if (swimming()) koda.play("swim", { speed: sprint ? 1.35 : 1 });
-    else koda.play(sneaking ? "crouch_walk" : sprint || boost.on ? "sprint" : walking || koda.pushing ? "walk" : "run", { speed: boost.on ? 1.4 : 1 });
+    else koda.play(sneaking ? "crouch_walk" : boost.on ? "sprint" : walking || koda.pushing ? "walk" : "run", { speed: boost.on ? 1.4 : 1 });
   } else if (swimming()) koda.play(koda.has("tread") ? "tread" : "swim");
   // In cover he crouches with his back to the box (facing away from it, set below).
   else koda.play(sneaking ? "crouch_idle" : koda.has("fight_idle") && fightFoe() ? "fight_idle" : "idle");
@@ -2983,10 +3057,20 @@ function jump() {
   const f = forward(koda);
   let low = null;
   for (let i = 4; i <= 16 && !low; i += 2) { const b = blocked(koda.pos.x + f.x * i * 0.1, koda.pos.z + f.y * i * 0.1, 0.3, koda.pos.y); if (b && b.low && b.top - koda.pos.y < 1.1 && Math.min(b.maxX - b.minX, b.maxZ - b.minZ) < 0.9) low = b; }   // thin things only: jump onto crates, vault over barriers
+  // A wall, container or stack taller than a vault and no higher than he can reach: run up it.
+  let tall = null;
+  for (let i = 4; i <= 12 && !tall; i += 2) { const b = blocked(koda.pos.x + f.x * i * 0.1, koda.pos.z + f.y * i * 0.1, 0.3, koda.pos.y); if (b && b.walk && !b.ramp && b.top - koda.pos.y >= 1.1 && b.top - koda.pos.y <= 5.2) tall = b; }
+  if (tall && koda.has("wallclimb") && !low) {
+    air = null;
+    const tx = clamp(koda.pos.x + f.x * 1.2, tall.minX + 0.35, tall.maxX - 0.35), tz = clamp(koda.pos.z + f.y * 1.2, tall.minZ + 0.35, tall.maxZ - 0.35);
+    const dur = Math.min(2.2, koda.play("wallclimb", { once: true, speed: 1.4 }) || 1.6);
+    koda.climb = { t: 0, dur, y0: koda.pos.y, y1: tall.top, x0: koda.pos.x, z0: koda.pos.z, x1: tx, z1: tz };
+    attackLock = dur; tip("jump"); return;
+  }
   if (low && koda.has("vault")) { air.speed = Math.max(speed, 5.5); air.vault = true; input.x = f.x; input.z = f.y; koda.play("vault", { once: true, speed: 1.6 }); }
   else if (speed >= 7.5 && koda.has("frontflip")) koda.play("frontflip", { once: true, speed: 1.35, from: 0.25 });
   else if (!input.mag && fightFoe() && koda.has("backflip")) { koda.play("backflip", { once: true, speed: 1.5, from: 0.35 }); const f = forward(koda); air.speed = 3; air.back = { x: -f.x, z: -f.y }; }
-  else koda.play("jump", { once: true, speed: 1.3 });
+  else koda.play(koda.has("bigjump") ? "bigjump" : "jump", { once: true, speed: 1.3, from: koda.has("bigjump") ? 0.25 : 0 });
   tip("jump");
 }
 // The guard to strike: the nearest one in reach, favouring the one he faces.
@@ -3082,6 +3166,7 @@ function action() {
   if (!koda || attackLock > 0 || air) return;
   if (mission) for (const qd of mission.quads) if (qd.focus === "rubble" && FOCUS.rubble.tap(qd)) return;
   if (prayNear()) return;
+  { const st = storeNear(); if (st) { openShop(st); return; } }
   if (!npcs.some(n => dist2(koda.pos, n.a.pos) < 2.6) && talkToAmbient()) return;
   if (npcs.some(n => dist2(koda.pos, n.a.pos) < 2.6) || (mission && mission.quads.some(q => q.focus === "copies" && q.zoras && q.zoras.some(z => !z.gone && dist2(z.z.pos, koda.pos) < 2.4)))) return talkOrListen();
   if (searchNear()) return;
@@ -3665,6 +3750,8 @@ function updateGuide(now, dt) {
   for (const x of shrines) x.flame.rotation.y += dt * 1.2;
   updateSway(now);
   updateAmbient(dt);
+  updateDust(dt);
+  updateFlyers(dt);
   const goal = objectiveTarget();
   const d = goal ? Math.hypot(goal.x - koda.pos.x, goal.z - koda.pos.z) : 0;
   // The route shows on the radar, GTA style; nothing is drawn on the ground.
@@ -4087,7 +4174,8 @@ function frame(now) {
     koda.update(real); if (zora) zora.update(real);
   }
   if (state === "play" || state === "build") updateCoop(real);
-  if (state === "build") { updateSway(now); updateAmbient(real); }
+  if ((frame.n = (frame.n || 0) + 1) % 30 === 0) { showHudBuild(); showRoomButtons(); }
+  if (state === "build") { updateSway(now); updateAmbient(real); updateFlyers(real); }
   if (!window.GILL_NORENDER) renderer.render(scene, camera);
 }
 // Time left on the song. Red for the last 20 seconds.
@@ -4153,12 +4241,13 @@ function titleShowStep() {
 function titleShowStart() { if (!show.timer) titleShowStep(); }
 function showBuildBtn() {
   const b = $("buildBtn");
-  if (canBuild || (typeof coop !== "undefined" && coop.ch)) { b.classList.remove("hidden"); b.disabled = false; b.textContent = coop && coop.ch ? "Build together" : "Build the city"; return; }
+  if (canBuild || (typeof coop !== "undefined" && coop.ch) || (typeof myWorld !== "undefined" && myWorld)) { b.classList.remove("hidden"); b.disabled = false; b.textContent = coop && coop.ch ? "Build together" : myWorld ? "Build my world" : "Build the city"; return; }
   const why = /[?&]build=1/.test(location.search) && buildWhyNot;
   b.classList.toggle("hidden", !why); b.disabled = true; if (why) b.textContent = buildWhyNot;
 }
 function toTitle() {
   state = "title";
+  if (myWorld) leaveWorld();
   stopMusic();
   $("hud").classList.add("hidden"); $("touch").classList.add("hidden"); $("score").classList.add("hidden");
   $("title").classList.remove("hidden");
@@ -4217,10 +4306,15 @@ function startFreeRoam() {
   state = "play";
   updateCamera(0, true);
   refreshObjective();
-  toast("Free roam. The city is yours.", 3);
+  loadInv(); drawInventory();
+  wakePlacedEnforcers();
+  toast("Free roam. The city is yours. Hold ACTION by trees, rocks and sand to gather.", 3.5);
 }
 $("roamBtn").addEventListener("click", startFreeRoam);
 $("btnView").addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); setView(cam.view + 1); });
+// In free roam: a Build button when this player can build here (their world, a room, or an admin).
+$("btnBuildHud").addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); if (state === "play" && mission && mission.def.free) startBuild(); });
+function showHudBuild() { $("btnBuildHud").classList.toggle("hidden", !(state === "play" && mission && mission.def.free)); }
 
 /* ---------- the city's own pieces, and build mode ----------
    Pieces placed in build mode are kept on Feelz Machine (table gill_world_pieces) and
@@ -4283,13 +4377,78 @@ const PIECES = [
   { kind: "bush", name: "Bush", cat: "Nature", w: 2, d: 2, h: 1.3 },
   { kind: "rock", name: "Rock", cat: "Nature", w: 3, d: 2.5, h: 1.8 },
   { kind: "boulder", name: "Boulder", cat: "Nature", w: 6, d: 5, h: 4 },
-  { kind: "lamp", name: "Street lamp", cat: "Nature", w: 0.4, d: 0.4, h: 4.4 }
+  { kind: "lamp", name: "Street lamp", cat: "Nature", w: 0.4, d: 0.4, h: 4.4 },
+  // Blocks: one metre cubes that stack, Minecraft style. Tiles: ground to lay down.
+  { kind: "block", name: "Wood", cat: "Blocks", w: 1, d: 1, h: 1, mat: "wood", cost: { wood: 1 } },
+  { kind: "block", name: "Stone", cat: "Blocks", w: 1, d: 1, h: 1, mat: "stone", cost: { stone: 1 } },
+  { kind: "block", name: "Brick", cat: "Blocks", w: 1, d: 1, h: 1, mat: "brick", cost: { stone: 1, sand: 1 } },
+  { kind: "block", name: "Sandstone", cat: "Blocks", w: 1, d: 1, h: 1, mat: "sandstone", cost: { sand: 2 } },
+  { kind: "block", name: "Glass", cat: "Blocks", w: 1, d: 1, h: 1, mat: "glass", cost: { sand: 3 } },
+  { kind: "block", name: "Leaves", cat: "Blocks", w: 1, d: 1, h: 1, mat: "leaves", cost: { wood: 1 } },
+  { kind: "tile", name: "Grass", cat: "Ground", w: 2, d: 2, h: 0.12, mat: "grass", cost: { wood: 1 } },
+  { kind: "tile", name: "Sand", cat: "Ground", w: 2, d: 2, h: 0.12, mat: "sand", cost: { sand: 1 } },
+  { kind: "tile", name: "Paving", cat: "Ground", w: 2, d: 2, h: 0.12, mat: "stone", cost: { stone: 1 } },
+  { kind: "tile", name: "Glass road", cat: "Ground", w: 2, d: 2, h: 0.12, mat: "glassroad", cost: { sand: 2 } },
+  { kind: "tile", name: "Water", cat: "Ground", w: 2, d: 2, h: 0.12, mat: "water", cost: { stone: 1 } },
+  // The F.I.L.L. kit: real stonework, doors, windows and roofs that snap together.
+  { kind: "kit", model: "k-corner", name: "Cut stone", cat: "Walls", w: 1, d: 1, h: 1, grid: 1, stack: true, cost: { stone: 2 } },
+  { kind: "kit", model: "k-wall", name: "Stone wall", cat: "Walls", w: 2, d: 1, h: 1.2, grid: 1, stack: true, cost: { stone: 3 } },
+  { kind: "kit", model: "k-pillar", name: "Pillar", cat: "Walls", w: 0.5, d: 0.5, h: 3, grid: 0.5, stack: true, cost: { stone: 2 } },
+  { kind: "kit", model: "k-win-closed", name: "Blue door", cat: "Walls", w: 1.4, d: 0.5, h: 2.4, grid: 0.5, stack: true, pass: true, cost: { wood: 2, metal: 1 } },
+  { kind: "kit", model: "k-win-half", name: "Wooden door", cat: "Walls", w: 1.2, d: 0.5, h: 2.3, grid: 0.5, stack: true, pass: true, cost: { wood: 2 } },
+  { kind: "kit", model: "k-win-open", name: "Arched window", cat: "Walls", w: 1.6, d: 0.6, h: 2.2, grid: 0.5, stack: true, cost: { stone: 2, wood: 1 } },
+  { kind: "kit", model: "k-roof-flat", name: "Tin roof", cat: "Walls", w: 3, d: 3, h: 0.3, grid: 1, stack: true, walk: true, cost: { metal: 2 } },
+  { kind: "kit", model: "k-roof-gentle", name: "Lean-to roof", cat: "Walls", w: 3, d: 3, h: 2.2, grid: 1, stack: true, cost: { wood: 3 } },
+  { kind: "kit", model: "k-roof-steep", name: "Sloped tin roof", cat: "Walls", w: 3, d: 3, h: 1.5, grid: 1, stack: true, cost: { metal: 3 } },
+  { kind: "kit", model: "k-walkway", name: "Plank walkway", cat: "Climb", w: 4, d: 2, h: 0.4, grid: 1, stack: true, walk: true, cost: { wood: 2 } },
+  { kind: "kit", model: "k-switchback", name: "Metal stairs", cat: "Climb", w: 6, d: 6, h: 6, grid: 1, walk: true, cost: { metal: 6 } },
+  { kind: "kit", model: "k-lift", name: "Lift cage", cat: "Climb", w: 3, d: 3, h: 3, grid: 1, walk: true, cost: { metal: 4 } },
+  { kind: "kit", model: "climbtower", name: "Climbing tower", cat: "Climb", w: 4, d: 4, h: 16, grid: 1, walk: true, cost: { metal: 10, stone: 6 } },
+  { kind: "kit", model: "k-washpost", name: "Post", cat: "Market", w: 0.5, d: 0.5, h: 2.5, grid: 0.5, cost: { wood: 1 } },
+  { kind: "kit", model: "stall", name: "Food stall", cat: "Market", w: 4.2, d: 3.2, h: 3.2, grid: 0.5, cost: { wood: 4 } },
+  { kind: "kit", model: "booth", name: "Kiosk", cat: "Market", w: 2.4, d: 2, h: 3, grid: 0.5, cost: { metal: 3 } },
+  { kind: "kit", model: "billboard", name: "Billboard", cat: "Market", w: 10, d: 1.2, h: 10, grid: 0.5, cost: { metal: 4, wood: 2 } },
+  { kind: "kit", model: "handcart", name: "Hand cart", cat: "Market", w: 2.4, d: 1.4, h: 1.2, grid: 0.5, walk: true, low: true, cost: { wood: 2 } },
+  { kind: "kit", model: "container", name: "Container", cat: "Industrial", w: 6, d: 2.5, h: 2.6, grid: 0.5, stack: true, walk: true, cost: { metal: 6 } },
+  { kind: "kit", model: "generator", name: "Generator", cat: "Industrial", w: 2.4, d: 1.6, h: 1.8, grid: 0.5, walk: true, cost: { metal: 4 } },
+  { kind: "kit", model: "conveyor", name: "Conveyor", cat: "Industrial", w: 4, d: 1.6, h: 1.1, grid: 0.5, walk: true, low: true, cost: { metal: 3 } },
+  { kind: "kit", model: "valve", name: "Pipe valve", cat: "Industrial", w: 2, d: 1, h: 2, grid: 0.5, walk: true, cost: { metal: 2 } },
+  { kind: "kit", model: "chimney", name: "Steam chimney", cat: "Industrial", w: 1, d: 1, h: 6, grid: 0.5, cost: { metal: 3 } },
+  { kind: "kit", model: "vent", name: "Steam vent", cat: "Industrial", w: 2.2, d: 2.2, h: 1.5, grid: 0.5, walk: true, low: true, cost: { metal: 2 } },
+  { kind: "kit", model: "turnstile", name: "Turnstile", cat: "Industrial", w: 3, d: 3, h: 1.6, grid: 0.5, cost: { metal: 2 } },
+  { kind: "kit", model: "hedge", name: "Planted hedge", cat: "Nature", w: 3, d: 1.4, h: 1.5, grid: 0.5, walk: true, low: true, cost: { wood: 1, stone: 1 } },
+  { kind: "kit", model: "fountain", name: "Fountain", cat: "Nature", w: 7, d: 7, h: 3.5, grid: 0.5, walk: true, cost: { stone: 8 } },
+  { kind: "kit", model: "firepit", name: "Fire pit", cat: "Nature", w: 6, d: 6, h: 1.4, grid: 0.5, pass: true, cost: { stone: 3, wood: 2 } },
+  { kind: "kit", model: "rocks", name: "Rock spire", cat: "Nature", w: 3, d: 2, h: 8, grid: 0.5, cost: { stone: 4 } },
+  { kind: "kit", model: "obelisk", name: "Rune obelisk", cat: "Landmarks", w: 1.2, d: 1.2, h: 6, grid: 0.5, cost: { stone: 6 } },
+  { kind: "kit", model: "checkpoint", name: "City gate", cat: "Landmarks", w: 10, d: 4, h: 7, grid: 0.5, gate: true, cost: { stone: 10, metal: 6 } },
+  { kind: "kit", model: "veilheart", name: "Veil ring", cat: "Landmarks", w: 5, d: 0.8, h: 5, grid: 0.5, pass: true, cost: { glass: 6 } },
+  { kind: "kit", model: "commtower", name: "Comm tower", cat: "Landmarks", w: 3, d: 3, h: 16, grid: 0.5, cost: { metal: 10 } },
+  // Stores: what a place sells, for credits from Feelz Run. Walk up and press ACTION to shop.
+  ...[["general", "General store"], ["wood", "Timber yard"], ["stone", "Quarry"], ["sand", "Sand pit"], ["metal", "Scrap yard"], ["glass", "Glassworks"]].map(([sells, name]) =>
+    ({ kind: "store", model: sells === "general" ? "booth" : "stall", sells, name, cat: "Stores", w: sells === "general" ? 2.6 : 4.2, d: sells === "general" ? 2.2 : 3.2, h: 3.2, grid: 0.5 })),
+  // Enforcers: stand one where it should patrol. In free roam and your worlds they come alive.
+  ...Object.keys(ENEMIES).map(k => ({ kind: "enforcer", model: k, name: { sentinel: "Sentinel", guard: "Guard", "street-warden": "Street warden", hunter: "Hunter", handler: "Handler", gilded: "Gilded" }[k] || k, cat: "Enforcers", w: 1, d: 1, h: 2 }))
 ];
-const pieceDef = rec => PIECES.find(p => p.kind === rec.kind && (rec.kind !== "building" || p.model === rec.model)) || PIECES.find(p => p.kind === rec.kind);
+const BLOCK_MATS = {
+  wood: new THREE.MeshStandardMaterial({ color: 0x9a6a3c, roughness: 0.85 }),
+  stone: new THREE.MeshStandardMaterial({ color: 0x8d8a85, roughness: 0.95, flatShading: true }),
+  brick: new THREE.MeshStandardMaterial({ color: 0xa4503a, roughness: 0.9 }),
+  sandstone: new THREE.MeshStandardMaterial({ color: 0xd8c08e, roughness: 0.9 }),
+  glass: new THREE.MeshStandardMaterial({ color: 0x9fd8e0, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.45 }),
+  leaves: new THREE.MeshStandardMaterial({ color: 0x4f7d3a, roughness: 0.85, flatShading: true }),
+  grass: new THREE.MeshStandardMaterial({ color: 0x6f9a4a, roughness: 0.95 }),
+  sand: new THREE.MeshStandardMaterial({ color: 0xe0c48e, roughness: 1 }),
+  glassroad: new THREE.MeshStandardMaterial({ color: 0x7fb3aa, roughness: 0.18, metalness: 0.25 }),
+  water: new THREE.MeshStandardMaterial({ color: 0x3f8fb5, roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.85 })
+};
+const pieceDef = rec => PIECES.find(p => p.kind === rec.kind && (rec.kind === "store" ? p.name === rec.label || p.sells === rec.sells : (rec.kind !== "building" && rec.kind !== "kit" && rec.kind !== "enforcer") || p.model === rec.model) && (rec.kind !== "block" && rec.kind !== "tile" || p.name === rec.label)) || PIECES.find(p => p.kind === rec.kind);
 
 // Stairs: a slope you walk up. Height at (x, z) on them.
 function rampTop(b, x, z) {
-  const r = b.ramp, t = clamp(r.axis === "x" ? (x - b.minX) / (b.maxX - b.minX) : (z - b.minZ) / (b.maxZ - b.minZ), 0, 1);
+  const r = b.ramp;
+  if (r.follow) return terrainAt(x, z) + 0.07;   // a causeway: it lies on the land like the road
+  const t = clamp(r.axis === "x" ? (x - b.minX) / (b.maxX - b.minX) : (z - b.minZ) / (b.maxZ - b.minZ), 0, 1);
   return b.base + r.h * (r.up > 0 ? t : 1 - t);
 }
 
@@ -4298,7 +4457,7 @@ async function makePiece(rec) {
   const def = pieceDef(rec) || {};
   const turn = Math.round((rec.rot || 0) / (Math.PI / 2)) & 3;
   const w = turn % 2 ? rec.d : rec.w, d = turn % 2 ? rec.w : rec.d, h = rec.h;
-  const x = rec.x, z = rec.z, base = terrainAt(x, z);
+  const x = rec.x, z = rec.z, base = rec.y != null ? rec.y : terrainAt(x, z);
   const made = { rec, meshes: [], blocks: [], roofs: [], lamps: [] };
   const box = (mat, bw, bh, bd, ox = 0, oy = 0, oz = 0) => {
     const m = new THREE.Mesh(propGeo, mat); m.scale.set(bw, bh, bd); m.position.set(x + ox, base + oy + bh / 2, z + oz);
@@ -4309,6 +4468,29 @@ async function makePiece(rec) {
     const before = blockers.length;
     await placeBuilding(rec.model, x, z, rec.rot || 0, h, Math.max(w, d), true);
     for (const b of blockers.slice(before)) { b.piece = made; made.blocks.push(b); made.meshes.push(b.mesh); navMark(b); if (rec.interior) b.interior = true; }
+  } else if (rec.kind === "kit" || rec.kind === "store") {
+    // A kit piece, fitted exactly to its size so pieces line up and stack.
+    const mdl = rec.model || def.model;
+    staticModel(mdl).then(src => {
+      if (!src || made.gone) return;
+      const m = src.clone(true), box0 = new THREE.Box3().setFromObject(m), sz = box0.getSize(new THREE.Vector3());
+      m.scale.set(rec.w / Math.max(0.01, sz.x), rec.h / Math.max(0.01, sz.y), rec.d / Math.max(0.01, sz.z));
+      m.rotation.y = turn * Math.PI / 2;
+      const b2 = new THREE.Box3().setFromObject(m), c = b2.getCenter(new THREE.Vector3());
+      m.position.set(x - c.x, base - b2.min.y, z - c.z);
+      m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      if (rec.kind === "store") tintStall(m, ["general", "wood", "stone", "sand", "metal", "glass"].indexOf(def.sells) % STALL_TINTS.length);
+      scene.add(m); made.meshes.push(m);
+    });
+    if (rec.kind === "store") { made.store = def.sells; stores.push(made); }
+    if (!def.pass) block({ walk: !!def.walk || !!def.stack, low: !!def.low || h <= 1.2, store: rec.kind === "store" ? def.sells : undefined });
+  } else if (rec.kind === "enforcer") {
+    // Shown standing at its post; in free roam a real one patrols from here.
+    makeActor(rec.model + ".glb", ENEMIES[rec.model] || 1.9).then(a => { if (!a) return; a.pos.set(x, base, z); a.face(rec.rot || 0, 1); a.play(a.has("fight_idle") ? "fight_idle" : "walk"); a.update(0.01); a.root.visible = !(state === "play" && mission && mission.def.free); scene.add(a.root); made.meshes.push(a.root); made.actor = a; }).catch(() => null);
+  } else if (rec.kind === "block" || rec.kind === "tile") {
+    const m = box(BLOCK_MATS[(def && def.mat) || "stone"] || BLOCK_MATS.stone, w, h, d);
+    if (rec.kind === "tile") m.castShadow = false;
+    block({ walk: true, low: rec.kind === "tile" || h <= 1 });
   } else if (def.prop) {
     const P = PROP(def.prop);
     box(P.mat, w, h, d);
@@ -4347,14 +4529,23 @@ async function makePiece(rec) {
     block({ minX: x - 0.15, maxX: x + 0.15, minZ: z - 0.15, maxZ: z + 0.15, walk: false });
   }
   if (rec.interior && made.meshes.length) {
-    // A lit doorway marks a building you'll be able to go into.
-    const door = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.4), new THREE.MeshBasicMaterial({ color: 0x7fe39a, transparent: true, opacity: 0.75 }));
-    const fx = Math.sin(rec.rot || 0), fz = Math.cos(rec.rot || 0);
-    door.position.set(x + fx * (d / 2 + 0.05), base + 1.2, z + fz * (d / 2 + 0.05)); door.rotation.y = rec.rot || 0; scene.add(door); made.meshes.push(door);
+    // A lit doorway on the wall it was set on (the side Koda stood at), on the building's real outline.
+    const door = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.4), new THREE.MeshBasicMaterial({ color: 0x7fe39a, transparent: true, opacity: 0.75, side: THREE.DoubleSide }));
+    const bb = made.blocks[0] || { minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 };
+    const a = rec.door != null ? rec.door : (rec.rot || 0), fx = Math.sin(a), fz = Math.cos(a);
+    // Walk out from the middle in that direction until the outline: the door sits there.
+    const hx = (bb.maxX - bb.minX) / 2, hz = (bb.maxZ - bb.minZ) / 2, cx = (bb.minX + bb.maxX) / 2, cz = (bb.minZ + bb.maxZ) / 2;
+    const t = Math.min(Math.abs(fx) > 1e-3 ? hx / Math.abs(fx) : 1e9, Math.abs(fz) > 1e-3 ? hz / Math.abs(fz) : 1e9);
+    const onX = Math.abs(fx) * t >= hx - 1e-3;
+    door.position.set(cx + fx * t + (onX ? Math.sign(fx) * 0.06 : 0), base + 1.2, cz + fz * t + (onX ? 0 : Math.sign(fz) * 0.06));
+    door.rotation.y = onX ? Math.sign(fx) * Math.PI / 2 : (fz > 0 ? 0 : Math.PI);
+    scene.add(door); made.meshes.push(door);
   }
   return made;
 }
 function unmakePiece(made) {
+  made.gone = true;
+  if (made.store) { const i = stores.indexOf(made); if (i >= 0) stores.splice(i, 1); }
   for (const m of made.meshes) if (m && m.parent) m.parent.remove(m);
   for (const b of made.blocks) { const i = blockers.indexOf(b); if (i >= 0) blockers.splice(i, 1); navMark(b); }
   for (const a of made.roofs) { const i = roofs.indexOf(a); if (i >= 0) roofs.splice(i, 1); }
@@ -4362,10 +4553,11 @@ function unmakePiece(made) {
 }
 
 const placed = [];   // pieces from Feelz Machine and the ones placed this visit
+const stores = [];   // store pieces: walk up to one to shop
 async function loadPieces() {
   if (!ONLINE) return;
   try {
-    const { data, error } = await ONLINE.from("gill_world_pieces").select("id,kind,model,label,x,z,rot,w,d,h,interior").limit(5000);
+    const { data, error } = await ONLINE.from("gill_world_pieces").select("id,kind,model,label,x,z,rot,w,d,h,interior,door,y").limit(5000);
     if (error || !data) return;
     for (const rec of data) placed.push(await makePiece(rec));
   } catch (e) { /* the city still plays without them */ }
@@ -4380,111 +4572,229 @@ const pickMat = new THREE.MeshBasicMaterial({ color: 0xff5a46, transparent: true
 const catList = () => [...new Set(PIECES.map(p => p.cat))];
 const catPieces = () => PIECES.filter(p => p.cat === B.cat);
 function startBuild() {
-  if (!canBuild && !coop.ch) return;
+  if (!canBuild && !coop.ch && !myWorld && !(mission && mission.def.free)) return;
   audioCtx(); goLandscape();
   $("title").classList.add("hidden"); $("hud").classList.remove("hidden"); document.body.classList.add("building");
   $("build").classList.remove("hidden");
   if (phone) $("touch").classList.remove("hidden");
+  // From free roam, building pauses the roam and Done comes back to it.
+  B.roam = mission && mission.def.free ? mission : null;
   mission = null; state = "build"; B.on = true;
-  applyTheme(null, 0, true); DAY.hour = 14; updateDayNight(0);
+  applyTheme(null, 0, true); if (!B.roam) { DAY.hour = 14; updateDayNight(0); }
   if (!koda.parent) scene.add(koda.root);
   koda.pos.y = groundAt(koda.pos.x, koda.pos.z);
   renderBuildBar(); updateCamera(0, true);
-  toast(canBuild && ONLINE ? (coop.ch ? "Building together. Your pieces are saved to the city and the room sees them." : "Build mode. Everything you place is saved to the city.") : coop.ch ? "Building together. Everyone in the room sees what you place." : "Build mode (trying it out: nothing is saved here).", 3.5);
+  if (myWorld) toast(saveTable() ? `Building in ${myWorld.name}. Everything you place is kept.` : "Building in your world. Keeping your builds comes with a Feelz Machine plan.", 3.5);
+  else if (!canBuild && !coop.ch) toast("Building in free roam. Gather materials for blocks. Keep what you build in My worlds.", 3.5);
+  else toast(canBuild && ONLINE ? (coop.ch ? "Building together. Your pieces are saved to the city and the room sees them." : "Build mode. Everything you place is saved to the city.") : coop.ch ? "Building together. Everyone in the room sees what you place." : "Build mode (trying it out: nothing is saved here).", 3.5);
 }
 function stopBuild() {
   B.on = false; if (B.ghost) { scene.remove(B.ghost); B.ghost = null; B.ghostKey = ""; }
   if (B.pick) { scene.remove(B.pick); B.pick = null; }
   $("build").classList.add("hidden"); document.body.classList.remove("building");
+  if (B.roam) { mission = B.roam; B.roam = null; state = "play"; wakePlacedEnforcers(); lastT = performance.now(); refreshObjective(); updateCamera(0, true); return; }
   toTitle();
 }
 function renderBuildBar() {
   $("buildCats").innerHTML = catList().map(c => `<button class="bcat${c === B.cat ? " on" : ""}" data-c="${c}">${c}</button>`).join("");
-  $("buildItems").innerHTML = catPieces().map((p, i) => `<button class="bitem${i === B.i ? " on" : ""}" data-i="${i}">${p.model ? `<img src="thumbs/${p.model}.webp" alt="" onerror="this.remove()">` : `<i>${{ Cover: "▣", Climb: "☰", Nature: "♣" }[p.cat] || "■"}</i>`}<span>${p.name}</span></button>`).join("");
+  $("buildItems").innerHTML = catPieces().map((p, i) => `<button class="bitem${i === B.i ? " on" : ""}" data-i="${i}">${p.kind === "building" && p.model ? `<img src="thumbs/${p.model}.webp" alt="" onerror="this.remove()">` : p.model && p.kind !== "enforcer" ? `<img src="thumbs/${p.model}.webp" alt="" onerror="this.replaceWith(Object.assign(document.createElement('i'), { textContent: '■' }))">` : `<i>${{ Cover: "▣", Climb: "☰", Nature: "♣", Blocks: "◼", Ground: "▦", Enforcers: "☗", Stores: "$" }[p.cat] || "■"}</i>`}<span>${p.name}</span></button>`).join("");
   $("buildName").textContent = (catPieces()[B.i] || {}).name || "";
 }
-function buildPick(cat, i) { if (cat) B.cat = cat; B.i = i || 0; B.ghostKey = ""; renderBuildBar(); }
+function buildPick(cat, i) {
+  // Choosing from the bar while holding a moved piece puts that piece back where it was.
+  if (B.carry) { const c = B.carry; B.carry = null; makePiece(c.rec).then(m => { placed.push(m); if (c.inWorld) worldMade.push(m); }); }
+  if (cat) B.cat = cat; B.i = i || 0; B.ghostKey = ""; renderBuildBar();
+}
+// The copy shown before placing is the real thing, see-through, at the size it will be built.
+const ghostModelMat = new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.4, depthWrite: false });
+function fitBuilding(p, src) {
+  const box = new THREE.Box3().setFromObject(src), sz = box.getSize(new THREE.Vector3());
+  const k = Math.min(p.h / Math.max(0.001, sz.y), Math.max(p.w, p.d) / Math.max(0.001, sz.x, sz.z));
+  p.fw = sz.x * k; p.fd = sz.z * k; p.fh = sz.y * k; p.fk = k;
+}
 function ghostFor(p) {
   const g = new THREE.Group();
+  if (p.kind === "building" && p.model) staticModel(p.model).then(src => {
+    if (!src || !g.parent) return;
+    fitBuilding(p, src);
+    const m = src.clone(true); m.scale.setScalar(p.fk);
+    const box = new THREE.Box3().setFromObject(m), c = box.getCenter(new THREE.Vector3());
+    m.position.set(-c.x, -box.min.y, -c.z);
+    m.traverse(o => { if (o.isMesh) { o.material = ghostModelMat; o.castShadow = false; } });
+    g.userData.box.visible = false; g.userData.edge.scale.set(p.fw, p.fh, p.fd); g.userData.edge.position.y = p.fh / 2; g.add(m);
+  });
   const m = new THREE.Mesh(propGeo, ghostMat); m.scale.set(p.w, Math.max(0.2, p.h), p.d); m.position.y = Math.max(0.2, p.h) / 2; g.add(m);
-  const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), ghostEdge); e.scale.copy(m.scale); e.position.copy(m.position); g.add(e);
+  const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), ghostEdge); e.scale.copy(m.scale); e.position.copy(m.position); g.add(e); g.userData.edge = e;
   // A little arrow on the ground showing which way it faces (stairs climb that way, buildings open that way).
   const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.9, 3), ghostMat); arrow.rotation.x = Math.PI / 2; arrow.position.set(0, 0.1, p.d / 2 + 0.7); g.add(arrow);
   g.userData.box = m; return g;
 }
+// What's in hand: the piece picked from the bar, or a placed piece picked up to move.
+const handPiece = () => B.carry ? B.carry.def : catPieces()[B.i];
+const raycaster = new THREE.Raycaster(), _ndc = new THREE.Vector2();
+function mouseGround() {
+  if (!B.mouse || performance.now() - B.mouse.t > 4000) return null;
+  _ndc.set(B.mouse.x / innerWidth * 2 - 1, -(B.mouse.y / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(_ndc, camera);
+  const r = raycaster.ray, y = koda.pos.y;
+  if (Math.abs(r.direction.y) < 1e-3) return null;
+  let t = (y - r.origin.y) / r.direction.y;
+  if (t < 0) return null;
+  // Settle onto the land under the cursor (a couple of passes is plenty).
+  for (let i = 0; i < 2; i++) { const px = r.origin.x + r.direction.x * t, pz = r.origin.z + r.direction.z * t; t = (terrainAt(px, pz) - r.origin.y) / r.direction.y; }
+  return { x: r.origin.x + r.direction.x * t, z: r.origin.z + r.direction.z * t };
+}
+function pieceUnderMouse() {
+  if (!B.mouse || performance.now() - B.mouse.t > 4000) return null;
+  _ndc.set(B.mouse.x / innerWidth * 2 - 1, -(B.mouse.y / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(_ndc, camera);
+  const near = placed.filter(m => Math.hypot(m.rec.x - koda.pos.x, m.rec.z - koda.pos.z) < 60);
+  const hits = raycaster.intersectObjects(near.flatMap(m => m.meshes.filter(Boolean)), true);
+  if (!hits.length) return null;
+  for (const m of near) { let o = hits[0].object; while (o) { if (m.meshes.includes(o)) return m; o = o.parent; } }
+  return null;
+}
+function pieceSize(p, rot) {
+  const turn = Math.round(rot / (Math.PI / 2)) & 3, pw = p.fw || p.w, pd = p.fd || p.d;
+  return { w: turn % 2 ? pd : pw, d: turn % 2 ? pw : pd };
+}
 function updateBuild(dt) {
   readInput();
-  updateKoda(dt);
-  const p = catPieces()[B.i]; if (!p) return;
-  const key = p.kind + (p.model || "") + p.name;
+  if (!input.mag && updateGather(dt, keys.has("KeyE") || B.gathering)) koda.update(dt); else updateKoda(dt);
+  const p = handPiece(); if (!p) return;
+  const key = (B.carry ? "carry:" : "") + p.kind + (p.model || "") + p.name;
   if (B.ghostKey !== key) { if (B.ghost) scene.remove(B.ghost); B.ghost = ghostFor(p); scene.add(B.ghost); B.ghostKey = key; }
-  // A few metres in front of Koda, far enough that a building doesn't land on him.
-  const f = forward(koda), reach = Math.max(p.w, p.d) / 2 + 2.5;
-  const x = Math.round((koda.pos.x + f.x * reach) * 2) / 2, z = Math.round((koda.pos.z + f.y * reach) * 2) / 2;
-  const turn = Math.round(B.rot / (Math.PI / 2)) & 3, w = turn % 2 ? p.d : p.w, d = turn % 2 ? p.w : p.d;
-  const ok = !onRiver(x, z, Math.max(w, d) / 2) && ridgeAt(x, z) < 1 && x > 4 && z > 4 && x < WORLD_W - 4 && z < WORLD_H - 4;
-  B.spot = { x, z, ok };
-  B.ghost.position.set(x, terrainAt(x, z), z); B.ghost.rotation.y = B.rot;
+  const { w, d } = pieceSize(p, B.rot);
+  // Where it goes: under the mouse if you're using one, otherwise a few metres in front of Koda.
+  const mg = mouseGround();
+  let x, z;
+  if (mg) { x = mg.x; z = mg.z; }
+  else { const f = forward(koda), reach = Math.max(w, d) / 2 + 1.6; x = koda.pos.x + f.x * reach; z = koda.pos.z + f.y * reach; }
+  // Blocks snap to a one-metre grid and stack on what's below; tiles to two metres; the rest to half metres.
+  const grid = p.grid || (p.kind === "block" ? 1 : p.kind === "tile" ? 2 : 0.5);
+  x = (Math.floor(x / grid) + (grid >= 1 ? 0.5 : 0)) * grid; z = (Math.floor(z / grid) + (grid >= 1 ? 0.5 : 0)) * grid;
+  let y = terrainAt(x, z);
+  if (p.kind === "block" || p.kind === "tile" || p.stack) { const g = groundAt(x, z); if (g !== MUD) y = Math.max(y, g); }
+  const ok = !onRiver(x, z, Math.max(w, d) / 2) && ridgeAt(x, z) < 1 && x > 4 && z > 4 && x < WORLD_W - 4 && z < WORLD_H - 4 && Math.hypot(x - koda.pos.x, z - koda.pos.z) < 70;
+  B.spot = { x, z, y, ok };
+  B.ghost.position.set(x, y, z); B.ghost.rotation.y = B.rot;
   B.ghost.userData.box.material = ok ? ghostMat : ghostBad;
-  // The placed piece the copy is touching, to pick up.
-  let near = null, nd = 1e9;
-  for (const m of placed) {
-    const r = m.rec, dd = Math.hypot(r.x - x, r.z - z);
-    if (dd < Math.max(r.w, r.d) / 2 + 1.5 && dd < nd) { nd = dd; near = m; }
+  // The placed piece to pick up: the one under the mouse, or the one the copy is touching.
+  let near = B.carry ? null : pieceUnderMouse();
+  if (!near && !B.carry && !mg) {
+    let nd = 1e9;
+    for (const m of placed) {
+      const bb = m.blocks[0], r = m.rec;
+      const dd = bb ? Math.hypot(Math.max(0, bb.minX - x, x - bb.maxX), Math.max(0, bb.minZ - z, z - bb.maxZ)) : Math.hypot(r.x - x, r.z - z);
+      if (dd < 1.2 && dd < nd) { nd = dd; near = m; }
+    }
   }
   if (near !== B.near) {
     B.near = near;
     if (B.pick) { scene.remove(B.pick); B.pick = null; }
-    if (near) { const r = near.rec, t = Math.round((r.rot || 0) / (Math.PI / 2)) & 3; B.pick = new THREE.Mesh(propGeo, pickMat); B.pick.scale.set((t % 2 ? r.d : r.w) + 0.4, r.h + 0.4, (t % 2 ? r.w : r.d) + 0.4); B.pick.position.set(r.x, terrainAt(r.x, r.z) + r.h / 2, r.z); scene.add(B.pick); }
+    if (near) {
+      const bb = near.blocks[0], r = near.rec;
+      B.pick = new THREE.Mesh(propGeo, pickMat);
+      if (bb) { B.pick.scale.set(bb.maxX - bb.minX + 0.3, (bb.top - bb.base) + 0.3, bb.maxZ - bb.minZ + 0.3); B.pick.position.set((bb.minX + bb.maxX) / 2, (bb.top + bb.base) / 2, (bb.minZ + bb.maxZ) / 2); }
+      else { B.pick.scale.set(r.w + 0.3, r.h + 0.3, r.d + 0.3); B.pick.position.set(r.x, terrainAt(r.x, r.z) + r.h / 2, r.z); }
+      scene.add(B.pick);
+    }
     $("bPickUp").disabled = !near;
   }
   $("bPlace").disabled = !ok;
+  $("bPlace").textContent = B.carry ? "Put down" : "Place";
+  drawInventory();
   updateDayNight(dt); updateAwnings(); updateOcclusion(); updateCamera(dt);
 }
 async function buildPlace() {
-  const p = catPieces()[B.i]; if (!p || !B.spot || !B.spot.ok) return;
-  const rec = { kind: p.kind, model: p.model || null, label: p.name, x: B.spot.x, z: B.spot.z, rot: B.rot, w: p.w, d: p.d, h: p.h, interior: false };
+  const p = handPiece(); if (!p || !B.spot || !B.spot.ok) return;
+  const carry = B.carry;
+  // In your own world and in free roam, blocks and ground cost what you've gathered.
+  if (!carry && usesMaterials() && p.cost && !spend(p.cost)) return;
+  const stacks = p.kind === "block" || p.kind === "tile" || !!p.stack;
+  const rec = carry ? Object.assign({}, carry.rec, { x: B.spot.x, z: B.spot.z, rot: B.rot, y: stacks ? B.spot.y : null })
+    : { kind: p.kind, model: p.model || null, label: p.name, x: B.spot.x, z: B.spot.z, rot: B.rot, w: p.w, d: p.d, h: p.h, interior: false, y: stacks ? B.spot.y : null };
+  B.carry = null;
   const made = await makePiece(rec); placed.push(made); B.near = undefined; sfxUnlock();
   B.undo.push(made);
+  if (carry && carry.inWorld) worldMade.push(made);
+  // A moved piece keeps its saved row: only where it stands changes.
+  if (carry && rec.id) {
+    if (coop.ch) coop.ch.send({ type: "broadcast", event: "piece", payload: { rec } });
+    const table = saveTable();
+    if (table) { const { error } = await ONLINE.from(table).update({ x: rec.x, z: rec.z, rot: rec.rot, y: rec.y }).eq("id", rec.id); $("buildSave").textContent = error ? "Couldn't save the move. Try again." : "Saved"; }
+    return;
+  }
   // In a room, everyone sees it straight away.
   if (coop.ch) { coop.ch.send({ type: "broadcast", event: "piece", payload: { rec } }); coopPiece(rec, made); }
-  if (!ONLINE || !canBuild) return;
+  const table = saveTable();
+  if (!table) return;
+  if (table === "gill_world_items") { rec.world_id = myWorld.id; worldMade.push(made); }
   B.saving++; $("buildSave").textContent = "Saving…";
-  const { data, error } = await ONLINE.from("gill_world_pieces").insert(rec).select("id").single();
+  const { data, error } = await ONLINE.from(table).insert(rec).select("id").single();
   B.saving--;
   if (error) { $("buildSave").textContent = "Couldn't save that piece. Check you're signed in to Feelz Machine."; unmakePiece(made); placed.splice(placed.indexOf(made), 1); return; }
   rec.id = data.id; $("buildSave").textContent = B.saving ? "Saving…" : "Saved";
+}
+// Pick up: the piece comes into your hand to put down somewhere else. Undo or a new piece from the bar drops it.
+function buildPickUp(made) {
+  if (!made) return;
+  if (B.carry) return;
+  const inWorld = worldMade.includes(made);
+  unmakePiece(made); placed.splice(placed.indexOf(made), 1); if (inWorld) worldMade.splice(worldMade.indexOf(made), 1);
+  if (coop.ch) coop.ch.send({ type: "broadcast", event: "unpiece", payload: { key: coopPieceKey(made.rec) } });
+  B.carry = { rec: Object.assign({}, made.rec), def: pieceDef(made.rec), inWorld };
+  B.rot = made.rec.rot || 0; B.near = undefined; sfxHit(false); popText("MOVING");
 }
 async function buildRemove(made) {
   if (!made) return;
   unmakePiece(made); placed.splice(placed.indexOf(made), 1); B.near = undefined; sfxHit(false);
   if (coop.ch) { const key = coopPieceKey(made.rec); coop.ch.send({ type: "broadcast", event: "unpiece", payload: { key } }); const i = coop.pieces.findIndex(p => coopPieceKey(p.rec) === key); if (i >= 0) coop.pieces.splice(i, 1); }
-  if (ONLINE && canBuild && made.rec.id) {
-    const { error } = await ONLINE.from("gill_world_pieces").delete().eq("id", made.rec.id);
+  if (worldMade.includes(made)) worldMade.splice(worldMade.indexOf(made), 1);
+  const table = saveTable();
+  if (ONLINE && table && made.rec.id) {
+    const { error } = await ONLINE.from(table).delete().eq("id", made.rec.id);
     $("buildSave").textContent = error ? "Couldn't remove it from the city. Try again." : "Saved";
   }
 }
 async function buildToggleInterior() {
   const made = B.near; if (!made || made.rec.kind !== "building") return;
-  const rec = Object.assign({}, made.rec, { interior: !made.rec.interior });
+  const rec = Object.assign({}, made.rec, { interior: !made.rec.interior, door: Math.atan2(koda.pos.x - made.rec.x, koda.pos.z - made.rec.z) });
   unmakePiece(made); placed.splice(placed.indexOf(made), 1);
   const again = await makePiece(rec); placed.push(again); B.near = undefined;
   popText(rec.interior ? "HAS AN INSIDE" : "NO INSIDE");
-  if (ONLINE && rec.id) { const { error } = await ONLINE.from("gill_world_pieces").update({ interior: rec.interior, updated_at: new Date().toISOString() }).eq("id", rec.id); $("buildSave").textContent = error ? "Couldn't save that. Try again." : "Saved"; }
+  if (worldMade.includes(made)) worldMade[worldMade.indexOf(made)] = again;
+  const table = saveTable();
+  if (ONLINE && table && rec.id) { const { error } = await ONLINE.from(table).update(table === "gill_world_pieces" ? { interior: rec.interior, door: rec.door, updated_at: new Date().toISOString() } : { interior: rec.interior, door: rec.door }).eq("id", rec.id); $("buildSave").textContent = error ? "Couldn't save that. Try again." : "Saved"; }
 }
 function buildTurn() { B.rot = (B.rot + Math.PI / 2) % (Math.PI * 2); }
 function buildUndo() { const m = B.undo.pop(); if (m && placed.includes(m)) buildRemove(m); }
+// Mouse in build mode: the copy follows the cursor; click a piece to pick it up and move it,
+// click again to put it down; right click turns it.
+addEventListener("pointermove", e => { if (state === "build" && e.pointerType === "mouse") B.mouse = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+addEventListener("pointerdown", e => {
+  if (state !== "build" || e.pointerType !== "mouse" || e.target !== renderer.domElement) return;
+  B.mouse = { x: e.clientX, y: e.clientY, t: performance.now() };
+  if (e.button === 2) { buildTurn(); return; }
+  if (e.button !== 0) return;
+  if (!B.carry && B.near && pieceUnderMouse() === B.near) buildPickUp(B.near); else buildPlace();
+});
+addEventListener("contextmenu", e => { if (state === "build") e.preventDefault(); });
 (function buildControls() {
   $("buildCats").addEventListener("click", e => { const b = e.target.closest("button"); if (b) buildPick(b.dataset.c, 0); });
   $("buildItems").addEventListener("click", e => { const b = e.target.closest("button"); if (b) buildPick(null, +b.dataset.i); });
   const tap = (id, fn) => $(id).addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); if (state === "build") fn(); });
-  tap("bTurn", buildTurn); tap("bPlace", buildPlace); tap("bPickUp", () => buildRemove(B.near)); tap("bInside", buildToggleInterior); tap("bUndo", buildUndo); tap("bDone", stopBuild); tap("bView", () => setView(cam.view + 1));
+  tap("bTurn", buildTurn); tap("bPlace", buildPlace); tap("bPickUp", () => buildPickUp(B.near)); tap("bDelete", () => { if (B.carry) { B.carry = null; B.ghostKey = ""; popText("BINNED"); } else buildRemove(B.near); }); tap("bInside", buildToggleInterior); tap("bUndo", buildUndo); tap("bDone", stopBuild); tap("bView", () => setView(cam.view + 1));
   $("buildBtn").addEventListener("click", startBuild);
+  const gb = $("bGather");
+  gb.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); B.gathering = true; });
+  for (const ev of ["pointerup", "pointercancel", "pointerleave"]) gb.addEventListener(ev, () => { B.gathering = false; });
   addEventListener("keydown", e => {
     if (state !== "build" || e.repeat) return;
     if (e.code === "KeyR") buildTurn();
     else if (e.code === "Enter" || e.code === "KeyF") buildPlace();
-    else if (e.code === "KeyX" || e.code === "Delete" || e.code === "Backspace") buildRemove(B.near);
+    else if (e.code === "KeyX") buildPickUp(B.near);
+    else if (e.code === "Delete" || e.code === "Backspace") { if (B.carry) { B.carry = null; B.ghostKey = ""; } else buildRemove(B.near); }
     else if (e.code === "KeyI") buildToggleInterior();
     else if (e.code === "KeyZ") buildUndo();
     else if (e.code === "Space") jump();
@@ -4505,6 +4815,12 @@ const stalls = [];      // { x, z, yaw, q }: someone stands behind each one
 const swayers = [];     // trees and plants that move in the wind
 const leafMats = [0x3f6a34, 0x4f7d3a, 0x5d8f43, 0x2f5a2c].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, flatShading: true }));
 const flowerMats = [0xd9475a, 0xf2b544, 0xe7e1f2, 0xb16cd9, 0xf58b3c].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 }));
+// Stalls in different colours: the awnings and paint take a tint, so no two look the same.
+const STALL_TINTS = [0xffffff, 0x8fd18a, 0x86b6ff, 0xffd06b, 0xd59cff, 0xff9c7a, 0x7fe0d0];
+function tintStall(root, i) {
+  const t = new THREE.Color(STALL_TINTS[i]);
+  root.traverse(o => { if (o.isMesh && o.material && o.material.color) { o.material = o.material.clone(); o.material.color.multiply(t); } });
+}
 async function placeThing(name, x, z, yaw, size, { h = null, solid = true, walk = false, low = false, pad = 0.6 } = {}) {
   if (onRoad(x, z, size * 0.45) || onRiver(x, z, size * 0.6) || ridgeAt(x, z) > 0.3 || blocked(x, z, size * 0.5 + pad)) return null;
   const src = await staticModel(name);
@@ -4549,6 +4865,29 @@ function addBed(x, z, w, r) {
   blockers.push({ minX: x - w / 2, maxX: x + w / 2, minZ: z - w / 3, maxZ: z + w / 3, top: base + 0.8, base, walk: true, low: true, mats: [] });
   swayers.push({ g, ph: r() * 6.28, amp: 0.012 });
 }
+// Dust: running on sand kicks up little clouds at his feet.
+const dust = { pool: [], t: 0, tex: null };
+function dustTex() {
+  const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d");
+  const gr = g.createRadialGradient(32, 32, 2, 32, 32, 30); gr.addColorStop(0, "rgba(255,240,215,.9)"); gr.addColorStop(1, "rgba(255,240,215,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
+}
+function onSand(x, z) { const q = zoneAt(x, z); return q ? districtOf(q) === "de" : !(S.quadrants.some(k => (districtOf(k) === "rc" || districtOf(k) === "uc") && Math.hypot(Math.max(0, k.x0 - x, x - k.x0 - k.w), Math.max(0, k.z0 - z, z - k.z0 - k.d)) < 30)) && !onRoad(x, z, 0); }
+function updateDust(dt) {
+  if (!dust.tex) dust.tex = dustTex();
+  dust.t -= dt;
+  if (koda && koda.moving && !air && dust.t <= 0 && onSand(koda.pos.x, koda.pos.z)) {
+    dust.t = koda.sneaking ? 0.3 : 0.08;
+    let p = dust.pool.find(p => p.life <= 0);
+    if (!p && dust.pool.length < 40) { p = { s: new THREE.Sprite(new THREE.SpriteMaterial({ map: dust.tex, color: 0xd9b98a, transparent: true, depthWrite: false })), life: 0 }; scene.add(p.s); dust.pool.push(p); }
+    if (p) { const f = forward(koda); p.s.position.set(koda.pos.x - f.x * 0.3 + (Math.random() - 0.5) * 0.4, koda.pos.y + 0.15, koda.pos.z - f.y * 0.3 + (Math.random() - 0.5) * 0.4); p.life = 0.9; p.s.visible = true; }
+  }
+  for (const p of dust.pool) {
+    if (p.life <= 0) { p.s.visible = false; continue; }
+    p.life -= dt; const k = 1 - p.life / 0.9;
+    p.s.scale.setScalar(0.5 + k * 1.6); p.s.position.y += dt * 0.5; p.s.material.opacity = 0.55 * (1 - k);
+  }
+}
 function updateSway(now) {
   const t = now / 1000;
   for (const s of swayers) { s.g.rotation.z = Math.sin(t * 1.3 + s.ph) * s.amp; s.g.rotation.x = Math.sin(t * 0.9 + s.ph * 1.7) * s.amp * 0.7; }
@@ -4558,14 +4897,27 @@ async function buildTownPlan() {
   for (const q of S.quadrants) {
     const r = rng(q.id.charCodeAt(2) * 911 + 31), cx = q.x0 + q.w / 2, cz = q.z0 + q.d / 2, dist = districtOf(q);
     const face = (x, z) => Math.atan2(cx - x, cz - z);   // turned to look into the middle
-    // Market row along the south side of the middle, stalls facing in.
-    const mz = cz + 18, n = q.w > 100 ? 4 : 3;
-    for (let i = 0; i < n; i++) {
-      const x = cx + (i - (n - 1) / 2) * 6;
-      jobs.push(placeThing("stall", x, mz, Math.PI, 4.4, { pad: 0.3 }).then(t => { if (t) stalls.push({ x, z: mz - 2.6, yaw: Math.PI, q }); }));
+    // Food stalls along the pavements of this place's streets, facing the road, each one different.
+    for (const st of WD.roads.filter(r => r.street && (r.name === q.name + " Street" || r.name === q.name + " Avenue"))) {
+      const [[ax, az], [bx, bz]] = st.points, horiz = Math.abs(bx - ax) > Math.abs(bz - az), off = st.width / 2 + 2.6;
+      for (let k = 0; k < 4; k++) {
+        const side = k % 2 ? 1 : -1, along = (horiz ? q.x0 : q.z0) + (0.18 + 0.2 * k + r() * 0.06) * (horiz ? q.w : q.d);
+        const x = horiz ? along : ax + side * off, z = horiz ? az + side * off : along;
+        if (Math.hypot(x - cx, z - cz) < 14) continue;   // the crossing in the middle stays clear
+        const yaw = horiz ? (side > 0 ? Math.PI : 0) : (side > 0 ? -Math.PI / 2 : Math.PI / 2);   // counter to the road
+        const kind = r() < 0.75 ? "stall" : "booth";
+        jobs.push(placeThing(kind, x, z, yaw, kind === "stall" ? 3.6 + r() * 1.2 : 2.4, { pad: 0.2 }).then(t => {
+          if (!t) return;
+          tintStall(t.m, Math.floor(r() * STALL_TINTS.length));
+          if (!q.hasTrade && t.b) { q.hasTrade = true; t.b.store = { lc: "wood", mc: "metal", uc: "glass", rc: "stone", de: "sand" }[dist] || "general"; }
+          const fx = horiz ? 0 : -side, fz = horiz ? -side : 0;   // the seller stands on the far side, facing the road
+          stalls.push({ x: x - fx * 2.2, z: z - fz * 2.2, yaw: Math.atan2(fx, fz) + Math.PI, q });
+        }));
+      }
     }
-    jobs.push(placeThing("booth", cx + 20, cz - 15, face(cx + 20, cz - 15), 2.6));
-    jobs.push(placeThing("billboard", cx - 24, cz - 20, face(cx - 24, cz - 20), 7, { h: 6 }));
+    // Every place has a general store (the kiosk), and its first stall is its own trade.
+    jobs.push(placeThing("booth", cx + 20, cz - 15, face(cx + 20, cz - 15), 2.6).then(t => { if (t && t.b) t.b.store = "general"; }));
+    jobs.push(placeThing("billboard", cx - 24, cz - 20, face(cx - 24, cz - 20), 12, { h: 10 }));
     if (dist === "lc") {
       for (let i = 0; i < 3; i++) { const x = q.x0 + 14 + r() * (q.w - 28), z = q.z0 + 14 + r() * (q.d - 28); if (Math.hypot(x - cx, z - cz) > 22) jobs.push(placeThing("washline", x, z, r() * 3, 5, { solid: false })); }
       jobs.push(placeThing("handcart", cx - 14, cz + 10, r() * 6, 2.4, { walk: true, low: true }));
@@ -4578,7 +4930,6 @@ async function buildTownPlan() {
       // A freight depot: stacked containers, a conveyor and a hauler parked up.
       for (let i = 0; i < 4; i++) jobs.push(placeThing("container", cx - 26 + (i % 2) * 7, cz - 8 + Math.floor(i / 2) * 3.2, Math.PI / 2 * 0, 6.2, { walk: true, pad: 0.1 }));
       jobs.push(placeThing("conveyor", cx - 18, cz + 4, 0, 4, { walk: true, low: true }));
-      jobs.push(placeThing("hauler", cx + 24, cz + 4, face(cx + 24, cz + 4), 9));
       jobs.push(placeThing("turnstile", cx + 10, cz - 22, 0, 3.2));
       jobs.push(placeThing("valve", cx + 24, cz - 6, 0, 2.2, { walk: true }));
       jobs.push(placeThing("filter", cx - 6, cz - 24, 0, 2.2, { walk: true }));
@@ -4604,6 +4955,46 @@ async function buildTownPlan() {
     if (dist === "de" || dist === "lc") for (let i = 0; i < 3; i++) { const a = r() * Math.PI * 2, d = 20 + r() * 18; jobs.push(Promise.resolve(addTree(cx + Math.cos(a) * d, cz + Math.sin(a) * d, 4 + r() * 2, r))); }
   }
   await Promise.all(jobs);
+  // Wreckage left by the Veil: toppled masts and chimneys, split containers, scrap. Gather metal from it.
+  const dr = rng(777);
+  for (const q of S.quadrants) for (let i = 0; i < 2; i++) {
+    const cx = q.x0 + q.w / 2, cz = q.z0 + q.d / 2, a = dr() * 6.28, d = 20 + dr() * Math.min(q.w, q.d) * 0.3;
+    const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+    if (onRoad(x, z, 5) || blocked(x, z, 3.5) || onRiver(x, z, 4)) continue;
+    const g = new THREE.Group(), base = terrainAt(x, z);
+    for (const [name, size, rx, rz, ox, oz] of [["mast", 9, 1.35, 0.2, 0, 0], ["container", 5, 0.25, 0.5, 2.2, 1.5], ["chimney", 5, 1.45, 0.6, -2, -1.4]]) {
+      const src = await staticModel(name); if (!src) continue;
+      const m = src.clone(true), bx = new THREE.Box3().setFromObject(m), sz = bx.getSize(new THREE.Vector3());
+      m.scale.setScalar(size / Math.max(sz.x, sz.y, sz.z)); m.rotation.set(rx, dr() * 6, rz);
+      const b2 = new THREE.Box3().setFromObject(m), c = b2.getCenter(new THREE.Vector3()); m.position.set(ox - c.x, -b2.min.y - 0.3, oz - c.z);
+      m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.material = o.material.clone(); o.material.color.multiplyScalar(0.7); } });
+      g.add(m);
+    }
+    for (let k = 0; k < 8; k++) { const ch = new THREE.Mesh(propGeo, rubbleMat); const sz = 0.3 + dr() * 0.7; ch.scale.set(sz, sz * 0.6, sz); ch.position.set((dr() - 0.5) * 5, sz * 0.25, (dr() - 0.5) * 4); ch.rotation.set(dr(), dr() * 3, dr()); ch.castShadow = true; g.add(ch); }
+    g.position.set(x, base, z); scene.add(g);
+    blockers.push({ minX: x - 2.6, maxX: x + 2.6, minZ: z - 2.2, maxZ: z + 2.2, top: base + 1.4, base, walk: true, low: false, mesh: g, mats: [], prop: "debris" });
+  }
+  // Air traffic: haulers and shuttles fly loops high over the city.
+  const fr = rng(2024);
+  for (const [name, size, n] of [["hauler", 24, 2], ["shuttle", 20, 2]]) for (let i = 0; i < n; i++) {
+    const src = await staticModel(name); if (!src) continue;
+    const m = src.clone(true), box = new THREE.Box3().setFromObject(m), sz = box.getSize(new THREE.Vector3());
+    m.scale.setScalar(size / Math.max(sz.x, sz.z));
+    const c = new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3()); m.position.sub(c);
+    const g = new THREE.Group(); g.add(m); m.traverse(o => { if (o.isMesh) o.castShadow = true; }); scene.add(g);
+    const q = S.quadrants[Math.floor(fr() * S.quadrants.length)];
+    flyers.push({ g, cx: q.x0 + q.w / 2, cz: q.z0 + q.d / 2, r: 70 + fr() * 90, y: 38 + fr() * 22, w: (0.06 + fr() * 0.05) * (fr() < 0.5 ? -1 : 1), a: fr() * 6.28 });
+  }
+}
+const flyers = [];
+function updateFlyers(dt) {
+  for (const f of flyers) {
+    f.a += f.w * dt;
+    const x = f.cx + Math.cos(f.a) * f.r, z = f.cz + Math.sin(f.a) * f.r;
+    const dx = -Math.sin(f.a) * Math.sign(f.w), dz = Math.cos(f.a) * Math.sign(f.w);
+    f.g.position.set(x, f.y + Math.sin(f.a * 3) * 1.5, z);
+    f.g.rotation.set(0, Math.atan2(dx, dz), 0); f.g.rotateZ(-Math.sign(f.w) * 0.18);
+  }
 }
 
 /* ---------- townsfolk at work ----------
@@ -4743,14 +5134,17 @@ async function coopJoin(code) {
   coop.code = code;
   const ch = ONLINE.channel("gill-room-" + code, { config: { broadcast: { self: false }, presence: { key: coop.id } } });
   ch.on("broadcast", { event: "pos" }, ({ payload: m }) => coopPos(m));
+  voiceWire(ch);
   ch.on("broadcast", { event: "piece" }, ({ payload: m }) => coopPiece(m.rec, false));
   ch.on("broadcast", { event: "unpiece" }, ({ payload: m }) => coopUnpiece(m.key));
   ch.on("broadcast", { event: "pieces" }, ({ payload: m }) => { if (m.to === coop.id) for (const rec of m.list) coopPiece(rec, false); });
   ch.on("presence", { event: "join" }, ({ key }) => {
     // Whoever has been here longest hands the newcomer what the room has built so far.
-    if (key !== coop.id && coop.pieces.length) ch.send({ type: "broadcast", event: "pieces", payload: { to: key, list: coop.pieces.map(p => p.rec) } });
+    const list = coop.pieces.map(p => p.rec).concat(worldMade.filter(m => !coop.pieces.some(p => p.made === m)).map(m => m.rec));
+    if (key !== coop.id && list.length) ch.send({ type: "broadcast", event: "pieces", payload: { to: key, list } });
   });
   ch.on("presence", { event: "leave" }, ({ key }) => { const o = coop.others.get(key); if (o) { scene.remove(o.root); coop.others.delete(key); coopRender(); } });
+  voiceCheck();
   ch.subscribe(async st => { if (st === "SUBSCRIBED") { await ch.track({ colour: coop.colour }); coopRender(); toast(`You're in room ${code}. Share the code to play together.`, 3); } });
   coop.ch = ch;
   coopRender();
@@ -4758,10 +5152,11 @@ async function coopJoin(code) {
 async function coopLeave() {
   if (!coop.ch) return;
   try { await coop.ch.unsubscribe(); } catch (e) { /* gone already */ }
+  if (voice.on) await voiceToggle();
   coop.ch = null; coop.code = "";
   for (const o of coop.others.values()) scene.remove(o.root);
   coop.others.clear();
-  for (const p of coop.pieces) if (!p.rec.id) unmakePiece(p.made);
+  for (const p of coop.pieces) if (!p.rec.id && !worldMade.includes(p.made)) { unmakePiece(p.made); if (placed.includes(p.made)) placed.splice(placed.indexOf(p.made), 1); }
   coop.pieces = [];
   coopRender();
 }
@@ -4802,13 +5197,21 @@ async function coopPiece(rec, mine) {
   if (coop.pieces.some(p => coopPieceKey(p.rec) === coopPieceKey(rec)) || placed.some(m => m.rec.id && m.rec.id === rec.id)) return;
   const made = mine || await makePiece(rec);
   coop.pieces.push({ rec, made });
-  if (!mine) placed.push(made);
+  if (!mine) {
+    placed.push(made);
+    // A friend built it in my world: I keep it for them.
+    if (myWorld && canSaveWorlds && ONLINE && !rec.id) {
+      const row = Object.assign({}, rec, { world_id: myWorld.id }); delete row.id;
+      ONLINE.from("gill_world_items").insert(row).select("id").single().then(({ data }) => { if (data) { made.rec.id = data.id; worldMade.push(made); } });
+    }
+  }
 }
 function coopUnpiece(key) {
   const i = coop.pieces.findIndex(p => coopPieceKey(p.rec) === key);
   if (i < 0) return;
   const p = coop.pieces.splice(i, 1)[0];
   if (placed.includes(p.made)) { unmakePiece(p.made); placed.splice(placed.indexOf(p.made), 1); }
+  if (worldMade.includes(p.made)) { worldMade.splice(worldMade.indexOf(p.made), 1); if (ONLINE && canSaveWorlds && p.made.rec.id) ONLINE.from("gill_world_items").delete().eq("id", p.made.rec.id); }
 }
 (function coopControls() {
   $("coopBtn").addEventListener("click", () => { $("coop").classList.remove("hidden"); coopRender(); });
@@ -4818,6 +5221,276 @@ function coopUnpiece(key) {
   $("coopJoin").addEventListener("click", () => coopJoin($("coopCode").value));
   $("coopCode").addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter") coopJoin($("coopCode").value); });
 })();
+
+/* ---------- my worlds ----------
+   A world is the city plus everything one player builds in it, kept on their Feelz Machine
+   account (a paid plan keeps it; anyone can try building). Open it from My worlds: it plays
+   as free roam with your pieces in place. Make a room from inside it and friends walk and
+   build in it with you; what they place is kept in your world. The official city (Steve's
+   pieces, the missions) is the same for everyone. */
+let myWorld = null, canSaveWorlds = false;
+const worldMade = [];
+function saveTable() {
+  if (!ONLINE) return null;
+  if (myWorld) return canSaveWorlds ? "gill_world_items" : null;
+  return canBuild ? "gill_world_pieces" : null;
+}
+async function checkWorlds() {
+  canSaveWorlds = false;
+  if (!ONLINE) return false;
+  try { const { data: s2 } = await ONLINE.auth.getSession(); if (!s2 || !s2.session) return false; const { data } = await ONLINE.rpc("gill_can_save_worlds"); canSaveWorlds = data === true; } catch (e) { canSaveWorlds = false; }
+  return canSaveWorlds;
+}
+async function renderWorlds() {
+  const list = $("worldList"), note = $("worldsNote");
+  list.innerHTML = ""; $("worldNew").disabled = true;
+  if (!ONLINE) { note.textContent = "Worlds are kept on feelzmachine.com."; return; }
+  const { data: s2 } = await ONLINE.auth.getSession();
+  if (!s2 || !s2.session) { note.textContent = "Sign in to Feelz Machine in this browser to keep worlds."; return; }
+  await checkWorlds();
+  note.textContent = canSaveWorlds ? "Your worlds, kept on your Feelz Machine account." : "Keeping worlds comes with a Feelz Machine plan. You can still build in Free roam and in rooms.";
+  $("worldNew").disabled = !canSaveWorlds;
+  const { data } = await ONLINE.from("gill_worlds").select("id,name,updated_at").order("updated_at", { ascending: false });
+  list.innerHTML = (data || []).map(w => `<div class="world-row" data-id="${w.id}"><b>${w.name.replace(/[<>&]/g, "")}</b><small>${new Date(w.updated_at).toLocaleDateString()}</small><button class="primary" data-act="play">Play</button><button class="ghost" data-act="rename">Rename</button></div>`).join("") || (canSaveWorlds ? '<p class="coop-or">No worlds yet. Make your first one.</p>' : "");
+  list._worlds = data || [];
+}
+async function enterWorld(w) {
+  $("worlds").classList.add("hidden");
+  startFreeRoam();
+  myWorld = { id: w.id, name: w.name }; loadInv(); drawInventory();
+  $("worldPill").textContent = w.name.toUpperCase(); $("worldPill").classList.remove("hidden");
+  toast(`Welcome to ${w.name}.`, 2.5);
+  const { data } = await ONLINE.from("gill_world_items").select("id,kind,model,label,x,z,rot,w,d,h,interior,door,y").eq("world_id", w.id).limit(5000);
+  if (!myWorld || myWorld.id !== w.id) return;
+  for (const rec of data || []) { const made = await makePiece(rec); placed.push(made); worldMade.push(made); }
+  wakePlacedEnforcers();
+  showBuildBtn();
+}
+function leaveWorld() {
+  for (const m of worldMade.splice(0)) { unmakePiece(m); if (placed.includes(m)) placed.splice(placed.indexOf(m), 1); }
+  myWorld = null; $("worldPill").classList.add("hidden");
+}
+(function worldControls() {
+  $("worldsBtn").addEventListener("click", () => { $("worlds").classList.remove("hidden"); renderWorlds(); });
+  $("worldsClose").addEventListener("click", () => $("worlds").classList.add("hidden"));
+  $("worldNew").addEventListener("click", async () => {
+    const n = (($("worldList")._worlds || []).length) + 1;
+    const { data, error } = await ONLINE.from("gill_worlds").insert({ name: "My world " + n }).select("id,name").single();
+    if (error) { $("worldsNote").textContent = /10 worlds/.test(error.message) ? "You can keep up to 10 worlds." : "Couldn't make a world. Try again."; return; }
+    enterWorld(data);
+  });
+  $("worldList").addEventListener("click", async e => {
+    const b = e.target.closest("button"), row = e.target.closest(".world-row"); if (!b || !row) return;
+    const w = ($("worldList")._worlds || []).find(x => x.id === row.dataset.id); if (!w) return;
+    if (b.dataset.act === "play") return enterWorld(w);
+    // Rename in place: the name becomes a box to type into.
+    const box = document.createElement("input"); box.value = w.name; box.maxLength = 40; box.className = "world-name";
+    row.querySelector("b").replaceWith(box); box.focus(); box.select();
+    const done = async () => { const v = box.value.trim().slice(0, 40); if (v && v !== w.name) await ONLINE.from("gill_worlds").update({ name: v, updated_at: new Date().toISOString() }).eq("id", w.id); renderWorlds(); };
+    box.addEventListener("keydown", ev => { ev.stopPropagation(); if (ev.key === "Enter") done(); });
+    box.addEventListener("blur", done, { once: true });
+  });
+})();
+
+/* ---------- gathering, Minecraft style ----------
+   In free roam and in your own worlds, blocks and ground cost materials you gather yourself:
+   hold ACTION (E, Y, or the Gather button while building) by a tree for wood, by rocks and
+   hills for stone, on open sand for sand. Admins building the official city build for free. */
+// Signed in: materials live on your Feelz Machine account (bought with credits or gathered).
+// Not signed in: they live in this browser.
+const MATS = ["wood", "stone", "sand", "metal", "glass"];
+let inv = { wood: 0, stone: 0, sand: 0, metal: 0, glass: 0 }, invOnline = false, credits = 0, invPending = {};
+const invKey = () => "gill.inv." + (myWorld ? myWorld.id : "roam");
+async function refreshInv() {
+  if (!ONLINE) return false;
+  try {
+    const { data: s2 } = await ONLINE.auth.getSession(); if (!s2 || !s2.session) return false;
+    const { data, error } = await ONLINE.rpc("gill_inv"); if (error || !data) return false;
+    for (const k of MATS) inv[k] = data[k] || 0; credits = data.credits || 0; invOnline = true; drawInventory(); return data;
+  } catch (e) { return false; }
+}
+function loadInv() {
+  if (invOnline) { refreshInv(); return; }
+  try { inv = Object.assign({ wood: 0, stone: 0, sand: 0, metal: 0, glass: 0 }, JSON.parse(localStorage.getItem(invKey()) || "{}")); } catch (e) { inv = { wood: 0, stone: 0, sand: 0, metal: 0, glass: 0 }; }
+}
+function saveInv() { if (invOnline) return; try { localStorage.setItem(invKey(), JSON.stringify(inv)); } catch (e) { /* no storage */ } }
+// Gathered units go to the account a few at a time.
+setInterval(async () => {
+  if (!invOnline) return;
+  for (const k of Object.keys(invPending)) {
+    const n = invPending[k]; if (!n) continue; invPending[k] = 0;
+    const { data } = await ONLINE.rpc("gill_gather", { p_kind: k, p_n: n });
+    if (data) { for (const m of MATS) inv[m] = data[m] || 0; drawInventory(); }
+  }
+}, 3000);
+function usesMaterials() { return !(saveTable() === "gill_world_pieces") && (!!myWorld || state === "build" || (mission && mission.def.free)); }
+function spend(cost) {
+  for (const k in cost) if ((inv[k] || 0) < cost[k]) { popText(`NEED ${cost[k]} ${k.toUpperCase()}`); toast(`You need ${cost[k]} ${k}. Gather it (hold ACTION) or buy it at a store.`, 2.5); return false; }
+  for (const k in cost) inv[k] -= cost[k];
+  saveInv(); drawInventory();
+  if (invOnline) ONLINE.rpc("gill_spend", { p_cost: cost }).then(({ data, error }) => { if (error) { refreshInv(); toast("Couldn't take those materials from your account.", 2.5); } else if (data) { for (const m of MATS) inv[m] = data[m] || 0; drawInventory(); } });
+  return true;
+}
+function drawInventory() {
+  const el = $("inv"), show = usesMaterials() && (state === "build" || (mission && mission.def.free));
+  el.classList.toggle("hidden", !show);
+  if (show) el.innerHTML = `<b title="Wood">🪵 ${inv.wood}</b><b title="Stone">🪨 ${inv.stone}</b><b title="Sand">⏳ ${inv.sand}</b><b title="Metal">⚙️ ${inv.metal}</b><b title="Glass">💎 ${inv.glass}</b>`;
+}
+const gather = { t: 0, what: null };
+function gatherable() {
+  const x = koda.pos.x, z = koda.pos.z;
+  if (swayers.some(sw => sw.g.children.length > 2 && Math.hypot(sw.g.position.x - x, sw.g.position.z - z) < 2.4) || placed.some(m => (m.rec.kind === "tree" || m.rec.kind === "palm") && Math.hypot(m.rec.x - x, m.rec.z - z) < 2.2)) return "wood";
+  if (nearBlocks(x, z, 2.5).some(b => b.prop === "debris")) return "metal";
+  if (ridgeAt(x, z) > 0.2 || nearBlocks(x, z, 2).some(b => b.prop === "rocks") || placed.some(m => (m.rec.kind === "rock" || m.rec.kind === "boulder") && Math.hypot(m.rec.x - x, m.rec.z - z) < 3.5)) return "stone";
+  if (onSand(x, z)) return "sand";
+  return null;
+}
+function updateGather(dt, holding) {
+  const what = holding ? gatherable() : null;
+  if (!what) { gather.t = 0; gather.what = null; return false; }
+  if (gather.what !== what) { gather.what = what; gather.t = 0; }
+  gather.t += dt;
+  koda.play(koda.has("pound") ? "pound" : "idle");
+  if (gather.t >= 0.9) { gather.t = 0; inv[what]++; if (invOnline) invPending[what] = (invPending[what] || 0) + 1; saveInv(); drawInventory(); popText(`+1 ${what.toUpperCase()}`); sfxHit(false); }
+  return true;
+}
+// Enforcers placed by builders patrol in free roam and in worlds.
+function wakePlacedEnforcers() {
+  for (const m of placed) {
+    if (m.rec.kind !== "enforcer" || m.awake) continue;
+    m.awake = true;
+    if (m.actor) m.actor.root.visible = false;
+    const r = m.rec, route = [];
+    for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + (r.rot || 0), s2 = freeSpot(r.x + Math.cos(a) * 5, r.z + Math.sin(a) * 5, 0.6); route.push(new THREE.Vector3(s2.x, floorAt(s2.x, s2.z), s2.z)); }
+    makeActor(r.model + ".glb", ENEMIES[r.model] || 1.9).then(a => {
+      if (!a || !(mission && mission.def.free)) return;
+      a.pos.set(r.x, floorAt(r.x, r.z), r.z); scene.add(a.root); a.play("walk");
+      enemies.push({ a, qd: null, route, leg: 1, state: "patrol", meter: 0, hp: r.model === "gilded" ? 5 : 3, hidden: false, cool: 0.5, hitT: 0, lastSeen: new THREE.Vector3(), searchT: 0, speed: 2.2, kind: r.model, shiftT: 0, placed: m });
+    }).catch(() => null);
+  }
+}
+function sleepPlacedEnforcers() { for (const m of placed) if (m.rec.kind === "enforcer") { m.awake = false; if (m.actor) m.actor.root.visible = true; } }
+
+/* ---------- stores ----------
+   Every place has stores. Walk up to one and press ACTION: buy wood, stone, sand, metal and
+   glass with your Feelz Machine credits (the ones Feelz Run pays out). */
+const SHOP_ITEMS = { wood: ["Wood", "🪵", 20], stone: ["Stone", "🪨", 20], sand: ["Sand", "⏳", 10], metal: ["Metal", "⚙️", 40], glass: ["Glass", "💎", 30] };
+let shopSells = null;
+function storeNear() {
+  const x = koda.pos.x, z = koda.pos.z;
+  const s2 = stores.find(m => Math.hypot(m.rec.x - x, m.rec.z - z) < Math.max(m.rec.w, m.rec.d) / 2 + 2.2);
+  if (s2) return s2.store;
+  const tb = nearBlocks(x, z, 2.6).find(b => b.store);
+  return tb ? tb.store : null;
+}
+async function openShop(sells) {
+  shopSells = sells;
+  const names = { general: "General store", wood: "Timber yard", stone: "Quarry", sand: "Sand pit", metal: "Scrap yard", glass: "Glassworks" };
+  $("shopTitle").textContent = names[sells] || "Store";
+  $("shop").classList.remove("hidden");
+  if (state === "play") { state = "paused"; shopOpen = true; }
+  await renderShop();
+}
+let shopOpen = false;
+function closeShop() { $("shop").classList.add("hidden"); if (shopOpen) { shopOpen = false; state = "play"; lastT = performance.now(); } }
+async function renderShop() {
+  const kinds = shopSells === "general" ? Object.keys(SHOP_ITEMS) : [shopSells];
+  const online = await refreshInv();
+  $("shopNote").textContent = online ? `You have ${credits} credits. Feelz Run finds turn into credits.` : "Sign in to Feelz Machine to shop with your credits. You can still gather by hand (hold ACTION).";
+  $("shopList").innerHTML = kinds.map(k => `<div class="shop-row" data-k="${k}"><span>${SHOP_ITEMS[k][1]}</span><b>${SHOP_ITEMS[k][0]}</b><small>${SHOP_ITEMS[k][2]} each · you have ${inv[k] || 0}</small><button class="ghost" data-n="1" ${online ? "" : "disabled"}>Buy 1</button><button class="primary" data-n="10" ${online ? "" : "disabled"}>Buy 10</button></div>`).join("");
+  $("shopConvert").disabled = !online;
+}
+(function shopControls() {
+  $("shopClose").addEventListener("click", closeShop);
+  $("shopList").addEventListener("click", async e => {
+    const b = e.target.closest("button"), row = e.target.closest(".shop-row"); if (!b || !row) return;
+    b.disabled = true;
+    const { data, error } = await ONLINE.rpc("gill_buy", { p_kind: row.dataset.k, p_qty: +b.dataset.n });
+    if (error) $("shopNote").textContent = /Not enough credits/.test(error.message) ? "Not enough credits. Play Feelz Run for more, or gather by hand." : "Couldn't buy that. Try again.";
+    else { for (const m of MATS) inv[m] = data[m] || 0; credits = data.credits; sfxUnlock(); await renderShop(); }
+  });
+  $("shopConvert").addEventListener("click", async () => {
+    const { error } = await ONLINE.rpc("game_convert");
+    $("shopNote").textContent = error ? (/Nothing to convert/.test(error.message) ? "Nothing to turn in yet. Play Feelz Run to find records, notes, pages and coins." : "Couldn't turn them in. Try again.") : "Done!";
+    if (!error) renderShop();
+  });
+})();
+
+/* ---------- chat and voice ----------
+   In a room: everyone can type (T or the Chat button). Voice is for adults only: the button
+   shows when your Feelz Machine account has a birth date showing 18 or over. */
+const CHAT_BAD = /\b(fuck|shit|bitch|cunt|nigg|fag|dick|pussy|slut|whore)\w*/gi;
+function chatShow(name, colour, text) {
+  const p2 = document.createElement("p");
+  p2.innerHTML = `<b style="color:${hexCol(colour)}"></b><span></span>`;
+  p2.querySelector("b").textContent = name; p2.querySelector("span").textContent = text;
+  const log = $("chatLog"); log.appendChild(p2); while (log.children.length > 6) log.firstChild.remove();
+  setTimeout(() => { p2.style.opacity = "0"; setTimeout(() => p2.remove(), 700); }, 9000);
+}
+function chatSend() {
+  const box = $("chatInput"), text = box.value.trim().slice(0, 120).replace(CHAT_BAD, m => "*".repeat(m.length));
+  box.value = ""; $("chatBox").classList.add("hidden"); box.blur();
+  if (!text || !coop.ch) return;
+  coop.ch.send({ type: "broadcast", event: "chat", payload: { id: coop.id, c: coop.colour, text } });
+  chatShow(coopName() + " (you)", COOP_COLOURS[coop.colour], text);
+}
+function chatOpen() { if (!coop.ch) return; $("chatBox").classList.remove("hidden"); $("chatInput").focus(); }
+$("btnChat").addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); chatOpen(); });
+$("chatSend").addEventListener("click", chatSend);
+$("chatInput").addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter") chatSend(); if (e.key === "Escape") { $("chatBox").classList.add("hidden"); e.target.blur(); } });
+addEventListener("keydown", e => { if (e.code === "KeyT" && coop.ch && (state === "play" || state === "build") && document.activeElement !== $("chatInput")) { e.preventDefault(); chatOpen(); } });
+// Voice: a direct audio link to each other adult in the room who has their voice on.
+const voice = { ok: false, on: false, stream: null, peers: new Map() };
+async function voiceCheck() { if (!ONLINE) return false; try { const { data } = await ONLINE.rpc("gill_voice_ok"); voice.ok = data === true; } catch (e) { voice.ok = false; } return voice.ok; }
+function voicePeer(id) {
+  let pc = voice.peers.get(id);
+  if (pc) return pc;
+  pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+  voice.peers.set(id, pc);
+  if (voice.stream) for (const t of voice.stream.getTracks()) pc.addTrack(t, voice.stream);
+  pc.onicecandidate = ev => { if (ev.candidate && coop.ch) coop.ch.send({ type: "broadcast", event: "rtc", payload: { from: coop.id, to: id, cand: ev.candidate } }); };
+  pc.ontrack = ev => { let el = document.getElementById("va-" + id); if (!el) { el = Object.assign(document.createElement("audio"), { id: "va-" + id, autoplay: true }); document.body.appendChild(el); } el.srcObject = ev.streams[0]; };
+  return pc;
+}
+async function voiceToggle() {
+  if (!voice.ok || !coop.ch) return;
+  if (voice.on) {
+    voice.on = false; for (const pc of voice.peers.values()) pc.close(); voice.peers.clear();
+    if (voice.stream) voice.stream.getTracks().forEach(t => t.stop()); voice.stream = null;
+    document.querySelectorAll("audio[id^=va-]").forEach(a => a.remove());
+    coop.ch.track({ colour: coop.colour, voice: false });
+  } else {
+    try { voice.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); } catch (e) { toast("Your browser didn't allow the microphone.", 2.5); return; }
+    voice.on = true; coop.ch.track({ colour: coop.colour, voice: true });
+    coop.ch.send({ type: "broadcast", event: "voice-hello", payload: { from: coop.id } });
+  }
+  $("btnVoice").classList.toggle("on", voice.on);
+  $("btnVoice").textContent = voice.on ? "Voice on" : "Voice";
+}
+$("btnVoice").addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); voiceToggle(); });
+function voiceWire(ch) {
+  ch.on("broadcast", { event: "chat" }, ({ payload: m }) => { const text = String(m.text || "").slice(0, 120).replace(CHAT_BAD, x => "*".repeat(x.length)); chatShow(["Gold", "Sky", "Rose", "Mint", "Violet", "Flame"][m.c % 6], COOP_COLOURS[m.c % COOP_COLOURS.length], text); });
+  // Someone switched voice on: if mine is on too, call them (the one with the lower id calls).
+  ch.on("broadcast", { event: "voice-hello" }, async ({ payload: m }) => {
+    if (!voice.on || m.from === coop.id) return;
+    if (coop.id < m.from) { const pc = voicePeer(m.from); const offer = await pc.createOffer(); await pc.setLocalDescription(offer); ch.send({ type: "broadcast", event: "rtc", payload: { from: coop.id, to: m.from, sdp: pc.localDescription } }); }
+    else ch.send({ type: "broadcast", event: "voice-hello", payload: { from: coop.id } });
+  });
+  ch.on("broadcast", { event: "rtc" }, async ({ payload: m }) => {
+    if (!voice.on || m.to !== coop.id) return;
+    const pc = voicePeer(m.from);
+    if (m.sdp) {
+      await pc.setRemoteDescription(m.sdp);
+      if (m.sdp.type === "offer") { const ans = await pc.createAnswer(); await pc.setLocalDescription(ans); ch.send({ type: "broadcast", event: "rtc", payload: { from: coop.id, to: m.from, sdp: pc.localDescription } }); }
+    } else if (m.cand) { try { await pc.addIceCandidate(m.cand); } catch (e) { /* late candidate */ } }
+  });
+}
+function showRoomButtons() {
+  const inRoom = !!coop.ch && (state === "play" || state === "build");
+  $("btnChat").classList.toggle("hidden", !inRoom);
+  $("btnVoice").classList.toggle("hidden", !(inRoom && voice.ok));
+  document.body.classList.toggle("roam", !!(mission && mission.def.free));
+}
 
 /* ---------- boot ---------- */
 (async function boot() {
@@ -4852,11 +5525,12 @@ function coopUnpiece(key) {
   await loadPieces();
   // Opened with ?build=1 but building isn't open to this browser: the button says why.
   checkBuilder().then(showBuildBtn);
+  refreshInv();
   $("loading").textContent = "";
   $("playBtn").disabled = false;
   toTitle();
   window.GILL_FLOATS = () => floats; window.GILL_DRONES = () => drones;
-  window.GILL = { zones: S.quadrants, ambientCount: () => ambient.map(p => p.job).join(","), moveWithCollision, shrines, travelTo, prayNear, guideRoute, buildStep: dt => updateBuild(dt), scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
+  window.GILL = { startBuild, B, buildPick, buildPlace, buildPickUp, placedCount: () => placed.length, inv: () => Object.assign({}, inv), dustCount: () => dust.pool.filter(p => p.life > 0).length, flyerCount: () => flyers.length, zones: S.quadrants, ambientCount: () => ambient.map(p => p.job).join(","), moveWithCollision, shrines, travelTo, prayNear, guideRoute, buildStep: dt => updateBuild(dt), scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
     enemies, npcs, get state() { return state; }, save: () => save, blockers, keys, input, cardContinue, pause, resume, drawBigMap, pathNext, stick, FOCUS, beat, songTime, boost, get lastSafe() { return lastSafe; }, fightFoe, get camZoom() { return camZoom; }, attack, jump, action, objectiveTarget, get health() { return health; }, get music() { return music; },
     sim(seconds) { let t = performance.now(); for (let i = 0; i < seconds * 30; i++) { t += 33; tick(1 / 30, t); } } };
 })();
