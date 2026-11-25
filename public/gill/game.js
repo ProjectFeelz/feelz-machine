@@ -464,6 +464,8 @@ const nearBlocks = (x, z, r) => inBox(x - r, z - r, x + r, z + r);
 // `maxFoot` caps how wide it can be. It sits on the land at its lowest corner.
 const BUILDING_TINT = { lc: 0xc9a07a, mc: 0xa9a7a2, uc: 0xe2dccd, rc: 0x9fb08a, de: 0xe0c08a };
 const tmpTint = new THREE.Color();
+// Buildings out past the fog are hidden, so the whole city costs only what's near.
+const FAR_CULL = [];
 async function placeBuilding(name, x, z, yaw, height, maxFoot = 13, force = false, freeYaw = false) {
   if (!force && (ridgeAt(x, z) > 0.3 || ridgeAt(x - 8, z - 8) > 0.6 || ridgeAt(x + 8, z + 8) > 0.6 || ridgeAt(x - 8, z + 8) > 0.6 || ridgeAt(x + 8, z - 8) > 0.6)) return;
   const src = await staticModel(name);
@@ -497,7 +499,7 @@ async function placeBuilding(name, x, z, yaw, height, maxFoot = 13, force = fals
       mats.push(o.material);
     }
   });
-  scene.add(m);
+  scene.add(m); FAR_CULL.push(m);
   const b = new THREE.Box3().setFromObject(m);
   blockers.push({ minX: b.min.x, maxX: b.max.x, minZ: b.min.z, maxZ: b.max.z, top: b.max.y, base, mesh: m, mats, faded: false, building: name, cells: buildingCells(m, base, b) });
 }
@@ -557,7 +559,7 @@ async function placeTree(e) {
   const b2 = new THREE.Box3().setFromObject(m), c = b2.getCenter(new THREE.Vector3()), base = terrainAt(e.x, e.z);
   m.position.set(e.x - c.x, base - b2.min.y, e.z - c.z);
   m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  scene.add(m);
+  scene.add(m); FAR_CULL.push(m);
   blockers.push({ minX: e.x - 0.35, maxX: e.x + 0.35, minZ: e.z - 0.35, maxZ: e.z + 0.35, top: base + e.h, base, mats: [] });
 }
 async function buildCity(onProgress) {
@@ -4357,6 +4359,11 @@ function drawClock() {
   el.classList.remove("low");
 }
 function tick(dt, now) {
+  if (!(tick.cullT > now - 250)) {
+    tick.cullT = now;
+    const cx = camera.position.x, cz = camera.position.z, r = (scene.fog ? scene.fog.far : 110) + 40;
+    for (const m of FAR_CULL) m.visible = (m.position.x - cx) ** 2 + (m.position.z - cz) ** 2 < r * r;
+  }
   if (hitStop > 0) { hitStop -= dt; updateSparks(dt); updateCamera(dt); return; }
   mission.t += dt;
   runTimers(dt);
@@ -6018,7 +6025,7 @@ function showRoomButtons() {
   $("playBtn").disabled = false;
   toTitle();
   window.GILL_FLOATS = () => floats; window.GILL_DRONES = () => drones;
-  window.GILL = { startBuild, B, buildPick, buildPlace, buildPickUp, placedCount: () => placed.length, inv: () => Object.assign({}, inv), dustCount: () => dust.pool.filter(p => p.life > 0).length, flyerCount: () => flyers.length, zones: S.quadrants, ambientCount: () => ambient.map(p => p.job).join(","), moveWithCollision, shrines, travelTo, prayNear, guideRoute, buildStep: dt => updateBuild(dt), scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
+  window.GILL = { FAR_CULL, startBuild, B, buildPick, buildPlace, buildPickUp, placedCount: () => placed.length, inv: () => Object.assign({}, inv), dustCount: () => dust.pool.filter(p => p.life > 0).length, flyerCount: () => flyers.length, zones: S.quadrants, ambientCount: () => ambient.map(p => p.job).join(","), moveWithCollision, shrines, travelTo, prayNear, guideRoute, buildStep: dt => updateBuild(dt), scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
     enemies, npcs, get state() { return state; }, save: () => save, blockers, keys, input, cardContinue, pause, resume, drawBigMap, pathNext, stick, FOCUS, beat, songTime, boost, get lastSafe() { return lastSafe; }, fightFoe, get camZoom() { return camZoom; }, attack, jump, action, objectiveTarget, get health() { return health; }, get music() { return music; },
     makeActor, horses, mount, dismount, nearHorse, critters, placeThing, staticModel: n => staticModel(n),
     sim(seconds) { let t = performance.now(); for (let i = 0; i < seconds * 30; i++) { t += 33; tick(1 / 30, t); } } };

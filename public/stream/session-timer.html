@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Session Timer</title>
+  <!--
+    public/stream/session-timer.html
+    A countdown overlay for live stream sections. Open it in a normal browser to set your
+    sections, then copy the link into an OBS Browser source.
+    Every time the source is shown (your Stream Dock button), the next section starts.
+  -->
+  <style>
+    :root { --gold: #f2b544; --red: #ff4d4d; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; color: #fff; font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    /* Overlay */
+    .pill { position: absolute; top: 4vmin; right: 4vmin; min-width: 46vmin; padding: 2.4vmin 3vmin 2.6vmin; border-radius: 2.4vmin;
+      background: rgba(5,5,5,.82); border: .3vmin solid rgba(242,181,68,.6); box-shadow: 0 1vmin 4vmin rgba(0,0,0,.5); transition: border-color .3s, transform .3s; }
+    .sec { color: var(--gold); font-weight: 800; letter-spacing: .25em; text-transform: uppercase; font-size: 2.2vmin; display: flex; justify-content: space-between; gap: 2vmin; }
+    .sec span:last-child { color: rgba(255,255,255,.5); }
+    .clock { font-size: 11vmin; font-weight: 900; line-height: 1; margin: 1vmin 0 1.4vmin; font-variant-numeric: tabular-nums; }
+    .bar { height: 1vmin; border-radius: 1vmin; background: rgba(255,255,255,.12); overflow: hidden; }
+    .bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #b47a12, var(--gold)); transition: width .5s linear; }
+    .next { margin-top: 1.4vmin; font-size: 2.2vmin; color: rgba(255,255,255,.65); }
+    .pill.warn { border-color: var(--red); animation: pulse .8s ease-in-out infinite; }
+    .pill.warn .clock { color: var(--red); }
+    .pill.warn .bar i { background: var(--red); }
+    .pill.done { border-color: var(--red); background: rgba(160,20,20,.9); }
+    @keyframes pulse { 50% { transform: scale(1.04); } }
+    @media (max-aspect-ratio: 1/1) { .pill { left: 50%; right: auto; transform: translateX(-50%); min-width: 70vmin; } .pill.warn { animation: none; } .clock { font-size: 15vmin; } .sec, .next { font-size: 3vmin; } }
+    /* Setup page */
+    body.setup { background: #0b0b0b; overflow: auto; }
+    .setup .pill { display: none; }
+    .panel { display: none; max-width: 620px; margin: 40px auto; padding: 0 16px; }
+    .setup .panel { display: block; }
+    .panel h1 { color: var(--gold); font-size: 28px; margin: 0 0 6px; }
+    .panel p { color: rgba(255,255,255,.7); line-height: 1.5; margin: 0 0 18px; }
+    .row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+    .row .n { color: var(--gold); font-weight: 800; width: 24px; }
+    .row input { background: #161616; border: 1px solid #333; color: #fff; border-radius: 10px; padding: 12px; font-size: 16px; }
+    .row input.name { flex: 1; min-width: 0; }
+    .row input.min { width: 90px; text-align: center; }
+    button { background: #1c1c1c; color: #fff; border: 1px solid #333; border-radius: 999px; padding: 12px 20px; font-weight: 700; font-size: 15px; cursor: pointer; }
+    button.gold { background: var(--gold); color: #000; border-color: var(--gold); }
+    button.x { padding: 10px 14px; }
+    .acts { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+    .link { word-break: break-all; background: #161616; border-radius: 10px; padding: 12px; font-size: 13px; color: rgba(255,255,255,.75); }
+    ol.steps { color: rgba(255,255,255,.75); line-height: 1.7; padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <div class="pill" id="pill">
+    <div class="sec"><span id="name">Section</span><span id="count"></span></div>
+    <div class="clock" id="clock">0:00</div>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="next" id="next"></div>
+  </div>
+
+  <div class="panel">
+    <h1>Session timer</h1>
+    <p>Add your sections and how long each one runs. Every press of your Stream Dock button starts the next section, and a buzzer sounds when its time is up.</p>
+    <div id="rows"></div>
+    <div class="acts">
+      <button id="add">+ Add section</button>
+      <button id="sunday">Sunday preset</button>
+      <button id="test">Test the buzzer</button>
+    </div>
+    <div class="acts"><button class="gold" id="copy">Copy OBS link</button><button id="welcome">Copy welcome screen link</button><button id="preview">Preview</button></div>
+    <div class="link" id="link"></div>
+    <ol class="steps">
+      <li>In OBS, add a Browser source to each scene you stream from, paste the link, and set it to 1920 x 1080 (1080 x 1920 in the Vertical dock).</li>
+      <li>Tick "Shutdown source when not visible" and "Control audio via OBS".</li>
+      <li>On your Stream Dock "Session timer" key, choose the OBS "Source visibility" action for that source.</li>
+      <li>Press once to start a section, press again to hide it. The next press starts the next section.</li>
+      <li>To start the run from the first section again, press the key twice within 3 seconds.</li>
+    </ol>
+  </div>
+
+  <script>
+    var DEFAULT = [["Welcome", 5], ["Making music", 45], ["Feedback", 15], ["Shout outs", 5]];
+    var SUNDAY = [["Welcome and catch up", 10], ["Listening session", 30], ["Beat breakdown", 30], ["Q and A", 15], ["Wrap up", 5]];
+    var qs = new URLSearchParams(location.search);
+    function parse(s) { return (s || "").split("|").map(function (p) { var i = p.lastIndexOf("~"); return [decodeURIComponent(p.slice(0, i)), parseFloat(p.slice(i + 1)) || 1]; }).filter(function (r) { return r[0]; }); }
+    function pack(list) { return list.map(function (r) { return encodeURIComponent(r[0]) + "~" + r[1]; }).join("|"); }
+    var list = parse(qs.get("s"));
+    if (!list.length) list = DEFAULT;
+
+    // Buzzer: three hard buzzes, made in the browser so there is no sound file to load.
+    var ac;
+    function buzz() {
+      try {
+        ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+        for (var k = 0; k < 3; k++) {
+          var t = ac.currentTime + k * 0.45, o = ac.createOscillator(), o2 = ac.createOscillator(), g = ac.createGain();
+          o.type = "sawtooth"; o.frequency.value = 110; o2.type = "square"; o2.frequency.value = 116;
+          g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.02); g.gain.setValueAtTime(0.35, t + 0.32); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
+          o.connect(g); o2.connect(g); g.connect(ac.destination); o.start(t); o2.start(t); o.stop(t + 0.4); o2.stop(t + 0.4);
+        }
+      } catch (e) {}
+    }
+
+    if (qs.has("setup") || !qs.get("s")) {
+      // Setup page
+      document.body.classList.add("setup");
+      var rows = document.getElementById("rows");
+      function draw() {
+        rows.innerHTML = "";
+        list.forEach(function (r, i) {
+          var d = document.createElement("div"); d.className = "row";
+          d.innerHTML = '<span class="n">' + (i + 1) + '</span><input class="name" placeholder="Section name"><input class="min" type="number" min="0.5" step="0.5" title="Minutes"><button class="x" title="Remove">&times;</button>';
+          var a = d.children[1], b = d.children[2];
+          a.value = r[0]; b.value = r[1];
+          a.oninput = function () { r[0] = a.value; link(); };
+          b.oninput = function () { r[1] = parseFloat(b.value) || 1; link(); };
+          d.children[3].onclick = function () { list.splice(i, 1); draw(); };
+          rows.appendChild(d);
+        });
+        link();
+      }
+      function url() { return location.href.split("?")[0] + "?s=" + pack(list.filter(function (r) { return r[0]; })); }
+      function link() { document.getElementById("link").textContent = url(); }
+      document.getElementById("add").onclick = function () { list.push(["New section", 10]); draw(); };
+      document.getElementById("sunday").onclick = function () { list = SUNDAY.map(function (r) { return r.slice(); }); draw(); };
+      document.getElementById("test").onclick = buzz;
+      document.getElementById("preview").onclick = function () { window.open(url() + "&m=0.1", "_blank"); };
+      document.getElementById("copy").onclick = function () { var u = url(); (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(function () { document.getElementById("copy").textContent = "Copied"; }, function () { prompt("Copy this link", u); }); };
+      document.getElementById("welcome").onclick = function () { var u = url().replace("session-timer.html", "welcome.html"); (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(function () { document.getElementById("welcome").textContent = "Copied"; }, function () { prompt("Copy this link", u); }); };
+      draw();
+    } else {
+      // Overlay: each time it loads (the source is shown), it moves on to the next section.
+      var key = "feelz.timer." + pack(list), st = {};
+      try { st = JSON.parse(localStorage.getItem(key)) || {}; } catch (e) {}
+      var now = Date.now(), idx;
+      if (st.last && now - st.last < 3000) idx = 0;                       // two quick presses: start over
+      else if (st.last && now - st.last < 6 * 3600000) idx = (st.idx + 1) % list.length;
+      else idx = 0;
+      try { localStorage.setItem(key, JSON.stringify({ idx: idx, last: now })); } catch (e) {}
+      var scale = parseFloat(qs.get("m")) || 1;                           // preview runs faster
+      var sec = list[idx], total = sec[1] * 60 * scale, end = now + total * 1000, buzzed = false;
+      document.getElementById("name").textContent = sec[0];
+      document.getElementById("count").textContent = (idx + 1) + " / " + list.length;
+      document.getElementById("next").textContent = list[idx + 1] ? "Next: " + list[idx + 1][0] : "Last section";
+      var pill = document.getElementById("pill");
+      function fmt(s) { var h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); }
+      function tick() {
+        var left = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+        document.getElementById("clock").textContent = left ? fmt(left) : "TIME";
+        document.getElementById("bar").style.width = (100 * left / Math.max(1, total)) + "%";
+        pill.classList.toggle("warn", left > 0 && left <= Math.min(30, total * 0.1 + 5));
+        pill.classList.toggle("done", left === 0);
+        if (!left && !buzzed) { buzzed = true; buzz(); }
+      }
+      tick(); setInterval(tick, 250);
+    }
+  </script>
+</body>
+</html>
