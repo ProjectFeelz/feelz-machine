@@ -238,14 +238,18 @@ function groundTexture(kind) {
   const speck = (n, a, sz) => { for (let i = 0; i < n; i++) { const v = r() > 0.5; g.fillStyle = `rgba(${v ? 255 : 0},${v ? 255 : 0},${v ? 255 : 0},${r() * a})`; g.fillRect(r() * 256, r() * 256, 1 + r() * sz, 1 + r() * sz); } };
   const line = (x1, y1, x2, y2) => { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); };
   if (kind === "asphalt") speck(2600, 0.08, 3);
-  else if (kind === "land") { speck(4000, 0.1, 3); for (let i = 0; i < 30; i++) { g.fillStyle = `rgba(0,0,0,${0.03 + r() * 0.05})`; g.beginPath(); g.ellipse(r() * 256, r() * 256, 8 + r() * 24, 5 + r() * 14, r() * 3, 0, 7); g.fill(); } }
+  else if (kind === "land") {
+    // Fine dry earth: soft, wide shading and tiny grit, so nothing on the ground reads bigger than a pebble.
+    for (let i = 0; i < 6; i++) { const x = r() * 256, y = r() * 256, rad = 60 + r() * 80, gr = g.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, `rgba(0,0,0,${0.025 + r() * 0.025})`); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); }
+    speck(14000, 0.09, 0.6);
+  }
   else if (kind === "lc") {
-    // Packed dirt, patches of old asphalt, cracks and dark wet sludge.
-    for (let i = 0; i < 14; i++) { g.fillStyle = `rgba(40,36,34,${0.25 + r() * 0.3})`; g.beginPath(); g.ellipse(r() * 256, r() * 256, 12 + r() * 30, 8 + r() * 18, r() * 3, 0, 7); g.fill(); }
-    for (let i = 0; i < 6; i++) { g.fillStyle = "rgba(30,24,18,.35)"; g.beginPath(); g.ellipse(r() * 256, r() * 256, 10 + r() * 14, 5 + r() * 8, r() * 3, 0, 7); g.fill(); }
-    speck(3000, 0.12, 3);
-    g.strokeStyle = "rgba(20,16,12,.45)"; g.lineWidth = 1.2;
-    for (let i = 0; i < 9; i++) { let x = r() * 256, y = r() * 256; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (r() - 0.5) * 40; y += (r() - 0.5) * 40; g.lineTo(x, y); } g.stroke(); }
+    // Packed township dirt: soft darker wear, fine grit and a few hairline cracks.
+    for (let i = 0; i < 8; i++) { const x = r() * 256, y = r() * 256, rad = 50 + r() * 70, gr = g.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, `rgba(30,24,18,${0.06 + r() * 0.06})`); gr.addColorStop(1, "rgba(30,24,18,0)"); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); }
+    speck(16000, 0.12, 0.6);
+    for (let i = 0; i < 260; i++) { g.fillStyle = `rgba(${r() > 0.5 ? "190,170,140" : "40,32,24"},${0.25 + r() * 0.3})`; g.fillRect(r() * 256, r() * 256, 1, 1); }
+    g.strokeStyle = "rgba(20,16,12,.25)"; g.lineWidth = 0.6;
+    for (let i = 0; i < 4; i++) { let x = r() * 256, y = r() * 256; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (r() - 0.5) * 30; y += (r() - 0.5) * 30; g.lineTo(x, y); } g.stroke(); }
   } else if (kind === "mc") {
     // Big concrete slabs with joints and stains.
     speck(2200, 0.07, 3);
@@ -359,14 +363,14 @@ function buildGround() {
     sh.uniforms.sandMap = { value: SAND.map };
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float sandy;\nvarying float vSandy;").replace("#include <uv_vertex>", "#include <uv_vertex>\nvSandy = sandy;");
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D sandMap;\nvarying float vSandy;")
-      .replace("#include <color_fragment>", "#include <color_fragment>\nif (vSandy > 0.001) { vec3 sandC = pow(mix(texture2D(sandMap, vMapUv * 5.3).rgb, texture2D(sandMap, vec2(vMapUv.y, -vMapUv.x) * 1.7).rgb, 0.35), vec3(2.2)); diffuseColor.rgb = mix(diffuseColor.rgb, sandC, vSandy); }");
+      .replace("#include <color_fragment>", "#include <color_fragment>\nif (vSandy > 0.001) { vec3 sandC = pow(mix(texture2D(sandMap, vMapUv * 12.0).rgb, texture2D(sandMap, vec2(vMapUv.y, -vMapUv.x) * 4.1).rgb, 0.35), vec3(2.2)); diffuseColor.rgb = mix(diffuseColor.rgb, sandC, vSandy); }");
   };
   const land = new THREE.Mesh(geo, landMat);
   land.position.set(WORLD_W / 2, 0, WORLD_H / 2); land.receiveShadow = true; scene.add(land);
   // Each place has its own paving, flat at its height.
   for (const q of S.quadrants) {
     const kind = districtOf(q), st = kind === "de" ? photoTex("sand") : null, paving = st ? st.map : groundTexture(kind);
-    const tileM = { lc: 8, mc: 8, uc: 5, rc: 9, de: 1.6 }[kind] || 6;   // the photo sand is about a metre and a half across
+    const tileM = { lc: 8, mc: 8, uc: 5, rc: 9, de: 0.7 }[kind] || 6;   // the photo sand ripples, at their real size
     paving.repeat.set(q.w / tileM, q.d / tileM);
     const tint = new THREE.Color(0xffffff).multiplyScalar(kind === "uc" ? 0.78 : kind === "de" ? 0.9 : 0.95);
     const mat = kind === "de"
