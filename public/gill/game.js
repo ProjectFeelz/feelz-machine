@@ -233,7 +233,7 @@ function groundTexture(kind) {
   const c = document.createElement("canvas"); c.width = c.height = 256;
   const g = c.getContext("2d");
   const r = rng(kind.length * 977 + kind.charCodeAt(0));
-  const base = { land: "#e6e2da", asphalt: "#3a3a3e", lc: "#6e5a45", mc: "#8e9094", uc: "#9c9488", rc: "#4f6a3a", de: "#d6b27a", sandroad: "#c9a46e" }[kind] || "#8a8a8a";
+  const base = { land: "#e6e2da", asphalt: "#3a3a3e", lc: "#a97a58", mc: "#8e9094", uc: "#9c9488", rc: "#4f6a3a", de: "#d6b27a", sandroad: "#c9a46e" }[kind] || "#8a8a8a";
   g.fillStyle = base; g.fillRect(0, 0, 256, 256);
   const speck = (n, a, sz) => { for (let i = 0; i < n; i++) { const v = r() > 0.5; g.fillStyle = `rgba(${v ? 255 : 0},${v ? 255 : 0},${v ? 255 : 0},${r() * a})`; g.fillRect(r() * 256, r() * 256, 1 + r() * sz, 1 + r() * sz); } };
   const line = (x1, y1, x2, y2) => { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); };
@@ -363,7 +363,7 @@ function buildGround() {
     sh.uniforms.sandMap = { value: SAND.map };
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float sandy;\nvarying float vSandy;").replace("#include <uv_vertex>", "#include <uv_vertex>\nvSandy = sandy;");
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D sandMap;\nvarying float vSandy;")
-      .replace("#include <color_fragment>", "#include <color_fragment>\nif (vSandy > 0.001) { vec3 sandC = pow(mix(texture2D(sandMap, vMapUv * 12.0).rgb, texture2D(sandMap, vec2(vMapUv.y, -vMapUv.x) * 4.1).rgb, 0.35), vec3(2.2)); diffuseColor.rgb = mix(diffuseColor.rgb, sandC, vSandy); }");
+      .replace("#include <color_fragment>", "#include <color_fragment>\nif (vSandy > 0.001) { vec3 sandC = pow(mix(texture2D(sandMap, vMapUv * 12.0).rgb, texture2D(sandMap, vec2(vMapUv.y, -vMapUv.x) * 4.1).rgb, 0.35), vec3(2.2)) * vec3(1.0, 0.8, 0.66); diffuseColor.rgb = mix(diffuseColor.rgb, sandC, vSandy); }");
   };
   const land = new THREE.Mesh(geo, landMat);
   land.position.set(WORLD_W / 2, 0, WORLD_H / 2); land.receiveShadow = true; scene.add(land);
@@ -372,7 +372,7 @@ function buildGround() {
     const kind = districtOf(q), st = kind === "de" ? photoTex("sand") : null, paving = st ? st.map : groundTexture(kind);
     const tileM = { lc: 8, mc: 8, uc: 5, rc: 9, de: 0.7 }[kind] || 6;   // the photo sand ripples, at their real size
     paving.repeat.set(q.w / tileM, q.d / tileM);
-    const tint = new THREE.Color(0xffffff).multiplyScalar(kind === "uc" ? 0.78 : kind === "de" ? 0.9 : 0.95);
+    const tint = (kind === "de" ? new THREE.Color(0xf0c8a8) : new THREE.Color(0xffffff)).multiplyScalar(kind === "uc" ? 0.78 : kind === "de" ? 0.9 : 0.95);
     const mat = kind === "de"
       ? new THREE.MeshStandardMaterial({ color: tint, map: paving, normalMap: st.normalMap, roughnessMap: st.roughnessMap, roughness: 1, emissive: 0x000000 })
       : new THREE.MeshStandardMaterial({ color: tint, map: paving, roughness: 0.85, emissive: 0x000000 });
@@ -384,17 +384,16 @@ function buildGround() {
   }
   // Roads, with a dashed centre line.
   const asphalt = groundTexture("asphalt"); asphalt.repeat.set(1, 1);
-  // Roads of fused sand glass: the city melts its own desert into paving. Smooth, glossy,
-  // sea-green, catching the sun and the street lamps. Kerbs are cut sandstone.
-  const roadMat = new THREE.MeshStandardMaterial({ color: 0x7fb3aa, map: asphalt, roughness: 0.18, metalness: 0.25, emissive: 0x0b2320, emissiveIntensity: 0.6, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
-  const kerbMat = new THREE.MeshStandardMaterial({ color: 0xd8c49c, map: SAND.map, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 });
+  // Roads are worn tar with concrete kerbs, the same as any Joburg street.
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0x8a8a8e, map: asphalt, roughness: 0.8, metalness: 0, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+  const kerbMat = new THREE.MeshStandardMaterial({ color: 0xa8a39c, map: SAND.map, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 });
   const dash = (() => { const c = document.createElement("canvas"); c.width = 8; c.height = 64; const g = c.getContext("2d"); g.fillStyle = "#f2d27a"; g.fillRect(2, 0, 4, 34); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
   const dashMat = new THREE.MeshBasicMaterial({ map: dash, transparent: true, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, depthWrite: false });
   for (const r of WD.roads) {
     // Laid right on the land, so feet stand on the road, not in it.
-    ribbon(r.points, r.width + 1.2, 0.03, kerbMat);
-    ribbon(r.points, r.width, 0.05, roadMat);
-    const dm = ribbon(r.points, 0.25, 0.07, dashMat, 3); dm.receiveShadow = false;
+    ribbon(r.points, r.width + 1.2, 0.09, kerbMat);
+    ribbon(r.points, r.width, 0.13, roadMat);
+    const dm = ribbon(r.points, 0.25, 0.16, dashMat, 3); dm.receiveShadow = false;
     dm.geometry.attributes.uv.array.forEach((v, i, a) => { if (i % 2) a[i] = v * 0.25 / 6; });
   }
   // Boulders along the rocky ridges, so the borders read as mountains.
@@ -1557,7 +1556,7 @@ async function decode(url) {
   return await new Promise((res, rej) => ac.decodeAudioData(buf, res, rej));
 }
 function stopMusic() {
-  music.started = false;
+  music.started = false; music.radioToken = null;
   for (const s of music.sources) { try { s.stop(); } catch (e) { /* stopped */ } try { s.disconnect(); } catch (e) { /* gone */ } }
   music.sources = []; music.parts = []; music.hint = null;
 }
@@ -1642,6 +1641,36 @@ function sfxHit(strong) {
   const f = ac.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = strong ? 900 : 1600;
   const g = ac.createGain(); g.gain.value = strong ? 0.5 : 0.32;
   s.connect(f); f.connect(g); g.connect(ac.destination); s.start();
+}
+
+// Free roam radio: the album plays song after song, with a low city hum under it.
+async function roamRadio() {
+  const ac = audioCtx(); if (!ac) return;
+  stopMusic();
+  const token = music.radioToken = {};
+  const live = () => music.radioToken === token && mission && mission.def.free;
+  // City hum: soft filtered noise, like distant traffic and wind.
+  const len = 4, nb = ac.createBuffer(1, ac.sampleRate * len, ac.sampleRate), nd = nb.getChannelData(0);
+  let last = 0; for (let i = 0; i < nd.length; i++) { last = last * 0.985 + (Math.random() * 2 - 1) * 0.015; nd[i] = last * 6; }
+  const hum = ac.createBufferSource(); hum.buffer = nb; hum.loop = true;
+  const hf = ac.createBiquadFilter(); hf.type = "lowpass"; hf.frequency.value = 500;
+  const hg = ac.createGain(); hg.gain.value = 0.18;
+  hum.connect(hf); hf.connect(hg); hg.connect(music.master); hum.start();
+  music.sources.push(hum);
+  const list = S.missions.filter(d => d.trackId);
+  music.radio = music.radio || Math.floor(Math.random() * list.length);
+  for (let tries = 0; tries < list.length * 50 && live(); tries++) {
+    const d = list[music.radio++ % list.length];
+    let buf; try { buf = await decode(await songUrl(d.trackId)); } catch (e) { await new Promise(r => setTimeout(r, 1500)); continue; }
+    if (!live()) return;
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const g = ac.createGain(); g.gain.value = 0.85; src.connect(g); g.connect(music.master);
+    music.buffer = buf; music.t0 = ac.currentTime + 0.05; music.started = true;
+    src.start(music.t0); music.sources.push(src);
+    toast("Now playing: " + d.song, 2.5);
+    await new Promise(r => { src.onended = r; });
+    music.sources = music.sources.filter(s => s !== src);
+  }
 }
 
 /* ---------- cards: mission intros, placeholder cutscenes ---------- */
@@ -1984,6 +2013,9 @@ function describeSpot(qd, x, z) {
 // search; now and then it's just lying somewhere, a lucky find.
 function stashSpot(qd) {
   const q = qd.q, c = zoneCenter(q);
+  // Hand-placed clue spots in this place come first.
+  const o = zoneOrigin(q), spots = CLUE_MADE.filter(m => !m.gone && m.rec.x > o.x && m.rec.x < o.x + q.w && m.rec.z > o.y && m.rec.z < o.y + q.d);
+  if (spots.length) { const m = spots[Math.floor(qd.r() * spots.length)]; return freeSpot(m.rec.x, m.rec.z, 1.2, qd.r); }
   if (qd.r() < 0.85) {
     const boxes = inBox(q.x0 + 4, q.z0 + 4, q.x0 + q.w - 4, q.z0 + q.d - 4).filter(b => SEARCHABLE[b.prop] && !b.holds && Math.hypot((b.minX + b.maxX) / 2 - c.x, (b.minZ + b.maxZ) / 2 - c.y) > 12);
     if (boxes.length) {
@@ -4363,6 +4395,7 @@ function drawClock() {
   el.classList.remove("low");
 }
 function tick(dt, now) {
+  for (const m of CLUE_MADE) if (m.clueMesh) m.clueMesh.visible = B.on;
   if (!(tick.cullT > now - 250)) {
     tick.cullT = now;
     const cx = camera.position.x, cz = camera.position.z, r = (scene.fog ? scene.fog.far : 110) + 40;
@@ -4492,6 +4525,7 @@ function startFreeRoam() {
   spawnRoadRiders();
   showRoomButtons(); showHudBuild();
   toast("Free roam. The city is yours. Hold ACTION by trees, rocks and sand to gather.", 3.5);
+  setTimeout(roamRadio, 3600);
 }
 $("roamBtn").addEventListener("click", startFreeRoam);
 $("btnView").addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); setView(cam.view + 1); });
@@ -4542,6 +4576,7 @@ const lampPoleMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1f, metalness:
 const ENFORCER_NAMES = { sentinel: "Sentinel", guard: "Guard", "street-warden": "Street warden", hunter: "Hunter", handler: "Handler", gilded: "Gilded" };
 const PIECES = [
   ...BUILDINGS.map(m => ({ kind: "building", model: m, name: { tenement: "Tenement", hostel: "Hostel", "kodas-building": "Koda's building" }[m] || m.toUpperCase(), cat: "Buildings", w: 20, d: 20, h: 16 })),
+  { kind: "clue", name: "Clue spot", cat: "Story", w: 1, d: 1, h: 1.2 },
   { kind: "crate", name: "Crate", cat: "Cover", w: 1.1, d: 1.1, h: 0.95, prop: "crate" },
   { kind: "stack", name: "Crate stack", cat: "Cover", w: 1.2, d: 1.2, h: 2, prop: "stack" },
   { kind: "bin", name: "Bin", cat: "Cover", w: 0.7, d: 0.7, h: 1, prop: "bin" },
@@ -4667,6 +4702,13 @@ async function makePiece(rec) {
     m.castShadow = true; m.receiveShadow = true; scene.add(m); made.meshes.push(m); return m;
   };
   const block = extra => { const b = Object.assign({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, top: base + h, base, mats: [], faded: false, piece: made }, extra); blockers.push(b); navMark(b); made.blocks.push(b); return b; };
+  if (rec.kind === "clue") {
+    // A hidden song part's spot: a gold marker seen only while building.
+    const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.5), new THREE.MeshBasicMaterial({ color: 0xf2b544 }));
+    m.position.set(x, base + 1.1, z); m.visible = B.on; scene.add(m); made.meshes.push(m); made.clueMesh = m;
+    CLUE_MADE.push(made);
+    return made;
+  }
   if (rec.kind === "building") {
     const before = blockers.length;
     await placeBuilding(rec.model, x, z, rec.rot || 0, h, Math.max(w, d), true);
@@ -4774,6 +4816,13 @@ function unmakePiece(made) {
   for (const l of made.lamps) { const i = lamps.indexOf(l); if (i >= 0) lamps.splice(i, 1); }
 }
 
+const CLUE_MADE = [];   // clue spot pieces, saved or from clues.js
+// The starting clue spots from clues.js, unless one has been moved (a saved spot with its name).
+async function seedClues() {
+  const moved = new Set(placed.filter(p => p.rec.kind === "clue").map(p => p.rec.label));
+  const all = window.GILL_CLUES || {};
+  for (const id in all) for (const s of all[id]) if (!moved.has(s.id)) placed.push(await makePiece({ kind: "clue", label: s.id, x: s.x, z: s.z, rot: 0, w: 1, d: 1, h: 1.2, interior: false, y: null }));
+}
 const placed = [];   // pieces from Feelz Machine and the ones placed this visit
 const stores = [];   // store pieces: walk up to one to shop
 async function loadPieces() {
@@ -6022,6 +6071,7 @@ function showRoomButtons() {
   buildRoadNet();
   $("loading").textContent = "Adding the city's own pieces…";
   await loadPieces();
+  await seedClues();
   // Opened with ?build=1 but building isn't open to this browser: the button says why.
   checkBuilder().then(showBuildBtn);
   refreshInv();
@@ -6029,7 +6079,7 @@ function showRoomButtons() {
   $("playBtn").disabled = false;
   toTitle();
   window.GILL_FLOATS = () => floats; window.GILL_DRONES = () => drones;
-  window.GILL = { FAR_CULL, startBuild, B, buildPick, buildPlace, buildPickUp, placedCount: () => placed.length, inv: () => Object.assign({}, inv), dustCount: () => dust.pool.filter(p => p.life > 0).length, flyerCount: () => flyers.length, zones: S.quadrants, ambientCount: () => ambient.map(p => p.job).join(","), moveWithCollision, shrines, travelTo, prayNear, guideRoute, buildStep: dt => updateBuild(dt), scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
+  window.GILL = { FAR_CULL, CLUE_MADE, startBuild, B, buildPick, buildPlace, buildPickUp, placedCount: () => placed.length, inv: () => Object.assign({}, inv), dustCount: () => dust.pool.filter(p => p.life > 0).length, flyerCount: () => flyers.length, zones: S.quadrants, ambientCount: () => ambient.map(p => p.job).join(","), moveWithCollision, shrines, travelTo, prayNear, guideRoute, buildStep: dt => updateBuild(dt), scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
     enemies, npcs, get state() { return state; }, save: () => save, blockers, keys, input, cardContinue, pause, resume, drawBigMap, pathNext, stick, FOCUS, beat, songTime, boost, get lastSafe() { return lastSafe; }, fightFoe, get camZoom() { return camZoom; }, attack, jump, action, objectiveTarget, get health() { return health; }, get music() { return music; },
     makeActor, horses, mount, dismount, nearHorse, critters, placeThing, staticModel: n => staticModel(n),
     sim(seconds) { let t = performance.now(); for (let i = 0; i < seconds * 30; i++) { t += 33; tick(1 / 30, t); } } };
