@@ -12,6 +12,7 @@
 
 import { coverUrl } from '../utils/coverUrl';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { makeSessionsCoverTest } from '../utils/sessionsCovers';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import ReactPlayer from 'react-player';
@@ -1391,6 +1392,30 @@ export default function ForYouPage() {
 
   const [tracks, setTracks]           = useState([]);
   const [feedFilter, setFeedFilter]   = useState('all');
+
+  // THE COMPETITION SONG, ELEVEN TIMES IN A ROW.
+  //
+  // During a Sessions competition the catalogue fills with other people's
+  // versions of the shortlist song: some are proper entries, some are ordinary
+  // uploads by people who meant to enter and never found the toggle. Entries
+  // are already out of the feed. The accidental ones were not, and they play
+  // back to back.
+  //
+  // Read from the competition itself rather than written down here, so the
+  // next competition needs no code change. reference_track is the original,
+  // which stays.
+  const [shortlistRows, setShortlistRows] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    supabase.from('school_sessions_shortlist_songs')
+      .select('title, reference_track:tracks(id)')
+      .eq('is_active', true)
+      .then(({ data }) => { if (!cancelled) setShortlistRows(data || []); });
+    // Failing open on purpose: no competition, a renamed column or a refused
+    // request all mean "hide nothing", never "show nothing".
+    return () => { cancelled = true; };
+  }, []);
+  const isSessionsCover = useMemo(() => makeSessionsCoverTest(shortlistRows), [shortlistRows]);
   const [idx, setIdx]                 = useState(0);
   const [loading, setLoading]         = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -1569,7 +1594,7 @@ export default function ForYouPage() {
   // out every other release. The winner's track has the flag cleared the
   // moment it is marked, so the one song the competition exists to
   // produce arrives here like any other.
-  const noPods = tracks.filter(t => !t.is_podcast && !t.is_competition_entry);
+  const noPods = tracks.filter(t => !t.is_podcast && !t.is_competition_entry && !isSessionsCover(t));
   const filteredTracks = feedFilter === 'music' ? noPods.filter(t => !t.is_beat)
     : feedFilter === 'beats' ? noPods.filter(t => t.is_beat)
     : noPods;
