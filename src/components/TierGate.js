@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, Zap, Crown, ChevronRight } from 'lucide-react';
 import { useTier, FEATURE_LABELS } from '../contexts/useTier';
+import { useAuth } from '../contexts/AuthContext';
 
 /**
  * TierGate - Wraps content that requires a specific tier.
@@ -24,6 +25,15 @@ import { useTier, FEATURE_LABELS } from '../contexts/useTier';
 export default function TierGate({ feature, children, inline = false, fallback }) {
   const navigate = useNavigate();
   const { hasFeature, getFeatureInfo, tierSlug, tierLoading } = useTier();
+  // WHO IS LOOKING AT THIS.
+  //
+  // Every route out of here used to be /upgrade, which sells artist plans. A
+  // listener who hit a gate was shown a page with nothing on it they could
+  // buy, under a button telling them to upgrade to Pro. No artists row means
+  // a fan, and fans buy Fan Pro somewhere else.
+  const { artist } = useAuth();
+  const isFan = !artist;
+  const upgradeHref = isFan ? '/listener/upgrade' : '/upgrade';
 
   if (tierLoading) return <>{children}</>;
 
@@ -38,13 +48,14 @@ export default function TierGate({ feature, children, inline = false, fallback }
   const isProFeature = minTier === 'pro';
   const color = isProFeature ? '#8B5CF6' : '#F59E0B';
   const Icon = isProFeature ? Zap : Crown;
-  const tierName = isProFeature ? 'Pro' : 'Premium';
+  // A fan is never offered Pro or Premium, because a fan cannot buy either.
+  const tierName = isFan ? 'Fan Pro' : (isProFeature ? 'Pro' : 'Premium');
 
   // Inline compact lock
   if (inline) {
     return (
       <button
-        onClick={() => navigate('/upgrade')}
+        onClick={() => navigate(upgradeHref)}
         className="flex items-center space-x-2 px-3 py-2 rounded-lg transition hover:bg-white/[0.04]"
         style={{ backgroundColor: `${color}08` }}
       >
@@ -82,7 +93,7 @@ export default function TierGate({ feature, children, inline = false, fallback }
 
         {/* Upgrade button */}
         <button
-          onClick={() => navigate('/upgrade')}
+          onClick={() => navigate(upgradeHref)}
           className="w-full py-2.5 rounded-lg font-semibold text-sm transition active:scale-[0.98] text-black"
           style={{ backgroundColor: color }}
         >

@@ -1494,7 +1494,7 @@ function AddTrackToAlbum({
 
 export default function TrackUploadPanel() {
   const { artist, user, refreshProfile, isBeatmaker } = useAuth();
-  const { isPremium, canAddDownloadSale, downloadSalesRemaining, downloadSalesLimit, beatLicences, maxBeats, canUploadStems, canUseBeatAnalytics, canUseExclusive } = useTier();
+  const { isPremium, canAddDownloadSale, downloadSalesRemaining, downloadSalesLimit, beatLicences, maxBeats, canUploadStems, canUseBeatAnalytics, canUseExclusive, canCreateAlbum } = useTier();
 
   // STEP ONE OF THE UPLOAD FUNNEL, FIRED WHERE ITS NAME SAYS.
   //
@@ -2892,6 +2892,24 @@ export default function TrackUploadPanel() {
             {/* Said up front. This requirement existed but was only shown
                 after the first track had been uploaded, so the first anyone
                 heard of it was being refused at the end. */}
+            {/* SAID BEFORE THE WORK, NOT AFTER IT.
+                Migration 220 put a trigger on albums that refuses the publish
+                when the plan is off, so a free artist used to upload every
+                track, write the description, make the cover, press Done and
+                THEN be refused by the database. The rule has not changed; it
+                now arrives first, with a way to act on it. */}
+            {ALBUM_TYPES.includes(release.release_type) && !canCreateAlbum && (
+              <div className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+                <p className="text-xs text-white/70">
+                  <span className="font-semibold text-white">Albums and EPs come with a paid plan.</span>
+                  {' '}Your singles stay free and stay up. You can build this {release.release_type} now,
+                  but it cannot be published while your plan is off, so it is worth sorting first.
+                </p>
+                <a href="/upgrade" className="inline-block mt-2 text-xs font-semibold text-[#f1ca78] underline">
+                  See the plans
+                </a>
+              </div>
+            )}
             {ALBUM_TYPES.includes(release.release_type) && (
               <p className="text-xs text-white/40">
                 An {release.release_type} needs at least {minTracksFor(release.release_type)} tracks, uploaded one at a time.

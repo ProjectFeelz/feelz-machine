@@ -540,6 +540,13 @@ function useTierInternal() {
     refreshListenerTier: () => {
       if (user?.id && !artist) fetchListenerTier(user.id);
     },
+    // Albums. max_albums has been in TIER_ACCESS since the start - 0 on free,
+    // Infinity on the paid tiers - and nothing read it, so the only thing
+    // standing between a free artist and a wasted evening was the migration
+    // 220 trigger refusing the publish at the very end. These let the upload
+    // panel say so at the start instead.
+    maxAlbums:      access.max_albums ?? 0,
+    canCreateAlbum: (access.max_albums ?? 0) > 0,
     // Download sales limit enforcement
     downloadSalesLimit,
     downloadSalesUsed: monthlyDownloadSalesCount,
