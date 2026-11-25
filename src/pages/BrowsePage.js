@@ -6,9 +6,10 @@ import TrackActionSheet from '../components/TrackActionSheet';
 import PreorderTag from '../components/PreorderTag';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useAuth } from '../contexts/AuthContext';
+import { makeSessionsCoverTest } from '../utils/sessionsCovers';
 import {
   Search, Flame, TrendingUp, Play, Pause, Music, Crown,
-  Loader, Disc3, Star, Sparkles, Clock, Users, Newspaper, ListMusic, Radio,
+  Loader, Disc3, Star, Sparkles, Clock, Users, Newspaper, ListMusic,
 } from 'lucide-react';
 import VerifiedBadge from '../components/VerifiedBadge';
 // Ask Supabase for the size we actually draw. See utils/coverUrl.
@@ -192,6 +193,21 @@ export default function BrowsePage() {
   const [featured, setFeatured]               = useState([]);
   const [newReleases, setNewReleases]         = useState([]);
   const [allTracks, setAllTracks]             = useState([]);
+
+  // Other people's versions of the Sessions song, out of browsing as well as
+  // out of For You. They exist only because of the competition, and the real
+  // one is named by the competition row itself, so nothing here hardcodes a
+  // title. No competition running means nothing is hidden.
+  const [shortlistRows, setShortlistRows] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    supabase.from('school_sessions_shortlist_songs')
+      .select('title, reference_track:tracks(id)')
+      .eq('is_active', true)
+      .then(({ data }) => { if (!cancelled) setShortlistRows(data || []); });
+    return () => { cancelled = true; };
+  }, []);
+  const isSessionsCover = React.useMemo(() => makeSessionsCoverTest(shortlistRows), [shortlistRows]);
   const [artistCovers, setArtistCovers]       = useState(() => new Map());
   const [artists, setArtists]                 = useState([]);
   const [albums, setAlbums]                   = useState([]);
@@ -536,10 +552,13 @@ export default function BrowsePage() {
         ...albumsNorm.map(a => ({ ...a, _isAlbum: true, _date: a.release_date || a.created_at })),
       ].sort((a, b) => new Date(b._date) - new Date(a._date));
 
-      setTrending(trendingBoosted);
-      setFeatured(dailyOrder(norm(featuredRaw)));
-      setNewReleases(merged);
-      setAllTracks(allNorm);
+      // One place for all four: search, genre and mood all read allTracks, so
+      // filtering here reaches every list on the page.
+      const noCovers = (list) => (list || []).filter(t => !isSessionsCover(t));
+      setTrending(noCovers(trendingBoosted));
+      setFeatured(noCovers(dailyOrder(norm(featuredRaw))));
+      setNewReleases(noCovers(merged));
+      setAllTracks(noCovers(allNorm));
       setAlbums(albumsNorm);
       // Pushing the bare profiles to the end was not enough: they were still
       // on the page, and a grid that trails off into grey circles with names
@@ -714,9 +733,6 @@ export default function BrowsePage() {
     // here rather than handled with a special case at the click.
     { key: 'whatsnew',  label: "What's New", icon: Newspaper, opens: true },
     { key: 'tracks',    label: 'Tracks',    icon: Music },
-    // Not a tab either: opens the Live page, so streams, replays and what is
-    // coming up can be found on a phone when nobody is live.
-    { key: 'live',      label: 'Livestreams', icon: Radio, go: '/live' },
     { key: 'albums',    label: 'Albums',    icon: Disc3 },
     { key: 'playlists', label: 'Playlists', icon: ListMusic },
     { key: 'new',       label: 'New',       icon: Sparkles },
@@ -794,9 +810,9 @@ export default function BrowsePage() {
 
         {/* Tab bar */}
         <div role="tablist" className="flex space-x-1 overflow-x-auto scrollbar-hide bg-white/[0.03] rounded-xl p-1">
-          {tabs.map(({ key, label, icon: Icon, opens, go }) => (
-            <button key={key} role="tab" aria-selected={!opens && !go && activeTab === key}
-              onClick={() => (opens ? setNewsOpen(true) : go ? navigate(go) : setActiveTab(key))}
+          {tabs.map(({ key, label, icon: Icon, opens }) => (
+            <button key={key} role="tab" aria-selected={!opens && activeTab === key}
+              onClick={() => (opens ? setNewsOpen(true) : setActiveTab(key))}
               className={`flex-shrink-0 flex items-center space-x-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition ${
                 !opens && activeTab === key ? 'bg-white text-black' : 'text-white/35 hover:text-white/60'
               }`}>
@@ -1460,4 +1476,4 @@ function AlbumTile({ album, navigate }) {
       </p>
     </button>
   );
-}
+}
