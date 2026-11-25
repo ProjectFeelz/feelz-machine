@@ -1356,7 +1356,7 @@ const MENU_OF = { title: "title", card: "card", score: "score", paused: "pause" 
 const menuId = () => state === "title" && !$("coop").classList.contains("hidden") ? "coop" : state === "title" && !$("worlds").classList.contains("hidden") ? "worlds" : MENU_OF[state];
 const padNav = { dir: "", t: 0, el: null, last: 0 };
 function menuButtons(id) {
-  return [...$(id).querySelectorAll("button")].filter(b => !b.disabled && b.offsetParent !== null && !b.closest(".hidden"));
+  return [...$(id).querySelectorAll("button, a.exit-link")].filter(b => !b.disabled && b.offsetParent !== null && !b.closest(".hidden"));
 }
 function padFocus(b) {
   if (padNav.el) padNav.el.classList.remove("padfocus");
