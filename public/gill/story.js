@@ -60,18 +60,18 @@ window.GILL_STORY = {
   },
 
   quadrants: [
-    { id: "q01", name: "The Yard",      grid: [0, 0], focus: "explore", tint: 0x6b5a48, district: "lc" },
-    { id: "q02", name: "Chalk Street",  grid: [1, 0], focus: "sneak",   tint: 0x5a5f6e, district: "lc" },
-    { id: "q03", name: "Ticket Row",    grid: [2, 0], focus: "explore", tint: 0x6e5a5a, district: "mc" },
-    { id: "q04", name: "The Strip",     grid: [3, 0], focus: "race",    tint: 0x5e6b4f, district: "mc" },
-    { id: "q05", name: "Tape Corner",   grid: [3, 1], focus: "sneak",   tint: 0x4f5e6b, district: "mc" },
-    { id: "q06", name: "Warden Square", grid: [2, 1], focus: "fight",   tint: 0x6b4848, district: "uc" },
-    { id: "q07", name: "Angel Court",   grid: [1, 1], focus: "explore", tint: 0x5f5a6e, district: "rc" },
-    { id: "q08", name: "Guard House",   grid: [0, 1], focus: "fight",   tint: 0x4f4f5e, district: "lc" },
-    { id: "q09", name: "Paper Lane",    grid: [0, 2], focus: "sneak",   tint: 0x6e6248, district: "lc" },
-    { id: "q10", name: "The Tunnels",   grid: [1, 2], focus: "race",    tint: 0x48606b, district: "mc" },
-    { id: "q11", name: "Old Tower",     grid: [2, 2], focus: "fight",   tint: 0x5a486e, district: "uc" },
-    { id: "q12", name: "East Gate",     grid: [3, 2], focus: "explore", tint: 0x6b3f3f, district: "de" }
+    { id: "q01", name: "Vilakazi Street",      grid: [0, 0], focus: "explore", tint: 0x6b5a48, district: "lc" },
+    { id: "q02", name: "Maboneng",  grid: [1, 0], focus: "sneak",   tint: 0x5a5f6e, district: "lc" },
+    { id: "q03", name: "Park Station",    grid: [2, 0], focus: "explore", tint: 0x6e5a5a, district: "mc" },
+    { id: "q04", name: "Randburg",     grid: [3, 0], focus: "race",    tint: 0x5e6b4f, district: "mc" },
+    { id: "q05", name: "Hatfield",   grid: [3, 1], focus: "sneak",   tint: 0x4f5e6b, district: "mc" },
+    { id: "q06", name: "Union Buildings", grid: [2, 1], focus: "fight",   tint: 0x6b4848, district: "uc" },
+    { id: "q07", name: "Montecasino",   grid: [1, 1], focus: "explore", tint: 0x5f5a6e, district: "rc" },
+    { id: "q08", name: "Orlando Towers",   grid: [0, 1], focus: "fight",   tint: 0x4f4f5e, district: "lc" },
+    { id: "q09", name: "Cosmos City",    grid: [0, 2], focus: "sneak",   tint: 0x6e6248, district: "lc" },
+    { id: "q10", name: "Carlton Centre",   grid: [1, 2], focus: "race",    tint: 0x48606b, district: "mc" },
+    { id: "q11", name: "Lukasrand Tower",     grid: [2, 2], focus: "fight",   tint: 0x5a486e, district: "uc" },
+    { id: "q12", name: "Mall of Africa",     grid: [3, 2], focus: "explore", tint: 0x6b3f3f, district: "de" }
   ],
 
   // The placeholder parts, until a mission has real stems.

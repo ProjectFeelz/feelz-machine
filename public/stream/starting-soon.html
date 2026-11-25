@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Starting Soon</title>
+  <!--
+    public/stream/starting-soon.html
+    A full-screen "Starting soon" scene for OBS. Works as a local file or from
+    feelzmachine.com/stream/starting-soon.html. It fits whatever canvas it's in:
+    a wide canvas gets the horizontal layout, a tall one (Aitum Vertical) the vertical one.
+    Countdown: change MINUTES below, or add ?m=10 to the address.
+  -->
+  <style>
+    :root { --gold: #f2b544; --gold-hi: #ffd27a; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #050505; color: #fff; font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .glow { position: absolute; inset: -20%; background: radial-gradient(circle at 30% 40%, rgba(242,181,68,.22), transparent 45%), radial-gradient(circle at 70% 65%, rgba(242,181,68,.12), transparent 40%); animation: drift 18s ease-in-out infinite alternate; }
+    @keyframes drift { to { transform: translate(6%, -4%) rotate(8deg); } }
+    .grain { position: absolute; inset: 0; opacity: .08; background-image: repeating-linear-gradient(0deg, #fff 0 1px, transparent 1px 3px); }
+    .wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 6vmin; padding: 6vmin; }
+    .vinyl { width: 42vmin; height: 42vmin; border-radius: 50%; flex: none; position: relative; animation: spin 4s linear infinite;
+      background: repeating-radial-gradient(circle, #111 0 2px, #1b1b1b 2px 4px); box-shadow: 0 0 80px rgba(242,181,68,.25); }
+    .vinyl::after { content: ""; position: absolute; inset: 34%; border-radius: 50%; background: radial-gradient(circle, #050505 0 12%, var(--gold) 13% 100%); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .text { max-width: 60vmin; }
+    .kick { color: var(--gold); font-weight: 800; letter-spacing: .4em; font-size: 2.2vmin; text-transform: uppercase; }
+    h1 { margin: 1.5vmin 0 1vmin; font-size: 11vmin; line-height: .95; font-weight: 900; font-style: italic; text-transform: uppercase;
+      background: linear-gradient(180deg, #fff3d8, var(--gold) 70%, #b47a12); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .clock { font-size: 8vmin; font-weight: 900; font-variant-numeric: tabular-nums; color: var(--gold-hi); text-shadow: 0 0 30px rgba(242,181,68,.4); }
+    .line { margin-top: 2vmin; font-size: 2.8vmin; color: rgba(255,255,255,.75); min-height: 4vmin; transition: opacity .6s; }
+    .bars { display: flex; gap: .8vmin; align-items: flex-end; height: 6vmin; margin-top: 3vmin; }
+    .bars i { width: 1.2vmin; background: var(--gold); border-radius: .4vmin; animation: eq 1s ease-in-out infinite alternate; }
+    @keyframes eq { from { height: 15%; } to { height: 100%; } }
+    .foot { position: absolute; left: 0; right: 0; bottom: 4vmin; text-align: center; font-size: 2.2vmin; letter-spacing: .3em; color: rgba(255,255,255,.5); text-transform: uppercase; }
+    .foot b { color: var(--gold); }
+    /* Tall canvas (vertical): stack everything. */
+    @media (max-aspect-ratio: 1/1) {
+      .wrap { flex-direction: column; text-align: center; gap: 5vmin; }
+      .vinyl { width: 60vmin; height: 60vmin; }
+      .text { max-width: 90vmin; }
+      h1 { font-size: 15vmin; }
+      .clock { font-size: 12vmin; }
+      .line { font-size: 4vmin; }
+      .bars { justify-content: center; height: 8vmin; }
+      .kick { font-size: 3.2vmin; }
+      .foot { font-size: 3vmin; bottom: 6vmin; }
+    }
+  </style>
+</head>
+<body>
+  <div class="glow"></div><div class="grain"></div>
+  <div class="wrap">
+    <div class="vinyl"></div>
+    <div class="text">
+      <div class="kick">Feelz Live</div>
+      <h1>Starting soon</h1>
+      <div class="clock" id="clock">5:00</div>
+      <div class="line" id="line"></div>
+      <div class="bars" id="bars"></div>
+    </div>
+  </div>
+  <div class="foot">Live on <b>feelzmachine.com</b></div>
+  <script>
+    var MINUTES = 5;   // the countdown; ?m=10 in the address overrides it
+    var LINES = ["Grab a drink, we're about to start.", "Say hi in the chat.", "Tips and reactions show up live on stream.", "New music from Feelz Machine artists tonight.", "Turn it up."];
+    var m = parseFloat(new URLSearchParams(location.search).get("m")) || MINUTES;
+    var end = Date.now() + m * 60000, i = 0;
+    for (var k = 0; k < 9; k++) { var b = document.createElement("i"); b.style.animationDelay = (k * 0.12) + "s"; b.style.animationDuration = (0.6 + (k % 3) * 0.25) + "s"; document.getElementById("bars").appendChild(b); }
+    function tick() {
+      var left = Math.max(0, Math.round((end - Date.now()) / 1000));
+      document.getElementById("clock").textContent = left ? Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0") : "Any second now";
+    }
+    function line() { var el = document.getElementById("line"); el.style.opacity = 0; setTimeout(function () { el.textContent = LINES[i++ % LINES.length]; el.style.opacity = 1; }, 600); }
+    tick(); line(); setInterval(tick, 500); setInterval(line, 6000);
+  </script>
+</body>
+</html>

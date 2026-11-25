@@ -17,6 +17,7 @@ import * as THREE from "../run/vendor/three-0.160.0/three.module.min.js";
 import { GLTFLoader, MeshoptDecoder, RoomEnvironment } from "../run/vendor/three-0.160.0/gltf-lib.js";
 
 const S = window.GILL_STORY;
+const REAL = window.GILL_REAL || {};   // real street layouts (real.js), from OpenStreetMap
 const MODELS = "../run/assets/models/";
 const $ = id => document.getElementById(id);
 const phone = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
@@ -55,6 +56,13 @@ for (const z of WD.zones) {
 (function streetsThroughPlaces() {
   const add = [];
   for (const q of S.quadrants) {
+    // Real places: their own streets, from the real map (Vilakazi Street, Fox Street, Leyds Street...).
+    const real = REAL[q.id];
+    if (real && real.streets.length) {
+      for (const st of real.streets) add.push({ name: st.name || q.name + " Lane", width: st.width, points: st.points, street: true, place: q.id, kind: st.type });
+      // Places with only short lanes still get one way through.
+      if (real.streets.some(st => st.width >= 7)) continue;
+    }
     const xs = new Set(), zs = new Set();
     for (const r of WD.roads) for (const [px, pz] of r.points) {
       const dx = Math.max(q.x0 - px, 0, px - (q.x0 + q.w)), dz = Math.max(q.z0 - pz, 0, pz - (q.z0 + q.d));
@@ -67,8 +75,8 @@ for (const z of WD.zones) {
     // Every place gets at least one street each way through its middle.
     if (!xs.size) xs.add(Math.round(q.x0 + q.w / 2));
     if (!zs.size) zs.add(Math.round(q.z0 + q.d / 2));
-    for (const z of zs) add.push({ name: q.name + " Street", width: 9, points: [[q.x0 - 2, z], [q.x0 + q.w + 2, z]], street: true });
-    for (const x of xs) add.push({ name: q.name + " Avenue", width: 9, points: [[x, q.z0 - 2], [x, q.z0 + q.d + 2]], street: true });
+    for (const z of zs) add.push({ name: q.name + " Street", width: 9, points: [[q.x0 - 2, z], [q.x0 + q.w + 2, z]], street: true, place: q.id });
+    for (const x of xs) add.push({ name: q.name + " Avenue", width: 9, points: [[x, q.z0 - 2], [x, q.z0 + q.d + 2]], street: true, place: q.id });
   }
   WD.roads.push(...add);
 })();
@@ -165,7 +173,10 @@ const OWN_MODELS = new Set(["stall", "booth", "billboard", "container", "carriag
   "commtower", "lockup", "shelter", "station", "elevator", "skydeck", "tenement2", "hostel2",
   "k-corner", "k-pillar", "k-wall", "k-win-open", "k-win-closed", "k-win-half", "k-roof-flat", "k-roof-gentle", "k-roof-steep", "k-switchback", "k-walkway", "k-lift", "k-washpost",
   "obelisk", "climbtower", "checkpoint", "veilheart",
-  "pump", "lampfall", "trafficfall", "carwreck", "cat", "cat2", "busstop", "watertank", "produce", "dish", "phonebox", "barrels", "planter"]);
+  "pump", "lampfall", "trafficfall", "carwreck", "cat", "cat2", "busstop", "watertank", "produce", "dish", "phonebox", "barrels", "planter",
+  "matchbox", "rdp", "spaza", "taxi", "towers", "union", "lukasrand", "mallgate", "tuscan", "jacaranda", "warehouse"]);
+// Made for the real places in Meshy: they keep their own colours (no district tint).
+const OWN_LOOK = new Set(["matchbox", "rdp", "spaza", "taxi", "towers", "union", "lukasrand", "mallgate", "tuscan", "jacaranda", "warehouse", "station"]);
 function staticModel(name) {
   if (!staticCache[name]) staticCache[name] = loadGLB((OWN_MODELS.has(name) ? "models/world/" : MODELS + "world/") + name + ".glb").then(g => g.scene).catch(() => null);
   return staticCache[name];
@@ -453,12 +464,12 @@ const nearBlocks = (x, z, r) => inBox(x - r, z - r, x + r, z + r);
 // `maxFoot` caps how wide it can be. It sits on the land at its lowest corner.
 const BUILDING_TINT = { lc: 0xc9a07a, mc: 0xa9a7a2, uc: 0xe2dccd, rc: 0x9fb08a, de: 0xe0c08a };
 const tmpTint = new THREE.Color();
-async function placeBuilding(name, x, z, yaw, height, maxFoot = 13, force = false) {
+async function placeBuilding(name, x, z, yaw, height, maxFoot = 13, force = false, freeYaw = false) {
   if (!force && (ridgeAt(x, z) > 0.3 || ridgeAt(x - 8, z - 8) > 0.6 || ridgeAt(x + 8, z + 8) > 0.6 || ridgeAt(x - 8, z + 8) > 0.6 || ridgeAt(x + 8, z - 8) > 0.6)) return;
   const src = await staticModel(name);
   if (!src) return;
   const m = src.clone(true);
-  m.rotation.y = Math.round(yaw / (Math.PI / 2)) * (Math.PI / 2);
+  m.rotation.y = freeYaw ? yaw : Math.round(yaw / (Math.PI / 2)) * (Math.PI / 2);
   const box = new THREE.Box3().setFromObject(m);
   const size = box.getSize(new THREE.Vector3());
   const k = Math.min(height / Math.max(0.001, size.y), maxFoot / Math.max(0.001, size.x, size.z));
@@ -478,7 +489,7 @@ async function placeBuilding(name, x, z, yaw, height, maxFoot = 13, force = fals
     if (o.isMesh) {
       o.castShadow = true; o.receiveShadow = true;
       o.material = o.material.clone();
-      if (o.material.color) {
+      if (o.material.color && !OWN_LOOK.has(name)) {
         // Pull the colour toward the district's own: its grey level stays, the hue follows the district.
         const c = o.material.color, l = (c.r + c.g + c.b) / 3;
         c.lerp(tmpTint.copy(tint).multiplyScalar(Math.max(0.35, l * 1.6)), 0.45);
@@ -538,11 +549,48 @@ function buildingCells(root, base, box) {
   return boxes;
 }
 const inCells = (cells, x, z, r) => cells.some(c => x > c.minX - r && x < c.maxX + r && z > c.minZ - r && z < c.maxZ + r);
+// A Meshy tree, standing on the ground, with a trunk you bump into.
+async function placeTree(e) {
+  const src = await staticModel(e.model); if (!src) return;
+  const m = src.clone(true), box = new THREE.Box3().setFromObject(m), sz = box.getSize(new THREE.Vector3());
+  m.scale.setScalar(e.h / Math.max(0.01, sz.y)); m.rotation.y = e.yaw;
+  const b2 = new THREE.Box3().setFromObject(m), c = b2.getCenter(new THREE.Vector3()), base = terrainAt(e.x, e.z);
+  m.position.set(e.x - c.x, base - b2.min.y, e.z - c.z);
+  m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  scene.add(m);
+  blockers.push({ minX: e.x - 0.35, maxX: e.x + 0.35, minZ: e.z - 0.35, maxZ: e.z + 0.35, top: base + e.h, base, mats: [] });
+}
 async function buildCity(onProgress) {
   const jobs = [];
   for (const q of S.quadrants) {
     const r = rng(q.id.charCodeAt(1) * 977 + q.id.charCodeAt(2) * 131);
     const set = DISTRICT_BUILDINGS[districtOf(q)] || BUILDINGS;
+    const real = REAL[q.id];
+    if (real) {
+      // The real place: its landmark, buildings where the map has them, and houses or blocks
+      // along its real streets, each facing the street. Koda's own building stays on his street.
+      const STYLE_SET = { township: ["matchbox"], rdp: ["rdp"], tuscan: ["tuscan"], maboneng: set, cbd: DISTRICT_BUILDINGS.uc || set, suburb: set, hatfield: set, pretoria: DISTRICT_BUILDINGS.uc || set, mall: set };
+      const pickR = () => { const ss = STYLE_SET[real.style] || set; return ss[Math.floor(r() * ss.length)]; };
+      let kodaDone = q.id !== "q01";
+      for (const b of real.buildings) {
+        const model = b.model || pickR();
+        if (!kodaDone && b.model === "matchbox") { kodaDone = true; jobs.push(() => placeBuilding("kodas-building", b.x, b.z, b.yaw, 12, 16, true, true)); continue; }
+        jobs.push(() => placeBuilding(model, b.x, b.z, b.yaw, b.h, b.foot, !!b.landmark, true));
+      }
+      for (const e of real.extras) jobs.push(() => e.model === "jacaranda" ? placeTree(e) : placeBuilding(e.model, e.x, e.z, e.yaw, e.h, e.model === "taxi" ? 5.5 : 9, true, true));
+      // Fill the edges where the real streets left gaps, so no place looks empty.
+      const inset = 16, edge = (len) => { const out = []; for (let s = 18; s < len - 16; s += 36 + r() * 6) out.push(s); return out; };
+      const fill = [];
+      for (const s of edge(q.w)) fill.push([q.x0 + s, q.z0 + inset, 0], [q.x0 + s, q.z0 + q.d - inset, Math.PI]);
+      for (const s of edge(q.d)) fill.push([q.x0 + inset, q.z0 + s, Math.PI / 2], [q.x0 + q.w - inset, q.z0 + s, -Math.PI / 2]);
+      const small = real.style === "township" || real.style === "rdp";
+      for (const [x, z, yaw] of fill) {
+        if (onRoad(x, z, small ? 6 : 12) || Math.hypot(x - (q.x0 + q.w / 2), z - (q.z0 + q.d / 2)) < 28) continue;
+        if (real.buildings.some(b => Math.hypot(b.x - x, b.z - z) < (b.foot || 10) / 2 + (small ? 6 : 12))) continue;
+        jobs.push(() => placeBuilding(pickR(), x, z, yaw, small ? 4.2 : 14 + r() * 10, small ? 8.5 : 24, false, false));
+      }
+      continue;
+    }
     const pick = () => set[Math.floor(r() * set.length)];
     // Life-size: a storey is about 3.2 m, so a three-storey block stands near 10 m and Koda
     // (1.62 m) reaches about halfway up its ground floor.
@@ -565,7 +613,7 @@ async function buildCity(onProgress) {
   // Houses and shops along the roads between places.
   const r = rng(4242);
   for (const road of WD.roads) {
-    if (road.name === "Ring Road") continue;
+    if (road.name === "N1") continue;
     for (let k = 0; k + 1 < road.points.length; k++) {
       const [ax, az] = road.points[k], [bx, bz] = road.points[k + 1], L = Math.hypot(bx - ax, bz - az);
       const nx = -(bz - az) / L, nz = (bx - ax) / L;
@@ -1129,7 +1177,7 @@ class Actor {
     this.mixer.update(dt);
     const name = this.current ? this.current.getClip().name : "";
     if (this.native) { if (this.armIn) armsIn(this.model, this.armIn); if (this.reach > 0.01 && !this.seated) armsReach(this.model, this.reach); }   // rigged and animated in Mixamo: only the arm width is tuned
-    else {
+    else if (!window.GILL_RAW) {
       if (/^(run|sprint)$/.test(name)) armSwing(this.model, ARM_SWING);
       if (!/^(punch|kick|takedown|hit|ko|alert|flykick|jump|spinkick)$/.test(name)) armClear(this.model, /^crouch/.test(name));
     }
@@ -1165,11 +1213,84 @@ function armsReach(root, amt) {
   for (const b of fores) turn(b, -0.85 * amt);
 }
 // Characters re-rigged in Mixamo with moves made for their own bodies live with the game.
-const NATIVE = { "koda.glb": "models/koda.glb", "guard.glb": "models/guard.glb" };
+const NATIVE = { "koda.glb": "models/koda.glb?v=10", "guard.glb": "models/guard.glb" };   // ?v= changes with each new set of moves, so browsers fetch the new one
+/* Everyone else moves with Koda's and the guard's moves, retargeted onto their own bodies.
+   Their own moves were keyed against a different resting arm pose, which is what folded arms
+   across chests and into sides (the same fault Koda had). Retargeting copies each bone's pose
+   as it looks, not its raw numbers: for every frame, each bone is turned to point the way the
+   source bone points, allowing for how the two bodies differ at rest. Done once per character
+   kind, when it first loads. */
+const MOVES_FROM = file => /^townsfolk\//.test(file) ? "koda.glb" : file === "zora.glb" ? "koda.glb" : ENEMIES[file.replace(/\.glb$/, "")] ? "guard.glb" : null;
+const moveSource = {}, retargeted = {};
+const boneKey = n => n.replace(/^mixamorig\d*:?/, "");
+function retargetClips(src, dst, keepOwn) {
+  const S = src.scene, D = dst.scene;
+  S.updateMatrixWorld(true); D.updateMatrixWorld(true);
+  const sb = {}, db = [];
+  S.traverse(o => { if (o.isBone) sb[boneKey(o.name)] = o; });
+  D.traverse(o => { if (o.isBone) db.push(o); });   // parents before children
+  const qInv = new THREE.Quaternion(), tq = new THREE.Quaternion(), tq2 = new THREE.Quaternion(), tv = new THREE.Vector3();
+  const rootQ = (root) => root.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const sRoot = rootQ(S), dRoot = rootQ(D);
+  const rel = (bone, rootInv) => rootInv.clone().multiply(bone.getWorldQuaternion(new THREE.Quaternion()));
+  // At rest: how each target bone sits relative to its source twin.
+  const corr = {}, dRestRel = new Map(), dParentRest = new Map();
+  for (const b of db) {
+    dRestRel.set(b, rel(b, dRoot));
+    if (!b.parent.isBone) dParentRest.set(b, rel(b.parent, dRoot));
+    const s0 = sb[boneKey(b.name)]; if (s0) corr[b.name] = rel(s0, sRoot).invert().multiply(dRestRel.get(b));
+  }
+  const sHips = sb.Hips, dHips = db.find(b => boneKey(b.name) === "Hips");
+  const hipH = (bone, root) => { bone.getWorldPosition(tv); root.worldToLocal(tv); return tv.clone(); };
+  const sHip0 = sHips && hipH(sHips, S), dHip0 = dHips && hipH(dHips, D);
+  const k = sHip0 && dHip0 ? dHip0.y / Math.max(1e-4, sHip0.y) : 1;
+  const mixer = new THREE.AnimationMixer(S), out = [];
+  // Only the moves this character uses: the ones it came with, plus standing, walking and running.
+  const need = new Set(dst.animations.map(c => c.name).concat(["idle", "walk", "run"]));
+  for (const clip of src.animations) {
+    if (!need.has(clip.name) || (keepOwn && keepOwn.has(clip.name))) continue;
+    const act = mixer.clipAction(clip); mixer.stopAllAction(); act.reset(); act.play();
+    const n = Math.max(2, Math.round(clip.duration * 20) + 1), times = new Float32Array(n);
+    const qv = new Map(db.filter(b => corr[b.name]).map(b => [b, new Float32Array(n * 4)])), pv = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const t = Math.min(clip.duration, i / 20); times[i] = t;
+      mixer.setTime(t); S.updateMatrixWorld(true);
+      const want = new Map();
+      for (const b of db) {
+        const s0 = sb[boneKey(b.name)];
+        const w = s0 && corr[b.name] ? rel(s0, sRoot).multiply(corr[b.name]) : null;
+        const parentW = b.parent.isBone ? want.get(b.parent) : dParentRest.get(b);
+        const self = w || (parentW ? parentW.clone().multiply(b.quaternion) : dRestRel.get(b));
+        want.set(b, self);
+        if (w && qv.has(b)) { tq.copy(parentW).invert().multiply(w); tq.toArray(qv.get(b), i * 4); }
+      }
+      if (sHips && dHips) {
+        const p = hipH(sHips, S).sub(sHip0).multiplyScalar(k).add(dHip0);   // in the target's root space
+        tv.copy(p); D.localToWorld(tv); dHips.parent.worldToLocal(tv); tv.toArray(pv, i * 3);
+      }
+    }
+    const tracks = [];
+    for (const [b, v] of qv) tracks.push(new THREE.QuaternionKeyframeTrack(b.name + ".quaternion", times, v));
+    if (sHips && dHips) tracks.push(new THREE.VectorKeyframeTrack(dHips.name + ".position", times, pv));
+    out.push(new THREE.AnimationClip(clip.name, clip.duration, tracks));
+  }
+  mixer.stopAllAction();
+  // Moves only the character had (a dance, a cheer) stay its own.
+  return out.concat(dst.animations.filter(c => !out.some(o => o.name === c.name)));
+}
 async function makeActor(file, metres) {
-  const own = NATIVE[file];
-  const a = new Actor(await loadGLB(own || MODELS + file), metres);
-  a.native = !!own;
+  const own = NATIVE[file], from = !own && MOVES_FROM(file);
+  const g = await loadGLB(own || MODELS + file);
+  if (from) {
+    try {
+      if (!moveSource[from]) moveSource[from] = loadGLB(NATIVE[from]);
+      const src = await moveSource[from];
+      if (!retargeted[file]) retargeted[file] = retargetClips(src, g, null);
+      g.animations = retargeted[file].map(c => c.clone());
+    } catch (e) { console.warn("retarget", file, e); }
+  }
+  const a = new Actor(g, metres);
+  a.native = !!own || !!from;
   return a;
 }
 const forward = a => new THREE.Vector2(Math.sin(a.yaw), Math.cos(a.yaw));
@@ -1370,7 +1491,7 @@ function writeSave() { try { localStorage.setItem("gill.save2", JSON.stringify(s
 
 /* ---------- HUD ---------- */
 let toastT = 0, tipT = 0;
-function toast(text, secs = 3) { if (typeof obsSend === "function") obsSend("toast", { text }); const t = $("toast"); t.textContent = text; t.classList.add("show"); toastT = secs; }
+function toast(text, secs = 3) { const t = $("toast"); t.textContent = text; t.classList.add("show"); toastT = secs; }
 const tipQueue = [];
 function tip(key) {
   if (save.tips[key] || !S.tips[key]) return;
@@ -1674,7 +1795,6 @@ function playNote(semi, len = 0.35, type = "triangle", vol = 0.16, detune = 0, w
 }
 function sfxBuzz() { playNote(-17, 0.3, "sawtooth", 0.08); playNote(-16, 0.3, "sawtooth", 0.08); }
 function popText(text, cls = "") {
-  if (typeof obsSend === "function") obsSend("pop", { text, cls });
   const el = $("pop"); el.textContent = text; el.className = "pop show " + cls;
   clearTimeout(popText.t); popText.t = setTimeout(() => el.classList.remove("show"), 700);
 }
@@ -2635,7 +2755,7 @@ async function songComplete() {
       zora.play(zora.has("stun") ? "stun" : "idle");
       zora.waiting = true;
     } catch (e) { return finishMission(); }
-    toast("The song is whole. Zora is in the Old Tower!", 4);
+    toast(`The song is whole. Zora is at ${Q("q11").name}!`, 4);
     refreshObjective();
     return;
   }
@@ -2703,8 +2823,8 @@ function refreshObjective() {
   if (!mission) return;
   if (mission.def.free) return setObjective("Free roam. Walk the city, light the prayer points, talk to people. Pause for the map.");
   const m = mission, left = m.quads.filter(q => !q.done);
-  if (escape) return setObjective("Get Zora out. Reach the gold light at East Gate!");
-  if (zora && zora.waiting) return setObjective("Find Zora in the Old Tower.");
+  if (escape) return setObjective(`Get Zora out. Reach the gold light at ${Q("q12").name}!`);
+  if (zora && zora.waiting) return setObjective(`Find Zora at ${Q("q11").name}.`);
   if (!left.length) return setObjective("The song is complete.");
   if (race) return setObjective(FOCUS.race.objective(race.qd));
   const here = currentQuad && m.quads.find(q => q.q === currentQuad && !q.done && q.spawned);
@@ -3148,7 +3268,8 @@ function attack() {
   if (onBeatHit) { popText("ON BEAT x2", "good"); mission.stats.onBeat++; }
   let mv = STRING[comboStep++ % STRING.length];
   if (ninja && koda.sprinting && comboStep === 1 && koda.has("knee")) mv = { clip: "knee", from: 0.4, speed: 1.5, lock: 0.9, hits: [0.97, 1.5], dmg: 1, dash: 3.2 };
-  if (ninja && mv.clip === "roundhouse" && onBeatHit && koda.has("hurricane")) mv = { clip: "hurricane", from: 0.05, speed: 1.3, lock: 1.0, hits: [0.4, 0.8, 1.15], dmg: 1, radial: 2.4, push: 1.8 };
+  // On the beat, the spinning kick catches everyone around him, not just the one in front.
+  if (ninja && mv.clip === "roundhouse" && onBeatHit) mv = Object.assign({}, mv, { radial: 2.4, push: 2.6 });
   koda.play(mv.clip, { once: true, speed: mv.speed, from: mv.from || 0 });
   attackLock = mv.lock;
   if (mv.dash) { const f = forward(koda); lunge = { x: koda.pos.x + f.x * mv.dash, z: koda.pos.z + f.y * mv.dash, t: 0.35 }; }
@@ -3803,7 +3924,7 @@ function updateGuide(now, dt) {
 }
 
 /* ---------- the marker over what to do next ---------- */
-const markerV = new THREE.Vector3();
+const markerV = new THREE.Vector3(), markerK = new THREE.Vector3(), markerFwd = new THREE.Vector3(), markerRight = new THREE.Vector3();
 function updateMarker() {
   const el = $("marker"), t = objectiveTarget();
   if (!t || state !== "play") { el.classList.add("hidden"); return; }
@@ -3815,15 +3936,30 @@ function updateMarker() {
   let x = (markerV.x + 1) / 2 * W, y = (1 - markerV.y) / 2 * H;
   const behind = markerV.z > 1;
   const off = behind || x < m || x > W - m || y < 90 || y > H - m;
-  if (behind) { x = W - x; y = H - m; }
   const half = Math.max(m, ($("markerText").offsetWidth || 120) / 2 + 10);
+  if (off) {
+    // Off screen: pin it to the edge in the direction of the goal as seen from above, measured
+    // from Koda on screen. Projecting a point behind the camera flips it to the wrong side,
+    // so the direction comes from the camera's own left-right and forward along the ground.
+    camera.getWorldDirection(markerFwd); markerFwd.y = 0; if (markerFwd.lengthSq() < 1e-6) markerFwd.set(0, 0, -1); markerFwd.normalize();
+    markerRight.set(-markerFwd.z, 0, markerFwd.x);
+    const gx = t.x - koda.pos.x, gz = t.z - koda.pos.z;
+    const sx = gx * markerRight.x + gz * markerRight.z, sy = -(gx * markerFwd.x + gz * markerFwd.z);
+    markerK.set(koda.pos.x, koda.pos.y + 1, koda.pos.z).project(camera);
+    const kx = (markerK.x + 1) / 2 * W, ky = (1 - markerK.y) / 2 * H, L = Math.hypot(sx, sy) || 1;
+    const ux = sx / L, uy = sy / L, top = 150, bottom = H - m;
+    // Walk out from Koda along that direction until the edge of the safe area.
+    const tx = ux > 0 ? (W - half - kx) / ux : ux < 0 ? (half - kx) / ux : 1e9, ty = uy > 0 ? (bottom - ky) / uy : uy < 0 ? (top - ky) / uy : 1e9;
+    const k = Math.max(0, Math.min(tx, ty));
+    x = kx + ux * k; y = ky + uy * k;
+  }
   x = clamp(x, half, W - half); y = clamp(y, off ? 150 : 90, H - m);   // clear of the HUD and tips when pinned to the edge
   el.classList.remove("hidden");
   el.classList.toggle("edge", off);
   el.style.transform = `translate(${x}px, ${y}px)`;
   $("markerText").textContent = (t.label || "") + (d > 6 && !t.rough ? ` · ${Math.round(d)}m` : "");
   if (off) {
-    const ang = Math.atan2(y - H / 2, x - W / 2);
+    const ang = Math.atan2(y - (1 - markerK.y) / 2 * H, x - (markerK.x + 1) / 2 * W);   // points away from Koda, toward the goal
     $("markerArrow").style.transform = `rotate(${ang}rad)`;
   }
 }
@@ -4208,7 +4344,6 @@ function frame(now) {
     koda.update(real); if (zora) zora.update(real);
   }
   if (state === "play" || state === "build") updateCoop(real);
-  updateObs(real);
   if ((frame.n = (frame.n || 0) + 1) % 30 === 0) { showHudBuild(); showRoomButtons(); }
   if (state === "build") { updateSway(now); updateAmbient(real); updateFlyers(real); updateHorses(real); }
   if (!window.GILL_NORENDER) renderer.render(scene, camera);
@@ -4974,19 +5109,27 @@ async function buildTownPlan() {
     const r = rng(q.id.charCodeAt(2) * 911 + 31), cx = q.x0 + q.w / 2, cz = q.z0 + q.d / 2, dist = districtOf(q);
     const face = (x, z) => Math.atan2(cx - x, cz - z);   // turned to look into the middle
     // Food stalls along the pavements of this place's streets, facing the road, each one different.
-    for (const st of WD.roads.filter(r => r.street && (r.name === q.name + " Street" || r.name === q.name + " Avenue"))) {
-      const [[ax, az], [bx, bz]] = st.points, horiz = Math.abs(bx - ax) > Math.abs(bz - az), off = st.width / 2 + 2.6;
-      for (let k = 0; k < 4; k++) {
-        const side = k % 2 ? 1 : -1, along = (horiz ? q.x0 : q.z0) + (0.18 + 0.2 * k + r() * 0.06) * (horiz ? q.w : q.d);
-        const x = horiz ? along : ax + side * off, z = horiz ? az + side * off : along;
+    // The place's longest street stretches (real ones bend), longest first, four stalls in all.
+    const runs = [];
+    for (const st of WD.roads.filter(rd => rd.street && rd.place === q.id && rd.width >= 6)) for (let i = 0; i + 1 < st.points.length; i++) {
+      const [ax, az] = st.points[i], [bx, bz] = st.points[i + 1], L = Math.hypot(bx - ax, bz - az);
+      if (L > 24) runs.push({ st, ax, az, bx, bz, L });
+    }
+    runs.sort((a, b) => b.L - a.L);
+    for (let k = 0; k < 4 && runs.length; k++) {
+      const { st, ax, az, bx, bz, L } = runs[k % runs.length];
+      const ux = (bx - ax) / L, uz = (bz - az) / L, nx = -uz, nz = ux, off = st.width / 2 + 2.6;
+      {
+        const side = k % 2 ? 1 : -1, t = L * (0.2 + 0.6 * ((k * 0.37 + r() * 0.2) % 1));
+        const x = ax + ux * t + nx * off * side, z = az + uz * t + nz * off * side;
         if (Math.hypot(x - cx, z - cz) < 14) continue;   // the crossing in the middle stays clear
-        const yaw = horiz ? (side > 0 ? Math.PI : 0) : (side > 0 ? -Math.PI / 2 : Math.PI / 2);   // counter to the road
+        const yaw = Math.atan2(-nx * side, -nz * side);   // counter to the road
         const kind = r() < 0.75 ? "stall" : "booth";
         jobs.push(placeThing(kind, x, z, yaw, kind === "stall" ? 3.6 + r() * 1.2 : 2.4, { pad: 0.2 }).then(t => {
           if (!t) return;
           tintStall(t.m, Math.floor(r() * STALL_TINTS.length));
           if (!q.hasTrade && t.b) { q.hasTrade = true; t.b.store = { lc: "wood", mc: "metal", uc: "glass", rc: "stone", de: "sand" }[dist] || "general"; }
-          const fx = horiz ? 0 : -side, fz = horiz ? -side : 0;   // the seller stands on the far side, facing the road
+          const fx = -nx * side, fz = -nz * side;   // the seller stands on the far side, facing the road
           stalls.push({ x: x - fx * 2.2, z: z - fz * 2.2, yaw: Math.atan2(fx, fz) + Math.PI, q });
         }));
       }
@@ -5030,9 +5173,8 @@ async function buildTownPlan() {
     }
     // Street life everywhere: a bus shelter by the road, a phone box, a produce table by the kiosk,
     // and each district's own bits (water tanks and drums down the hill, dishes and planters up it).
-    { const st = WD.roads.find(rd => rd.street && (rd.name === q.name + " Street" || rd.name === q.name + " Avenue"));
-      if (st) { const [[ax, az], [bx, bz]] = st.points, horiz = Math.abs(bx - ax) > Math.abs(bz - az), off = st.width / 2 + 2.2, along = (horiz ? q.x0 + q.w * 0.72 : q.z0 + q.d * 0.72);
-        const x = horiz ? along : ax - off, z = horiz ? az - off : along; jobs.push(placeThing("busstop", x, z, horiz ? 0 : Math.PI / 2, 4, { h: 3, pad: 0.3 })); } }
+    if (runs.length) { const { st, ax, az, bx, bz, L } = runs[0], ux = (bx - ax) / L, uz = (bz - az) / L, off = st.width / 2 + 2.2;
+      const x = ax + ux * L * 0.72 + uz * off, z = az + uz * L * 0.72 - ux * off; jobs.push(placeThing("busstop", x, z, Math.atan2(-uz, ux) + Math.PI / 2, 4, { h: 3, pad: 0.3 })); }
     jobs.push(placeThing("phonebox", cx + 16, cz - 19, face(cx + 16, cz - 19), 1.2, { h: 2.4 }));
     jobs.push(placeThing("produce", cx + 23, cz - 12, face(cx + 23, cz - 12), 2, { h: 1.4, walk: true, pad: 0.2 }));
     if (dist === "lc" || dist === "mc") {
@@ -5339,75 +5481,6 @@ function spawnRoadRiders() {
     makeRider(kinds[Math.floor(r() * kinds.length)], route[0].x, route[0].z, route, { roam: true }).then(e => { if (mission !== m) { scene.remove(e.a.root); removeHorse(e.horse); enemies.splice(enemies.indexOf(e), 1); } }).catch(() => null);
   }
 }
-
-/* ---------- stream overlay (OBS) ----------
-   Stream the game with OBS and the overlay shows what's happening on top: the song, the
-   objective, the parts of the song unlocked, where Koda is, hearts, when he's been seen,
-   room chat and the big moments. Turn it on from the pause menu; it gives a link to add in
-   OBS as a Browser source. The game sends its state to that link a couple of times a second.
-   "Clean screen" hides the game's own HUD so the overlay is the only one on the stream. */
-var obs = { code: null, ch: null, t: 0, last: "", idle: 0 };   // var: toasts before this line still find it
-function obsCode() {
-  const make = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), b => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[b % 32]).join("");
-  try { let c = localStorage.getItem("gill.obs"); if (!c) { c = make(); localStorage.setItem("gill.obs", c); } return c; } catch (e) { return obs.code || make(); }
-}
-const obsLink = () => `${location.origin}${location.pathname.replace(/[^/]*$/, "")}obs.html?c=${obs.code || obsCode()}`;
-function obsStart() {
-  if (!ONLINE || obs.ch) return;
-  obs.code = obsCode();
-  obs.ch = ONLINE.channel("gill-obs-" + obs.code, { config: { broadcast: { self: false } } });
-  obs.ch.subscribe(st => { if (st === "SUBSCRIBED") { obs.last = ""; obs.t = 0; } });
-  try { localStorage.setItem("gill.obsOn", "1"); } catch (e) { /* no storage */ }
-  renderObs();
-}
-async function obsStop() {
-  if (obs.ch) { try { await obs.ch.unsubscribe(); } catch (e) { /* gone */ } }
-  obs.ch = null;
-  try { localStorage.removeItem("gill.obsOn"); } catch (e) { /* no storage */ }
-  renderObs();
-}
-function obsSend(event, payload) { if (obs && obs.ch) { try { obs.ch.send({ type: "broadcast", event, payload }); } catch (e) { /* not ready */ } } }
-function updateObs(dt) {
-  if (!obs.ch || (obs.t -= dt) > 0) return;
-  obs.t = 0.5;
-  const q = koda ? zoneAt(koda.pos.x, koda.pos.z) : null, m = mission;
-  const st = {
-    playing: state === "play" || state === "build" || state === "paused", state,
-    song: m ? m.def.song : "", n: m && m.index >= 0 ? m.index + 1 : 0, free: !!(m && m.def.free),
-    objective: $("objective") ? $("objective").textContent : "",
-    place: q ? q.name : "", district: q ? districtOf(q) : "",
-    parts: m ? m.quads.map((qd, i) => ({ name: qd.partName, done: !!qd.done, colour: "#" + PART_COLOURS[i % PART_COLOURS.length].toString(16).padStart(6, "0") })) : [],
-    time: m && !m.def.free ? Math.floor(m.t) : null,
-    hearts: health, wanted: anySeen ? 2 : anySus ? 1 : 0, riding: !!(koda && koda.riding), building: state === "build",
-    room: coop.ch ? coop.code : "", players: coop.ch ? coop.others.size + 1 : 1, world: myWorld ? myWorld.name : "",
-    hour: Math.round(DAY.hour * 10) / 10
-  };
-  const key = JSON.stringify(st);
-  if (key === obs.last && (obs.idle += 0.5) < 5) return;   // unchanged: a heartbeat every 5 seconds
-  obs.idle = 0; obs.last = key;
-  obsSend("state", st);
-}
-function renderObs() {
-  const on = !!obs.ch;
-  $("obsToggle").textContent = on ? "Overlay: on" : "Overlay: off";
-  $("obsToggle").classList.toggle("primary", on); $("obsToggle").classList.toggle("ghost", !on);
-  $("obsLink").value = ONLINE ? obsLink() : "";
-  $("obsNote").textContent = !ONLINE ? "The overlay works when you play on feelzmachine.com." : on ? "Live. Anything you do now shows on the overlay." : "Turn the overlay on, then add the link to OBS.";
-  $("obsClean").textContent = document.body.classList.contains("clean-feed") ? "Clean screen: on" : "Clean screen: off";
-}
-(function obsControls() {
-  $("obsBtn").addEventListener("click", () => { $("obsPanel").classList.toggle("hidden"); renderObs(); });
-  $("obsClose").addEventListener("click", () => $("obsPanel").classList.add("hidden"));
-  $("obsToggle").addEventListener("click", () => { if (obs.ch) obsStop(); else obsStart(); });
-  $("obsCopy").addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(obsLink()); $("obsCopy").textContent = "Copied"; } catch (e) { $("obsLink").select(); document.execCommand && document.execCommand("copy"); $("obsCopy").textContent = "Copied"; }
-    setTimeout(() => { $("obsCopy").textContent = "Copy link"; }, 1600);
-  });
-  $("obsPreview").addEventListener("click", () => window.open(obsLink() + "&preview=1", "_blank", "noopener"));
-  $("obsClean").addEventListener("click", () => { document.body.classList.toggle("clean-feed"); try { localStorage.setItem("gill.clean", document.body.classList.contains("clean-feed") ? "1" : ""); } catch (e) { /* no storage */ } renderObs(); });
-  $("obsLink").addEventListener("keydown", e => e.stopPropagation());
-  try { if (localStorage.getItem("gill.clean") === "1") document.body.classList.add("clean-feed"); if (localStorage.getItem("gill.obsOn") === "1") obsStart(); } catch (e) { /* no storage */ }
-})();
 
 /* ---------- townsfolk at work ----------
    The place Koda is in comes alive: a seller behind every stall and people walking
@@ -5835,7 +5908,6 @@ async function renderShop() {
    shows when your Feelz Machine account has a birth date showing 18 or over. */
 const CHAT_BAD = /\b(fuck|shit|bitch|cunt|nigg|fag|dick|pussy|slut|whore)\w*/gi;
 function chatShow(name, colour, text) {
-  obsSend("chat", { name, colour: hexCol(colour), text });
   const p2 = document.createElement("p");
   p2.innerHTML = `<b style="color:${hexCol(colour)}"></b><span></span>`;
   p2.querySelector("b").textContent = name; p2.querySelector("span").textContent = text;
@@ -5948,6 +6020,6 @@ function showRoomButtons() {
   window.GILL_FLOATS = () => floats; window.GILL_DRONES = () => drones;
   window.GILL = { startBuild, B, buildPick, buildPlace, buildPickUp, placedCount: () => placed.length, inv: () => Object.assign({}, inv), dustCount: () => dust.pool.filter(p => p.life > 0).length, flyerCount: () => flyers.length, zones: S.quadrants, ambientCount: () => ambient.map(p => p.job).join(","), moveWithCollision, shrines, travelTo, prayNear, guideRoute, buildStep: dt => updateBuild(dt), scene, DAY, terrainAt, groundAt, ridgeAt, blocked, pathLine, camera, CAM_OFFSET, get koda() { return koda; }, get zora() { return zora; }, get mission() { return mission; },
     enemies, npcs, get state() { return state; }, save: () => save, blockers, keys, input, cardContinue, pause, resume, drawBigMap, pathNext, stick, FOCUS, beat, songTime, boost, get lastSafe() { return lastSafe; }, fightFoe, get camZoom() { return camZoom; }, attack, jump, action, objectiveTarget, get health() { return health; }, get music() { return music; },
-    horses, mount, dismount, nearHorse, obs, obsStart, updateObs, critters, placeThing, staticModel: n => staticModel(n),
+    makeActor, horses, mount, dismount, nearHorse, critters, placeThing, staticModel: n => staticModel(n),
     sim(seconds) { let t = performance.now(); for (let i = 0; i < seconds * 30; i++) { t += 33; tick(1 / 30, t); } } };
 })();

@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Feelz Live Overlay</title>
+  <meta name="robots" content="noindex">
+  <!--
+    public/overlay/index.html  (feelzmachine.com/overlay/?a=ARTIST_ID)
+
+    The OBS overlay for Feelz Live. Add it in OBS as a Browser source (1920 x 1080)
+    above whatever you're streaming: a game, your camera, your screen. It shows what's
+    happening in your Feelz Live stream as it happens: tips as big alerts, reactions
+    floating up, what's playing, and (with layout=full) the chat.
+
+      a        the artist id (Live Studio gives you the link)
+      layout   feelz (default): tips, reactions and what's playing. Feelz Live already
+               shows chat beside the video, so it isn't repeated in the picture.
+               full: the same plus the chat, for YouTube and other platforms whose
+               viewers can't see Feelz chat.
+      sound    1: a chime on every tip
+      hide     comma list of parts to leave out: tips, reactions, playing, chat
+  -->
+  <style>
+    :root { --gold: #f2b544; --gold-hi: #ffd27a; --ink: rgba(0,0,0,.82); --line: rgba(242,181,68,.55); }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; color: #fff;
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    body.preview { background: repeating-conic-gradient(#1a1a1a 0 25%, #222 0 50%) 0 0 / 40px 40px; }
+    #ov { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+    .card { position: absolute; background: var(--ink); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 10px 40px rgba(0,0,0,.45); transition: opacity .5s, transform .5s; }
+    .gone { opacity: 0 !important; transform: translateY(12px); pointer-events: none; }
+    .kick { font-size: 15px; letter-spacing: .3em; color: var(--gold); font-weight: 800; text-transform: uppercase; }
+
+    /* What's playing: bottom right, clear of a game's own corners (radar bottom left, buttons top right). */
+    #playing { right: 40px; bottom: 40px; padding: 16px 22px 16px 18px; display: flex; gap: 16px; align-items: center; max-width: 620px; }
+    #cover { width: 72px; height: 72px; border-radius: 12px; object-fit: cover; flex: none; background: #222; }
+    #song { font-size: 26px; font-weight: 900; line-height: 1.15; margin-top: 4px; }
+    #byline { font-size: 17px; color: rgba(255,255,255,.65); margin-top: 3px; }
+
+    /* Tips: a big alert in the lower middle, then a running total. */
+    #tip { left: 50%; bottom: 150px; transform: translateX(-50%) scale(.9); min-width: 620px; max-width: 980px; padding: 22px 34px; text-align: center;
+      background: linear-gradient(135deg, rgba(40,26,4,.94), rgba(0,0,0,.92)); border: 2px solid var(--gold); }
+    #tip.gone { transform: translateX(-50%) scale(.9) translateY(16px); }
+    #tip.on { animation: pop .6s cubic-bezier(.2,1.4,.4,1) forwards; }
+    @keyframes pop { from { transform: translateX(-50%) scale(.6); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+    #tipAmount { font-size: 64px; font-weight: 900; color: var(--gold-hi); text-shadow: 0 4px 0 #3a2206, 0 0 30px rgba(242,181,68,.5); line-height: 1; }
+    #tipName { font-size: 28px; font-weight: 800; margin-top: 10px; }
+    #tipMsg { font-size: 22px; color: rgba(255,255,255,.85); margin-top: 8px; line-height: 1.35; word-wrap: break-word; }
+
+    /* Reactions float up the right edge. */
+    #reactions { position: absolute; right: 30px; bottom: 170px; width: 240px; height: 700px; overflow: hidden; }
+    .rx { position: absolute; bottom: 0; font-size: 54px; animation: rise 3.2s ease-out forwards; filter: drop-shadow(0 4px 8px rgba(0,0,0,.5)); }
+    @keyframes rise { 0% { transform: translateY(0) scale(.6); opacity: 0; } 12% { opacity: 1; transform: translateY(-60px) scale(1.1); } 100% { transform: translateY(-700px) scale(1); opacity: 0; } }
+    #combo { right: 40px; bottom: 160px; padding: 10px 20px; font-size: 26px; font-weight: 900; color: var(--gold-hi); }
+
+    /* Chat (layout=full): down the left side, between a game's top-left panel and its radar. */
+    #chat { left: 40px; top: 300px; width: 500px; padding: 14px 18px; }
+    #chatLog p { margin: 10px 0 0; font-size: 20px; line-height: 1.35; animation: in .4s ease-out; word-wrap: break-word; }
+    #chatLog p b { margin-right: 8px; }
+    @keyframes in { from { opacity: 0; transform: translateX(-16px); } }
+
+    #wait { left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; padding: 26px 34px; max-width: 760px; }
+    #wait h1 { margin: 6px 0 8px; font-size: 34px; }
+    #wait p { margin: 0; font-size: 18px; color: rgba(255,255,255,.75); line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div id="ov">
+    <div class="card gone" id="playing"><img id="cover" alt=""><div><div class="kick">Now playing</div><div id="song"></div><div id="byline"></div></div></div>
+    <div class="card gone" id="chat"><div class="kick">Feelz Live chat</div><div id="chatLog"></div></div>
+    <div id="reactions"></div>
+    <div class="card gone" id="combo"></div>
+    <div class="card gone" id="tip"><div class="kick">Tip</div><div id="tipAmount"></div><div id="tipName"></div><div id="tipMsg"></div></div>
+    <div class="card gone" id="wait"><div class="kick">Feelz Live overlay</div><h1 id="waitHead">Waiting for your stream</h1><p id="waitText">Go live on Feelz Machine and this fills in by itself.</p></div>
+  </div>
+  <script src="/run/vendor/supabase-2.45.4/supabase.js"></script>
+  <script>
+  (function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var qs = new URLSearchParams(location.search);
+    var artist = (qs.get("a") || "").replace(/[^a-zA-Z0-9-]/g, "").slice(0, 64);
+    var full = qs.get("layout") === "full", preview = !!qs.get("preview"), sound = qs.get("sound") === "1";
+    var hide = (qs.get("hide") || "").split(",");
+    var on = function (part) { return hide.indexOf(part) < 0 && (part !== "chat" || full); };
+    if (preview) document.body.classList.add("preview");
+    function fit() { var k = Math.min(innerWidth / 1920, innerHeight / 1080); $("ov").style.transform = "scale(" + k + ")"; }
+    addEventListener("resize", fit); fit();
+    var show = function (id, v) { $(id).classList.toggle("gone", !v); };
+    var wait = function (head, text) { $("waitHead").textContent = head; $("waitText").textContent = text; show("wait", preview); };
+    if (!artist) { $("waitHead").textContent = "This link is missing your artist id"; $("waitText").textContent = "Copy the overlay link again from Live Studio."; show("wait", true); return; }
+    if (!window.supabase) { wait("Couldn't connect", "Check the internet connection and refresh the source in OBS."); return; }
+    var db = window.supabase.createClient("https://bycdnwenbjusxpowojdb.supabase.co",
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5Y2Rud2VuYmp1c3hwb3dvamRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MjIzOTYsImV4cCI6MjA4NTA5ODM5Nn0.ixUISqTydgNOKJn9w_p7po15mG9kE25yL0HbHprRHj4",
+      { auth: { persistSession: false, autoRefreshToken: false } });
+    var session = null, subs = [], trackId = null;
+    var esc = function (t) { var d = document.createElement("div"); d.textContent = t == null ? "" : String(t); return d.innerHTML; };
+    var colourOf = function (name) { var h = 0; for (var i = 0; i < (name || "").length; i++) h = (h * 31 + name.charCodeAt(i)) % 360; return "hsl(" + h + ",80%,68%)"; };
+    var money = function (n) { n = Number(n || 0); return "$" + (n % 1 ? n.toFixed(2) : n.toFixed(0)); };
+
+    // ---- what's playing
+    function showTrack(id) {
+      if (!on("playing")) return;
+      if (!id) { show("playing", false); trackId = null; return; }
+      if (id === trackId) return; trackId = id;
+      db.from("tracks").select("title, cover_artwork_url, artists(artist_name)").eq("id", id).maybeSingle().then(function (r) {
+        var t = r.data; if (!t || trackId !== id) return;
+        $("song").textContent = t.title || ""; $("byline").textContent = (t.artists && t.artists.artist_name) || "";
+        if (t.cover_artwork_url) { $("cover").src = t.cover_artwork_url; $("cover").style.display = ""; } else $("cover").style.display = "none";
+        show("playing", true);
+      });
+    }
+    // ---- tips: one at a time, each for 7 seconds
+    var tipQueue = [], tipBusy = false;
+    function chime() {
+      if (!sound) return;
+      try { var ac = chime.ac || (chime.ac = new (window.AudioContext || window.webkitAudioContext)());
+        [0, 4, 7, 12].forEach(function (s, i) { var o = ac.createOscillator(), g = ac.createGain(); o.type = "triangle"; o.frequency.value = 523.25 * Math.pow(2, s / 12);
+          g.gain.setValueAtTime(0.0001, ac.currentTime + i * 0.09); g.gain.exponentialRampToValueAtTime(0.18, ac.currentTime + i * 0.09 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + i * 0.09 + 0.5);
+          o.connect(g); g.connect(ac.destination); o.start(ac.currentTime + i * 0.09); o.stop(ac.currentTime + i * 0.09 + 0.55); }); } catch (e) { /* no audio */ }
+    }
+    function nextTip() {
+      if (tipBusy || !tipQueue.length) return;
+      tipBusy = true; var m = tipQueue.shift();
+      $("tipAmount").textContent = money(m.tip_amount); $("tipName").innerHTML = '<span style="color:' + colourOf(m.name) + '">' + esc(m.name || "Someone") + "</span> sent a tip";
+      $("tipMsg").textContent = m.content || ""; $("tipMsg").style.display = m.content ? "" : "none";
+      var el = $("tip"); el.classList.remove("gone", "on"); void el.offsetWidth; el.classList.add("on"); chime();
+      setTimeout(function () { el.classList.remove("on"); el.classList.add("gone"); setTimeout(function () { tipBusy = false; nextTip(); }, 600); }, 7000);
+    }
+    // ---- chat
+    function addChat(m) {
+      if (!on("chat") || m.is_tip) return;
+      var p = document.createElement("p");
+      p.innerHTML = '<b style="color:' + colourOf(m.name) + '"></b><span></span>';
+      p.querySelector("b").textContent = m.name || "Listener"; p.querySelector("span").textContent = m.content || "";
+      var log = $("chatLog"); log.appendChild(p); while (log.children.length > 7) log.firstChild.remove();
+      show("chat", true);
+      setTimeout(function () { p.style.transition = "opacity .8s"; p.style.opacity = "0"; setTimeout(function () { p.remove(); if (!log.children.length) show("chat", false); }, 800); }, 45000);
+    }
+    // ---- reactions
+    var comboTimes = [];
+    function addReaction(emoji) {
+      if (!on("reactions")) return;
+      var el = document.createElement("div"); el.className = "rx"; el.textContent = emoji;
+      el.style.left = (10 + Math.random() * 160) + "px"; el.style.animationDuration = (2.6 + Math.random() * 1.2) + "s";
+      $("reactions").appendChild(el); setTimeout(function () { el.remove(); }, 4200);
+      var now = Date.now(); comboTimes = comboTimes.filter(function (t) { return now - t < 4000; }); comboTimes.push(now);
+      if (comboTimes.length >= 5) { $("combo").textContent = comboTimes.length + " reactions!"; show("combo", true); clearTimeout(addReaction.t); addReaction.t = setTimeout(function () { show("combo", false); }, 4200); }
+    }
+
+    function leave() { subs.forEach(function (c) { try { db.removeChannel(c); } catch (e) { /* gone */ } }); subs = []; }
+    function watch(s) {
+      leave(); session = s; show("wait", false);
+      showTrack(s.current_track_id);
+      subs.push(db.channel("overlay-state-" + s.id).on("postgres_changes", { event: "UPDATE", schema: "public", table: "listening_sessions", filter: "id=eq." + s.id }, function (e) {
+        showTrack(e.new.current_track_id);
+        if (e.new.status !== "live") { leave(); session = null; show("playing", false); show("chat", false); wait("Stream ended", "This fills in again next time you go live."); }
+      }).subscribe());
+      subs.push(db.channel("overlay-chat-" + s.id).on("postgres_changes", { event: "INSERT", schema: "public", table: "session_messages", filter: "session_id=eq." + s.id }, function (e) {
+        var m = e.new; if (m.is_tip) { if (on("tips")) { tipQueue.push(m); nextTip(); } } else addChat(m);
+      }).subscribe());
+      // The same channel viewers' reactions travel on (listen only: the overlay never counts as a viewer).
+      subs.push(db.channel("session-reactions-" + s.id).on("broadcast", { event: "reaction" }, function (e) { if (e.payload && e.payload.emoji) addReaction(e.payload.emoji); }).subscribe());
+    }
+    // Find the artist's live stream; check again every 20 seconds until there is one.
+    function find() {
+      db.from("listening_sessions").select("id, status, current_track_id").eq("artist_id", artist).eq("status", "live").order("started_at", { ascending: false }).limit(1).then(function (r) {
+        var s = r.data && r.data[0];
+        if (s && (!session || session.id !== s.id)) watch(s);
+        else if (!s && !session) wait("Waiting for your stream", "Go live on Feelz Machine and this fills in by itself.");
+      });
+    }
+    find(); setInterval(function () { if (!session) find(); }, 20000);
+    if (preview) {
+      // Preview: a little of everything, so you can see where things sit.
+      setTimeout(function () {
+        show("wait", false);
+        $("song").textContent = "Your song plays here"; $("byline").textContent = "Artist name"; $("cover").style.display = "none"; if (on("playing")) show("playing", true);
+        addChat({ name: "Thandi", content: "this beat though" }); addChat({ name: "Sipho", content: "first time here, love it" });
+        if (on("tips")) { tipQueue.push({ name: "Lerato", tip_amount: 5, content: "Keep going!" }); nextTip(); }
+        ["🔥", "❤️", "🙌", "🔥", "😂", "🔥"].forEach(function (x, i) { setTimeout(function () { addReaction(x); }, i * 250); });
+      }, 600);
+    }
+  })();
+  </script>
+</body>
+</html>

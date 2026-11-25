@@ -3,177 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>G.I.L.L. Stream Overlay</title>
+  <title>Feelz Live Overlay</title>
   <meta name="robots" content="noindex">
   <style>
-    :root { --gold: #f2b544; --gold-hi: #ffd27a; --ink: rgba(0,0,0,.82); --line: rgba(242,181,68,.55); --red: #ff4a3d; }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; color: #fff;
-      font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-    body.preview { background: repeating-conic-gradient(#1a1a1a 0 25%, #222 0 50%) 0 0 / 40px 40px; }
-    /* Everything is laid out on a 1920 x 1080 canvas and scaled to the browser source. */
-    #ov { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
-    .card { position: absolute; background: var(--ink); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 10px 40px rgba(0,0,0,.45);
-      transition: opacity .5s, transform .5s; }
-    .gone { opacity: 0 !important; transform: translateY(-10px); }
-    .kick { font-size: 15px; letter-spacing: .3em; color: var(--gold); font-weight: 800; text-transform: uppercase; }
-
-    #now { left: 40px; top: 36px; padding: 18px 24px 18px 20px; display: flex; gap: 16px; align-items: center; min-width: 420px; }
-    #disc { width: 64px; height: 64px; border-radius: 50%; flex: none; background: radial-gradient(circle, #111 0 18%, var(--gold) 19% 23%, #151515 24% 100%);
-      border: 2px solid var(--line); animation: spin 3s linear infinite; }
-    body.idle #disc { animation-play-state: paused; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    #song { font-size: 30px; font-weight: 900; line-height: 1.1; margin-top: 4px; }
-    #artist { font-size: 16px; color: rgba(255,255,255,.65); margin-top: 3px; }
-
-    #obj { left: 50%; top: 36px; transform: translateX(-50%); max-width: 900px; padding: 16px 30px; text-align: center; }
-    #obj.gone { transform: translate(-50%, -10px); }
-    #objText { font-size: 26px; font-weight: 800; color: var(--gold-hi); line-height: 1.25; margin-top: 4px; }
-    #obj.pulse { animation: pulse .9s ease-out; }
-    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(242,181,68,.8); } 100% { box-shadow: 0 0 0 26px rgba(242,181,68,0); } }
-
-    #parts { left: 40px; top: 180px; padding: 16px 20px; width: 330px; }
-    .part { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 18px; font-weight: 700; color: rgba(255,255,255,.55); }
-    .part i { width: 16px; height: 16px; border-radius: 5px; border: 2px solid var(--c); flex: none; }
-    .part.on { color: #fff; }
-    .part.on i { background: var(--c); box-shadow: 0 0 14px var(--c); }
-    .part .eq { margin-left: auto; display: flex; gap: 3px; align-items: flex-end; height: 18px; }
-    .part .eq b { width: 4px; background: var(--c); border-radius: 2px; height: 30%; }
-    .part.on .eq b { animation: eq .8s ease-in-out infinite alternate; }
-    .part.on .eq b:nth-child(2) { animation-delay: .2s; } .part.on .eq b:nth-child(3) { animation-delay: .4s; }
-    @keyframes eq { to { height: 100%; } }
-
-    #where { left: 40px; bottom: 40px; padding: 16px 22px; min-width: 330px; }
-    #place { font-size: 28px; font-weight: 900; margin-top: 4px; }
-    #info { font-size: 16px; color: rgba(255,255,255,.7); margin-top: 6px; display: flex; gap: 14px; flex-wrap: wrap; }
-    #hearts { font-size: 26px; color: var(--red); letter-spacing: 3px; margin-top: 8px; }
-
-    #wanted { right: 40px; top: 36px; padding: 14px 22px; font-size: 22px; font-weight: 900; letter-spacing: .2em; }
-    #wanted.sus { color: var(--gold-hi); }
-    #wanted.seen { color: #fff; background: rgba(160,20,15,.88); border-color: var(--red); animation: alarm .7s ease-in-out infinite alternate; }
-    @keyframes alarm { to { box-shadow: 0 0 40px rgba(255,60,40,.8); } }
-
-    #chat { right: 40px; bottom: 120px; width: 460px; padding: 14px 18px; }
-    #chatLog p { margin: 10px 0 0; font-size: 19px; line-height: 1.35; animation: in .4s ease-out; word-wrap: break-word; }
-    #chatLog p b { margin-right: 8px; }
-    @keyframes in { from { opacity: 0; transform: translateX(20px); } }
-
-    #pop { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%) scale(.8); font-size: 72px; font-weight: 900; font-style: italic;
-      color: var(--gold-hi); text-shadow: 0 6px 0 #3a2206, 0 0 40px rgba(242,181,68,.6); opacity: 0; transition: opacity .25s, transform .25s; white-space: nowrap; }
-    #pop.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-    #pop.bad { color: #ff8a7a; }
-    #toast { left: 50%; bottom: 150px; transform: translateX(-50%); max-width: 1000px; padding: 16px 28px; font-size: 24px; font-weight: 700; text-align: center; }
-    #toast.gone { transform: translate(-50%, 10px); }
-
-    #tag { position: absolute; right: 40px; bottom: 40px; padding: 12px 20px; border-radius: 999px; background: var(--ink); border: 1px solid var(--line);
-      font-size: 18px; font-weight: 800; color: var(--gold-hi); }
-    #tag span { color: #fff; font-weight: 600; }
-
-    #wait { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; padding: 26px 34px; max-width: 760px; }
-    #wait h1 { margin: 6px 0 8px; font-size: 34px; }
-    #wait p { margin: 0; font-size: 18px; color: rgba(255,255,255,.75); line-height: 1.5; }
+    html, body { margin: 0; height: 100%; background: transparent; color: #fff; font-family: "Inter", system-ui, sans-serif; }
+    div { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 22px 30px; background: rgba(0,0,0,.85);
+      border: 1px solid rgba(242,181,68,.55); border-radius: 16px; text-align: center; max-width: 640px; }
+    b { color: #f2b544; letter-spacing: .25em; font-size: 13px; }
+    p { margin: 8px 0 0; font-size: 18px; line-height: 1.5; }
   </style>
 </head>
 <body>
-  <div id="ov">
-    <div class="card gone" id="now">
-      <div id="disc"></div>
-      <div><div class="kick" id="nowKick">Now playing</div><div id="song"></div><div id="artist">Big Feelz · Good Intentions Last Longest</div></div>
-    </div>
-    <div class="card gone" id="obj"><div class="kick">Objective</div><div id="objText"></div></div>
-    <div class="card gone" id="parts"><div class="kick">The song so far</div><div id="partList"></div></div>
-    <div class="card gone" id="where"><div class="kick" id="whereKick">Koda is in</div><div id="place"></div><div id="info"></div><div id="hearts"></div></div>
-    <div class="card gone" id="wanted"></div>
-    <div class="card gone" id="chat"><div class="kick">Room chat</div><div id="chatLog"></div></div>
-    <div class="card gone" id="toast"></div>
-    <div id="pop"></div>
-    <div id="tag">G.I.L.L. <span>· play free at feelzmachine.com/gill</span></div>
-    <div class="card gone" id="wait"><div class="kick">G.I.L.L. stream overlay</div><h1>Waiting for the game</h1><p id="waitText">Open G.I.L.L., press pause, choose Stream overlay and turn it on.</p></div>
-  </div>
-  <script src="../run/vendor/supabase-2.45.4/supabase.js"></script>
-  <script>
-  (function () {
-    var $ = function (id) { return document.getElementById(id); };
-    var qs = new URLSearchParams(location.search);
-    var code = (qs.get("c") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
-    var hide = (qs.get("hide") || "").split(",");
-    if (qs.get("preview")) document.body.classList.add("preview");
-    hide.forEach(function (h) { var el = h && $(h); if (el) el.style.display = "none"; });
-
-    function fit() { var k = Math.min(innerWidth / 1920, innerHeight / 1080); $("ov").style.transform = "scale(" + k + ")"; }
-    addEventListener("resize", fit); fit();
-
-    var show = function (id, on) { $(id).classList.toggle("gone", !on); };
-    var esc = function (t) { var d = document.createElement("div"); d.textContent = t == null ? "" : String(t); return d.innerHTML; };
-    var DISTRICT = { lc: "Lower City", mc: "Middle City", uc: "Upper City", rc: "Restored City", de: "Desert" };
-    var lastSeen = 0, lastObj = "", toastT = null, popT = null;
-
-    if (!code) { show("wait", true); $("waitText").textContent = "This link is missing its code. Copy the link again from the game's pause menu: Stream overlay."; return; }
-    if (!window.supabase) { show("wait", true); $("waitText").textContent = "Couldn't connect. Check the internet connection and refresh the source."; return; }
-    if (qs.get("preview")) show("wait", true);
-
-    function state(s) {
-      lastSeen = Date.now(); show("wait", false);
-      document.body.classList.toggle("idle", !s.playing);
-      $("nowKick").textContent = s.free ? (s.building ? "Building" : "Free roam") : s.n ? "Mission " + s.n + " · Now playing" : "Now playing";
-      $("song").textContent = s.free ? (s.world || "The city") : (s.song || "");
-      show("now", s.playing && !!(s.song || s.free));
-      var obj = s.objective || "";
-      $("objText").textContent = obj; show("obj", s.playing && !!obj);
-      if (obj && obj !== lastObj) { var o = $("obj"); o.classList.remove("pulse"); void o.offsetWidth; o.classList.add("pulse"); }
-      lastObj = obj;
-      var parts = s.parts || [];
-      $("partList").innerHTML = parts.map(function (p) {
-        return '<div class="part' + (p.done ? " on" : "") + '" style="--c:' + esc(p.colour) + '"><i></i>' + esc(p.name) + '<span class="eq"><b></b><b></b><b></b></span></div>';
-      }).join("");
-      show("parts", s.playing && parts.length > 0);
-      $("place").textContent = s.place || "Between places";
-      var info = [];
-      if (s.district && DISTRICT[s.district]) info.push(DISTRICT[s.district]);
-      if (s.riding) info.push("On horseback");
-      if (s.room) info.push("Room " + s.room + " · " + s.players + " playing");
-      if (s.time != null) info.push(Math.floor(s.time / 60) + ":" + String(s.time % 60).padStart(2, "0"));
-      $("info").innerHTML = info.map(function (t) { return "<span>" + esc(t) + "</span>"; }).join("");
-      var h = Math.max(0, Math.min(5, s.hearts | 0));
-      $("hearts").textContent = "♥".repeat(h) + "♡".repeat(5 - h);
-      $("hearts").style.display = s.free ? "none" : "";
-      show("where", s.playing);
-      var w = $("wanted");
-      w.className = "card" + (s.wanted === 2 ? " seen" : s.wanted === 1 ? " sus" : " gone");
-      w.textContent = s.wanted === 2 ? "SEEN" : s.wanted === 1 ? "SUSPICIOUS" : "";
-      show("chat", !!s.room && $("chatLog").children.length > 0);
-    }
-    function toast(t) {
-      $("toast").textContent = t; show("toast", true);
-      clearTimeout(toastT); toastT = setTimeout(function () { show("toast", false); }, 4200);
-    }
-    function pop(p) {
-      var el = $("pop"); el.textContent = p.text; el.className = (p.cls || "") + " show";
-      clearTimeout(popT); popT = setTimeout(function () { el.classList.remove("show"); }, 1100);
-    }
-    function chat(m) {
-      var p = document.createElement("p");
-      p.innerHTML = '<b style="color:' + esc(m.colour) + '"></b><span></span>';
-      p.querySelector("b").textContent = m.name; p.querySelector("span").textContent = m.text;
-      var log = $("chatLog"); log.appendChild(p); while (log.children.length > 7) log.firstChild.remove();
-      show("chat", true);
-    }
-
-    var client = window.supabase.createClient("https://bycdnwenbjusxpowojdb.supabase.co",
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5Y2Rud2VuYmp1c3hwb3dvamRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1MjIzOTYsImV4cCI6MjA4NTA5ODM5Nn0.ixUISqTydgNOKJn9w_p7po15mG9kE25yL0HbHprRHj4",
-      { auth: { persistSession: false, autoRefreshToken: false } });
-    client.channel("gill-obs-" + code)
-      .on("broadcast", { event: "state" }, function (e) { state(e.payload || {}); })
-      .on("broadcast", { event: "toast" }, function (e) { if (e.payload && e.payload.text) toast(e.payload.text); })
-      .on("broadcast", { event: "pop" }, function (e) { if (e.payload && e.payload.text) pop(e.payload); })
-      .on("broadcast", { event: "chat" }, function (e) { if (e.payload) chat(e.payload); })
-      .subscribe();
-    // Nothing heard for a while: the game is closed. Clear the screen, leave just the tag.
-    setInterval(function () {
-      if (lastSeen && Date.now() - lastSeen > 15000) { ["now", "obj", "parts", "where", "wanted", "chat", "toast"].forEach(function (id) { show(id, false); }); lastSeen = 0; }
-      if (!lastSeen && qs.get("preview")) show("wait", true);
-    }, 3000);
-  })();
-  </script>
+  <!-- public/gill/obs.html: the stream overlay now lives with Feelz Live, for every game and show. -->
+  <div><b>FEELZ LIVE OVERLAY</b><p>Your stream overlay now shows your Feelz Live tips, reactions and chat for every stream. Copy its link from Live Studio on feelzmachine.com and paste it into this Browser source.</p></div>
 </body>
 </html>

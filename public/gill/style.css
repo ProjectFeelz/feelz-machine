@@ -453,16 +453,3 @@ body.roam #timer, body.roam #beat, body.roam #mixer { display: none !important; 
 .view-btn.on { background: var(--gold); color: #000; }
 /* The objective always has its own line under the top bar, so nothing on the right can cover it. */
 .hud-objective { top: calc(54px + var(--sat)); }
-
-/* Stream overlay panel (pause menu) */
-.obs-panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100vw - 32px)); z-index: 30;
-  background: rgba(0,0,0,.92); border: 1px solid rgba(242,181,68,.55); border-radius: 16px; padding: 16px 18px; color: #fff; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
-.obs-head { display: flex; align-items: center; justify-content: space-between; }
-.obs-head .kicker { margin: 0; }
-.obs-head button { padding: 4px 12px; font-size: 18px; }
-.obs-steps { margin: 10px 0 12px; padding-left: 20px; font-size: 13px; line-height: 1.6; color: rgba(255,255,255,.82); }
-.obs-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-.obs-row input { flex: 1; min-width: 0; background: #0b0b0b; color: var(--gold-hi); border: 1px solid rgba(242,181,68,.35); border-radius: 10px; padding: 8px 10px; font: 12px/1.2 ui-monospace, Menlo, monospace; }
-.obs-note { margin: 10px 0 0; font-size: 12px; color: var(--gold); }
-/* Clean screen: the game's own HUD stays off the stream; the overlay shows it instead. */
-body.clean-feed #hud { display: none !important; }

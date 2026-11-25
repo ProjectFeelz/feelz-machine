@@ -17,6 +17,7 @@ import {
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import DirectStreamSettings from '../components/DirectStreamSettings';
+import StreamOverlayCard from '../components/StreamOverlayCard';
 
 const when = (iso) => iso ? new Date(iso).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
 const money = (n) => `$${Number(n || 0).toFixed(Number(n || 0) % 1 ? 2 : 0)}`;
@@ -216,6 +217,7 @@ export default function LiveStudioPage() {
           {/* Side column */}
           <aside className="space-y-6">
             <DirectStreamSettings />
+            <StreamOverlayCard artistId={artist?.id} />
             <section className="rounded-3xl p-5 bg-white/[0.04] border border-white/[0.07]">
               <h2 className="text-base font-black text-white mb-1 flex items-center gap-2"><Shield className="w-4 h-4 text-emerald-400" /> Moderators</h2>
               <p className="text-xs text-white/45 mb-4">To add one, tap their name in your stream's chat and choose Make moderator. They help on all your streams.</p>
