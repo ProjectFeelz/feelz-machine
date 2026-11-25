@@ -808,7 +808,11 @@ export default function ProfilePage() {
       <SettingsGroup title="Payments">
         {isArtist
           ? <NavRow icon={DollarSign} label="Payouts and subscription" onClick={() => { setActiveTab('payments'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
-          : <NavRow icon={Crown} label="Fan Pro" iconColor="text-amber-400" onClick={() => nav('/upgrade')} />}
+          // The listener branch, so it goes to the page that sells Fan Pro. It
+          // pointed at /upgrade, which sells artist plans, so somebody tapped
+          // the row called Fan Pro in their own settings and landed on a page
+          // with no Fan Pro on it.
+          : <NavRow icon={Crown} label="Fan Pro" iconColor="text-amber-400" onClick={() => nav('/listener/upgrade')} />}
         <NavRow icon={Download} label="Your downloads" onClick={() => nav('/library/downloads')} border />
         <NavRow icon={Link} label="Affiliate programme" iconColor="text-green-400" onClick={() => nav('/affiliates')} border badge="Earn" />
       </SettingsGroup>
