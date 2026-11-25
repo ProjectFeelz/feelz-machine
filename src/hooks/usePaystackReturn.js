@@ -1,4 +1,37 @@
 import { useEffect, useRef } from 'react';
+import { supabase } from '../supabaseClient';
+
+/**
+ * Ask the server to claim the charge, instead of waiting to be told about it.
+ *
+ * tier-claim asks Paystack directly whether this reference was paid and
+ * records the subscription if it was, through the same lib the webhook uses.
+ * It is idempotent, so racing the webhook is harmless, and it is the only
+ * thing that helps when the webhook never arrives at all.
+ *
+ * Failing quietly on purpose. The polling below is the fallback and the
+ * webhook is still the primary path; a claim that cannot be made is not
+ * something to put in front of somebody who has just paid.
+ */
+async function claim(reference) {
+  if (!reference) return false;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return false;
+    const res = await fetch('/.netlify/functions/tier-claim', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ reference }),
+    });
+    const body = await res.json().catch(() => null);
+    return !!(body && body.ok);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Coming back from Paystack's hosted page.
@@ -61,6 +94,8 @@ export default function usePaystackReturn({ ready, check, onPaid, onPending }) {
       const SPEAK_AFTER = 6;
       let spoke = false;
 
+      let claimed = false;
+
       for (let i = 0; i < waits.length; i++) {
         if (stop) return;
         if (waits[i]) await new Promise(r => setTimeout(r, waits[i]));
@@ -68,6 +103,22 @@ export default function usePaystackReturn({ ready, check, onPaid, onPending }) {
         try { slug = await check(); } catch { /* the next attempt can have it */ }
         if (stop) return;
         if (slug && slug !== 'free') { onPaid(slug); return; }
+
+        // Not there yet. Ask the server to claim it once, on the second pass
+        // rather than the first, so a webhook that was already quick costs
+        // nobody an extra call. Once only: it is idempotent, but repeating it
+        // twelve times would hammer Paystack's verify endpoint for nothing.
+        if (!claimed) {
+          claimed = true;
+          const got = await claim(reference);
+          if (stop) return;
+          if (got) {
+            let after = null;
+            try { after = await check(); } catch { /* fall through to the loop */ }
+            if (stop) return;
+            if (after && after !== 'free') { onPaid(after); return; }
+          }
+        }
 
         // Say something, then keep looking. The message is replaced by the
         // receipt if a later attempt finds it.
