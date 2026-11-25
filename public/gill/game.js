@@ -4873,7 +4873,7 @@ function startBuild() {
   if (!koda.parent) scene.add(koda.root);
   koda.pos.y = groundAt(koda.pos.x, koda.pos.z);
   renderBuildBar(); updateCamera(0, true);
-  if (myWorld) toast(saveTable() ? `Building in ${myWorld.name}. Everything you place is kept.` : "Building in your world. Keeping your builds comes with Feelz Machine Premium.", 3.5);
+  if (myWorld) toast(saveTable() ? `Building in ${myWorld.name}. Everything you place is kept.` : "Building in your world. Keeping your builds comes with Fan Pro, or Premium if you are an artist.", 3.5);
   else if (!canBuild && !coop.ch) toast("Building in free roam. Gather materials for blocks. Keep what you build in My worlds.", 3.5);
   else toast(canBuild && ONLINE ? (coop.ch ? "Building together. Your pieces are saved to the city and the room sees them." : "Build mode. Everything you place is saved to the city.") : coop.ch ? "Building together. Everyone in the room sees what you place." : "Build mode (trying it out: nothing is saved here).", 3.5);
 }
@@ -5811,7 +5811,19 @@ async function renderWorlds() {
   const { data: s2 } = await ONLINE.auth.getSession();
   if (!s2 || !s2.session) { note.textContent = "Sign in to Feelz Machine in this browser to keep worlds."; return; }
   await checkWorlds();
-  note.textContent = canSaveWorlds ? "Your worlds, kept on your Feelz Machine account." : "Making your own worlds comes with Feelz Machine Premium. The game, Free roam and rooms are free for everyone, and you can build in them.";
+  // Both plans, and a way to get there. A fan on Fan Pro CAN build - the
+  // database has said so since migration 257 - and being told otherwise is the
+  // reason they would never press the button they already paid for. Static
+  // text, so innerHTML carries the links with nothing user-supplied in it.
+  if (canSaveWorlds) {
+    note.textContent = "Your worlds, kept on your Feelz Machine account.";
+  } else {
+    note.innerHTML = 'Making your own worlds comes with <b>Fan Pro</b>, or <b>Premium</b> if you are an artist. '
+      + 'The game, Free roam and rooms are free for everyone, and you can build in them.<br>'
+      + '<a href="/listener/upgrade" style="color:#f1ca78">Get Fan Pro</a>'
+      + ' &nbsp;·&nbsp; '
+      + '<a href="/upgrade" style="color:#f1ca78">Artist plans</a>';
+  }
   $("worldNew").disabled = !canSaveWorlds;
   const { data } = await ONLINE.from("gill_worlds").select("id,name,updated_at").order("updated_at", { ascending: false });
   list.innerHTML = (data || []).map(w => `<div class="world-row" data-id="${w.id}"><b>${w.name.replace(/[<>&]/g, "")}</b><small>${new Date(w.updated_at).toLocaleDateString()}</small><button class="primary" data-act="play">Play</button><button class="ghost" data-act="rename">Rename</button></div>`).join("") || (canSaveWorlds ? '<p class="coop-or">No worlds yet. Make your first one.</p>' : "");

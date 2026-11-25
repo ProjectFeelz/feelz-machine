@@ -343,7 +343,7 @@ function DesktopGames() {
               <p className="text-[10px] font-bold tracking-[0.3em] text-amber-300/80 uppercase">{g.tagline}</p>
               <h2 className="text-4xl font-black italic mt-1">{g.title}</h2>
               <p className="text-sm text-white/60 mt-3 leading-relaxed">{g.description}</p>
-              <p className="text-xs text-white/40 mt-3 leading-relaxed">It is still being built, so things change from week to week. Free to play for everyone; making your own worlds comes with Premium.</p>
+              <p className="text-xs text-white/40 mt-3 leading-relaxed">It is still being built, so things change from week to week. Free to play for everyone; making your own worlds comes with Fan Pro, or Premium if you are an artist.</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {g.tags.map(({ icon: Icon, text }) => (
                   <span key={text} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.07] border border-white/[0.08] text-[11px] text-white/75">

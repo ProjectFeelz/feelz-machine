@@ -628,6 +628,10 @@ export default function AdminAnalytics({ embedded = false }) {
           { data: beatRevenue, error: beatErr },
           { data: artistSubs,  error: artistSubErr },
           { data: listenerSubs, error: listenerSubErr },
+          // Migration 258. Aggregates behind an admin gate, because the five
+          // reads above are owner-scoped and return THIS admin's own money.
+          { data: rpcRevenue, error: rpcRevenueErr },
+          { data: rpcSubs,    error: rpcSubsErr },
         ] = await Promise.all([
           supabase.from('tips').select('amount, currency').gte('created_at', cutoff),
           supabase.from('downloads').select('amount_paid').gt('amount_paid', 0).gte('created_at', cutoff),
@@ -639,7 +643,18 @@ export default function AdminAnalytics({ embedded = false }) {
             .eq('status', 'active'),
           supabase.from('listener_tier_subscriptions')
             .select('tier_id, billing_cycle').eq('status', 'active'),
+          supabase.rpc('admin_revenue_totals', { p_since: cutoff }),
+          supabase.rpc('admin_subscription_summary'),
         ]);
+
+        // Zero rows means "you are not an admin", not "no revenue" - that is
+        // the whole reason the functions return no row rather than a zero.
+        // A missing function means the migration has not run yet, which is a
+        // fallback, not a failure.
+        const rev  = Array.isArray(rpcRevenue) ? rpcRevenue[0] : rpcRevenue;
+        const rsub = Array.isArray(rpcSubs)    ? rpcSubs[0]    : rpcSubs;
+        if (rpcRevenueErr) console.error('[analytics] admin_revenue_totals:', rpcRevenueErr.code, rpcRevenueErr.message);
+        if (rpcSubsErr)    console.error('[analytics] admin_subscription_summary:', rpcSubsErr.code, rpcSubsErr.message);
 
         [['tips', tipErr], ['downloads', dlErr], ['beat_purchases', beatErr],
          ['artist_tier_subscriptions', artistSubErr],
@@ -649,16 +664,24 @@ export default function AdminAnalytics({ embedded = false }) {
           .forEach(([name, e]) => console.error(`[analytics] revenue: ${name} blocked or failed:`, e.code, e.message));
 
         // Any of these failing means the figures below are not the platform's.
-        const blocked = [tipErr, dlErr, beatErr, listenerSubErr].some(Boolean);
+        // With the gate answering, the owner-scoped reads no longer decide it.
+        const blocked = !rev && [tipErr, dlErr, beatErr, listenerSubErr].some(Boolean);
 
-        const tipTotal  = (tipRevenue  || []).reduce((s, t) => s + (parseFloat(t.amount)      || 0), 0);
-        const dlTotal   = (dlRevenue   || []).reduce((s, d) => s + (parseFloat(d.amount_paid) || 0), 0);
-        const beatTotal = (beatRevenue || []).reduce((s, b) => s + (parseFloat(b.amount_paid) || 0), 0);
+        let tipTotal  = (tipRevenue  || []).reduce((s, t) => s + (parseFloat(t.amount)      || 0), 0);
+        let dlTotal   = (dlRevenue   || []).reduce((s, d) => s + (parseFloat(d.amount_paid) || 0), 0);
+        let beatTotal = (beatRevenue || []).reduce((s, b) => s + (parseFloat(b.amount_paid) || 0), 0);
+        if (rev) {
+          tipTotal  = parseFloat(rev.tips_total)      || 0;
+          dlTotal   = parseFloat(rev.downloads_total) || 0;
+          beatTotal = parseFloat(rev.beats_total)     || 0;
+        }
 
         // Tips carry a currency column and are summed here regardless of it.
         // Flagged rather than converted: a made-up FX rate would be the same
         // mistake as the made-up MRR this replaces.
-        const tipCurrencies = [...new Set((tipRevenue || []).map(t => t.currency).filter(Boolean))];
+        const tipCurrencies = rev
+          ? String(rev.tips_currencies || '').split(', ').filter(Boolean)
+          : [...new Set((tipRevenue || []).map(t => t.currency).filter(Boolean))];
 
         const proId  = tierBySlug.pro?.id;
         const premId = tierBySlug.premium?.id;
@@ -710,11 +733,15 @@ export default function AdminAnalytics({ embedded = false }) {
           downloads:   dlTotal.toFixed(2),
           beats:       beatTotal.toFixed(2),
           total:       (tipTotal + dlTotal + beatTotal).toFixed(2),
-          artistPro:   countFor(proId),
-          artistPrem:  countFor(premId),
-          fanPro:      (listenerSubs || []).length,
-          mrr:         mrr.toFixed(2),
-          comps,
+          artistPro:   rsub ? Number(rsub.artist_pro)     : countFor(proId),
+          artistPrem:  rsub ? Number(rsub.artist_premium) : countFor(premId),
+          fanPro:      rsub ? Number(rsub.fan_subs)       : (listenerSubs || []).length,
+          mrr:         (rsub ? parseFloat(rsub.artist_mrr) || 0 : mrr).toFixed(2),
+          // Fan subscriptions are counted in MRR by nobody today. Shown beside
+          // the artist figure rather than folded into it, because what MRR
+          // means is a decision, not a bug.
+          fanMrr:      rsub ? (parseFloat(rsub.fan_mrr) || 0).toFixed(2) : null,
+          comps:       rsub ? Number(rsub.comps) : comps,
           tierIdsResolved: !!(proId && premId),
           tierWarnings,
           tipCurrencies,
@@ -1148,6 +1175,9 @@ export default function AdminAnalytics({ embedded = false }) {
                     from tiers nobody has paid for. */}
                 <p className="text-[10px] text-white/25 mt-3 text-center">
                   MRR from recorded subscription payments: <span className="text-green-400/70 font-semibold">${revenueStats.mrr || '0.00'}/mo</span>
+                  {revenueStats.fanMrr && parseFloat(revenueStats.fanMrr) > 0 && (
+                    <span className="text-white/20"> · plus <span className="text-cyan-400/70 font-semibold">${revenueStats.fanMrr}/mo</span> from fan subscriptions, not counted above</span>
+                  )}
                   {revenueStats.comps > 0 && (
                     <span className="text-white/20"> · {revenueStats.comps} admin-granted {revenueStats.comps === 1 ? 'comp' : 'comps'} excluded</span>
                   )}
