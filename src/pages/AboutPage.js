@@ -13,6 +13,7 @@ import {
   Check, Mic2, Headphones, Store, Sparkles, Disc3, SlidersHorizontal, ChevronRight,
 } from 'lucide-react';
 import { BASE_USD, TIER_FEATURES, BEATMAKER_TIER_FEATURES } from '../data/tiers';
+import useLocalPrice from '../hooks/useLocalPrice';
 
 const GREEN = '#8CAB2E';
 
@@ -25,10 +26,16 @@ const TABS = [
 ];
 const TIERS = ['free', 'pro', 'premium'];
 
-function priceLine(slug) {
-  if (slug === 'free') return { big: '$0', small: 'free forever' };
+// Takes the money helper rather than reaching for a dollar sign. This page
+// is read by people who pay in rand, and quoting them dollars here and rand
+// at the checkout is two prices for one plan.
+function priceLine(slug, money) {
+  if (slug === 'free') return { big: `${money.currency.symbol}0`, small: 'free forever' };
   const p = BASE_USD[slug];
-  return { big: `$${p.annual}`, small: `a year, or $${p.monthly.toFixed(2)} a month` };
+  return {
+    big:   money.format(p.annual),
+    small: `a year, or ${money.format(p.monthly)} a month`,
+  };
 }
 
 const TIER_BLURB = {
@@ -152,6 +159,7 @@ export default function AboutPage() {
   const height = useFitHeight(rootRef);
   const [tab, setTab] = useState('about');
   const [tier, setTier] = useState('pro');
+  const money = useLocalPrice();
 
   // The Google Play and App Store footer links were read from
   // platform_settings here. Feelz Machine is a PWA and is staying one, so there
@@ -188,7 +196,7 @@ export default function AboutPage() {
       eyebrow: `${tab === 'artist' ? 'Artists' : 'Beat makers'} · ${src.name}`,
       title: src.name,
       blurb: TIER_BLURB[tab][tier],
-      price: priceLine(tier),
+      price: priceLine(tier, money),
       items: src.features.filter(f => f.included).map(f => f.text),
       cta: { label: tier === 'free' ? 'Start free' : `Get ${src.name}`, to: '/upgrade' },
     };
@@ -243,6 +251,25 @@ export default function AboutPage() {
             </button>
           ))}
         </div>
+        {(tab === 'artist' || tab === 'beatmaker') && money.localAvailable && (
+          <div className="flex items-center justify-end mt-2">
+            {/* Detection is a guess. A VPN or a roaming phone makes it a wrong
+                one, and without this there is no way to say so. */}
+            <div className="flex items-center bg-white/[0.04] border border-white/[0.06] rounded-xl p-0.5">
+              {[
+                { key: 'local', label: money.geoInfo?.currency || 'Local', on: !money.usingUsd },
+                { key: 'usd',   label: 'USD',                              on: money.usingUsd },
+              ].map(c => (
+                <button key={c.key} type="button" onClick={() => money.setCurrency(c.key)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                    c.on ? 'bg-white text-black' : 'text-white/45 hover:text-white/75'
+                  }`}>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {(tab === 'artist' || tab === 'beatmaker') && (
           <div className="flex items-center space-x-1.5 mt-2">
             {TIERS.map(s => {

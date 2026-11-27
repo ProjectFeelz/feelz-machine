@@ -5,6 +5,7 @@ import useGoBack from '../hooks/useGoBack';
 import { supabase } from '../supabaseClient';
 import { step, screen } from '../utils/track';
 import usePaystackReturn from '../hooks/usePaystackReturn';
+import useLocalPrice from '../hooks/useLocalPrice';
 import { showReceipt } from '../components/PurchaseReceipt';
 import { useAuth } from '../contexts/AuthContext';
 import { useTier } from '../contexts/useTier';
@@ -44,22 +45,9 @@ const PLAN_IDS = {
 };
 const isConfigured = !!PAYPAL_CLIENT_ID && PAYPAL_CLIENT_ID !== 'YOUR_PAYPAL_CLIENT_ID_HERE';
 
-// ── Currency display map ──────────────────────────────────────
-// Maps country code → { currency, symbol, locale }
-const CURRENCY_MAP = {
-  ZA: { currency: 'ZAR', symbol: 'R',   locale: 'en-ZA' },
-  NG: { currency: 'NGN', symbol: '₦',   locale: 'en-NG' },
-  GH: { currency: 'GHS', symbol: 'GH₵', locale: 'en-GH' },
-  KE: { currency: 'KES', symbol: 'KSh', locale: 'en-KE' },
-  GB: { currency: 'GBP', symbol: '£',   locale: 'en-GB' },
-  EU: { currency: 'EUR', symbol: '€',   locale: 'en-EU' }, // fallback for EU
-  DE: { currency: 'EUR', symbol: '€',   locale: 'de-DE' },
-  FR: { currency: 'EUR', symbol: '€',   locale: 'fr-FR' },
-  AU: { currency: 'AUD', symbol: 'A$',  locale: 'en-AU' },
-  CA: { currency: 'CAD', symbol: 'C$',  locale: 'en-CA' },
-  US: { currency: 'USD', symbol: '$',   locale: 'en-US' },
-};
-const DEFAULT_CURRENCY = { currency: 'USD', symbol: '$', locale: 'en-US' };
+// The currency map and the detection used to live here. They moved to
+// src/hooks/useLocalPrice.js when the About page needed them too, because a
+// second copy is a second thing to keep in step.
 
 // ── PayPal Button ─────────────────────────────────────────────
 function PayPalButton({ planId, tierSlug, billingCycle, customId, onSuccess, onError }) {
@@ -174,47 +162,16 @@ export default function TierUpgradePage() {
   const [selectedTier, setSelectedTier] = useState(null);
   const [billingCycle, setBillingCycle] = useState('monthly');
 
-  // Geo state
-  const [geoRate, setGeoRate]       = useState(1);
-  const [geoInfo, setGeoInfo]       = useState(null);
-  const [geoLoading, setGeoLoading] = useState(true);
-
-  // ── Geo detection ─────────────────────────────────────────
-  useEffect(() => {
-    const detect = async () => {
-      try {
-        // 1. Detect country via IP
-        const res = await fetch('https://ipapi.co/json/');
-        if (!res.ok) throw new Error('Geo detection failed');
-        const data = await res.json();
-        const countryCode = data.country_code;
-        const info = CURRENCY_MAP[countryCode] || DEFAULT_CURRENCY;
-
-        if (info.currency !== 'USD') {
-          // 2. Fetch live exchange rate
-          try {
-            const rateRes = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
-            const rateData = await rateRes.json();
-            const rate = rateData.rates?.[info.currency];
-            if (rate && rate > 0) {
-              setGeoRate(rate);
-              setGeoInfo(info); // only set local currency if we have a valid rate
-            } else {
-              setGeoInfo(DEFAULT_CURRENCY); // rate unavailable, show USD
-            }
-          } catch {
-            setGeoInfo(DEFAULT_CURRENCY); // exchange rate API down, show USD
-          }
-        } else {
-          setGeoInfo(info); // already USD
-        }
-      } catch {
-        setGeoInfo(DEFAULT_CURRENCY); // geo detection failed, show USD
-      }
-      setGeoLoading(false);
-    };
-    detect();
-  }, []);
+  // ── Geo and currency ──────────────────────────────────────
+  //
+  // Detection, the rate lookup and the reader's own choice all live in
+  // useLocalPrice now, shared with the About page. The three names below are
+  // kept so everything downstream reads exactly as it did, and they now
+  // follow the toggle: pick USD on either page and both show USD.
+  const money       = useLocalPrice();
+  const geoRate     = money.usingUsd ? 1 : money.geoRate;
+  const geoInfo     = money.currency;
+  const geoLoading  = money.geoLoading;
 
   useEffect(() => {
     if (artist) fetchCurrentTier();
