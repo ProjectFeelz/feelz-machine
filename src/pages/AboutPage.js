@@ -29,12 +29,16 @@ const TIERS = ['free', 'pro', 'premium'];
 // Takes the money helper rather than reaching for a dollar sign. This page
 // is read by people who pay in rand, and quoting them dollars here and rand
 // at the checkout is two prices for one plan.
+// MONTHLY FIRST. The year price was the big number, so the first thing
+// anybody read was the largest figure on the page. It is the same plan
+// either way: lead with the small number and let the year be the saving
+// rather than the barrier.
 function priceLine(slug, money) {
   if (slug === 'free') return { big: `${money.currency.symbol}0`, small: 'free forever' };
   const p = BASE_USD[slug];
   return {
-    big:   money.format(p.annual),
-    small: `a year, or ${money.format(p.monthly)} a month`,
+    big:   money.format(p.monthly),
+    small: `a month, or ${money.format(p.annual)} for the year`,
   };
 }
 
