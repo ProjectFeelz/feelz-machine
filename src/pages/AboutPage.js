@@ -12,7 +12,10 @@ import { useNavigate } from 'react-router-dom';
 import {
   Check, Mic2, Headphones, Store, Sparkles, Disc3, SlidersHorizontal, ChevronRight,
 } from 'lucide-react';
-import { BASE_USD, TIER_FEATURES, BEATMAKER_TIER_FEATURES } from '../data/tiers';
+import {
+  BASE_USD, TIER_FEATURES, BEATMAKER_TIER_FEATURES,
+  LISTENER_BASE_USD, LISTENER_TIER_FEATURES, LISTENER_TIERS,
+} from '../data/tiers';
 import useLocalPrice from '../hooks/useLocalPrice';
 
 const GREEN = '#8CAB2E';
@@ -26,6 +29,25 @@ const TABS = [
 ];
 const TIERS = ['free', 'pro', 'premium'];
 
+// Which tiers each tab offers, and where to read them from. Listeners used to
+// have neither, so the tab showed Free and stopped on the page meant to sell
+// Fan Pro.
+const TIER_LIST = {
+  artist:    TIERS,
+  beatmaker: TIERS,
+  listener:  LISTENER_TIERS,
+};
+const FEATURES_FOR = {
+  artist:    TIER_FEATURES,
+  beatmaker: BEATMAKER_TIER_FEATURES,
+  listener:  LISTENER_TIER_FEATURES,
+};
+const BASE_FOR = {
+  artist:    BASE_USD,
+  beatmaker: BASE_USD,
+  listener:  LISTENER_BASE_USD,
+};
+
 // Takes the money helper rather than reaching for a dollar sign. This page
 // is read by people who pay in rand, and quoting them dollars here and rand
 // at the checkout is two prices for one plan.
@@ -33,9 +55,11 @@ const TIERS = ['free', 'pro', 'premium'];
 // anybody read was the largest figure on the page. It is the same plan
 // either way: lead with the small number and let the year be the saving
 // rather than the barrier.
-function priceLine(slug, money) {
-  if (slug === 'free') return { big: `${money.currency.symbol}0`, small: 'free forever' };
-  const p = BASE_USD[slug];
+function priceLine(slug, money, base = BASE_USD) {
+  // Free is whatever has no row in the price table, which is true for artists
+  // and listeners alike.
+  if (!base[slug]) return { big: `${money.currency.symbol}0`, small: 'free forever' };
+  const p = base[slug];
   return {
     big:   money.format(p.monthly),
     small: `a month, or ${money.format(p.annual)} for the year`,
@@ -47,6 +71,10 @@ const TIER_BLURB = {
     free:    'Put your first songs out and see how it feels.',
     pro:     'For artists releasing properly: unlimited uploads, stats and collabs.',
     premium: 'Everything, plus the tools that bring money in.',
+  },
+  listener: {
+    free:    'Everything you need to listen, free and with no card.',
+    fan_pro: 'Keep the music on your phone, and build in the games.',
   },
   beatmaker: {
     free:    'Get your first beats in front of artists.',
@@ -165,6 +193,12 @@ export default function AboutPage() {
   const [tier, setTier] = useState('pro');
   const money = useLocalPrice();
 
+  // Derived, never synced. Moving from Artists on 'premium' to Listeners would
+  // otherwise leave an invalid tier selected until an effect corrected it, and
+  // the wrong card would show for a frame.
+  const tierList = TIER_LIST[tab] || [];
+  const effTier  = tierList.includes(tier) ? tier : tierList[0];
+
   // The Google Play and App Store footer links were read from
   // platform_settings here. Feelz Machine is a PWA and is staying one, so there
   // are no store listings to link to and this page no longer asks for them.
@@ -192,17 +226,23 @@ export default function AboutPage() {
 
   // What the current tab shows.
   let page = null;
-  if (tab === 'artist' || tab === 'beatmaker') {
-    const src = (tab === 'artist' ? TIER_FEATURES : BEATMAKER_TIER_FEATURES)[tier];
+  if (tab === 'artist' || tab === 'beatmaker' || tab === 'listener') {
+    const src   = FEATURES_FOR[tab][effTier];
+    const isFan = tab === 'listener';
     page = {
-      icon: tab === 'artist' ? Mic2 : SlidersHorizontal,
+      icon: isFan ? Headphones : (tab === 'artist' ? Mic2 : SlidersHorizontal),
       color: src.color === '#737373' ? '#A3A3A3' : src.color,
-      eyebrow: `${tab === 'artist' ? 'Artists' : 'Beat makers'} · ${src.name}`,
+      eyebrow: `${isFan ? 'For listeners' : tab === 'artist' ? 'Artists' : 'Beat makers'} · ${src.name}`,
       title: src.name,
-      blurb: TIER_BLURB[tab][tier],
-      price: priceLine(tier, money),
+      blurb: TIER_BLURB[tab][effTier],
+      price: priceLine(effTier, money, BASE_FOR[tab]),
       items: src.features.filter(f => f.included).map(f => f.text),
-      cta: { label: tier === 'free' ? 'Start free' : `Get ${src.name}`, to: '/upgrade' },
+      cta: {
+        label: effTier === 'free' ? (isFan ? 'Start listening' : 'Start free') : `Get ${src.name}`,
+        // A listener sent to /upgrade lands on a page selling artist plans,
+        // which sells them nothing. Same bug as the Fan Pro row in settings.
+        to: isFan ? '/listener/upgrade' : '/upgrade',
+      },
     };
   } else if (STATIC_PAGES[tab]) {
     page = STATIC_PAGES[tab];
@@ -255,7 +295,7 @@ export default function AboutPage() {
             </button>
           ))}
         </div>
-        {(tab === 'artist' || tab === 'beatmaker') && money.localAvailable && (
+        {tierList.length > 0 && money.localAvailable && (
           <div className="flex items-center justify-end mt-2">
             {/* Detection is a guess. A VPN or a roaming phone makes it a wrong
                 one, and without this there is no way to say so. */}
@@ -274,11 +314,11 @@ export default function AboutPage() {
             </div>
           </div>
         )}
-        {(tab === 'artist' || tab === 'beatmaker') && (
+        {tierList.length > 0 && (
           <div className="flex items-center space-x-1.5 mt-2">
-            {TIERS.map(s => {
-              const f = (tab === 'artist' ? TIER_FEATURES : BEATMAKER_TIER_FEATURES)[s];
-              const on = tier === s;
+            {tierList.map(s => {
+              const f = FEATURES_FOR[tab][s];
+              const on = effTier === s;
               return (
                 <button key={s} onClick={() => setTier(s)}
                   className="px-3.5 py-1.5 rounded-full text-xs font-bold border transition"

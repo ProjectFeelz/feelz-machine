@@ -182,6 +182,8 @@ export const LISTENER_TIERS = ['free', 'fan_pro'];
 export const LISTENER_TIER_FEATURES = {
   free: {
     name: 'Free',
+    icon: Star,
+    color: '#737373',
     features: [
       { text: 'Stream every published track', included: true },
       { text: 'Follow artists and get their drops first', included: true },
@@ -198,6 +200,9 @@ export const LISTENER_TIER_FEATURES = {
   },
   fan_pro: {
     name: 'Fan Pro',
+    icon: Crown,
+    color: '#22D3EE',
+    popular: true,
     features: [
       // What Fan Pro alone gives, first, for the same reason as Premium.
       { text: 'Offline listening, play with no signal', included: true },
